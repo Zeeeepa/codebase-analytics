@@ -84,7 +84,7 @@ interface DeploymentConfig {
 }
 
 // Repository Tree Component
-const RepositoryTree: React.FC<{ 
+const TreeNode: React.FC<{ 
   node: RepositoryNode; 
   level?: number;
 }> = ({ node, level = 0 }) => {
@@ -146,7 +146,7 @@ const RepositoryTree: React.FC<{
       {isDirectory && isExpanded && node.children && (
         <div>
           {node.children.map((child, index) => (
-            <RepositoryTree 
+            <TreeNode 
               key={index} 
               node={child} 
               level={level + 1}
@@ -247,7 +247,7 @@ export default function RepoAnalyticsDashboard() {
     status: 'idle'
   })
 
-  const analyzeRepository = async () => {
+  const analyzeRepo = async () => {
     if (!repoUrl.trim()) {
       setError('Please enter a repository URL')
       return
@@ -311,137 +311,114 @@ export default function RepoAnalyticsDashboard() {
   })) : []
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            🚀 Enhanced Codebase Analytics
-          </h1>
-          <p className="text-xl text-gray-600">
-            Comprehensive repository analysis with advanced deployment options
-          </p>
+    <div className="min-h-screen bg-gray-900 text-white p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-4">Repository Analytics Dashboard</h1>
+          
+          <div className="flex gap-4 mb-6">
+            <Input
+              type="url"
+              placeholder="Enter GitHub repository URL"
+              value={repoUrl}
+              onChange={(e) => setRepoUrl(e.target.value)}
+              className="flex-1 bg-gray-800 border-gray-700 text-white"
+            />
+            <Button 
+              onClick={analyzeRepo} 
+              disabled={loading || !repoUrl}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {loading ? 'Analyzing...' : 'Analyze Repository'}
+            </Button>
+          </div>
+
+          {error && (
+            <Alert className="mb-6 bg-red-900 border-red-700">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-red-100">{error}</AlertDescription>
+            </Alert>
+          )}
         </div>
 
-        {/* Deployment Status */}
-        <DeploymentStatus 
-          config={deploymentConfig}
-          onDeploy={handleDeploy}
-        />
-
-        {/* Input Section */}
-        <Card className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <GitBranch className="h-5 w-5" />
-              <span>Repository Analysis</span>
-            </CardTitle>
-            <CardDescription>
-              Enter a GitHub repository URL to analyze code quality, structure, and issues
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex space-x-2">
-              <Input
-                placeholder="https://github.com/owner/repository"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                className="flex-1"
-              />
-              <Button 
-                onClick={analyzeRepository} 
-                disabled={loading || deploymentConfig.status === 'deploying'}
-                className="px-6"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    Analyze Repository
-                  </>
-                )}
-              </Button>
-            </div>
-            
-            {error && (
-              <Alert variant="destructive">
-                <XCircle className="h-4 w-4" />
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            {deploymentConfig.status === 'deployed' && (
-              <Alert>
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription>
-                  Connected to {deploymentConfig.mode} deployment at {deploymentConfig.endpoint}
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Results */}
         {analysis && (
           <div className="space-y-6">
-            {/* Overview Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
+            {/* Basic Metrics */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card className="bg-gray-800 border-gray-700">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-blue-700">Total Files</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-300">Total Files</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-blue-900">{analysis.basic_metrics.files}</div>
-                  <div className="text-xs text-blue-600 mt-1">
-                    {analysis.basic_metrics.functions} functions, {analysis.basic_metrics.classes} classes
-                  </div>
+                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.total_files}</div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-green-50 to-green-100 border-green-200">
+              <Card className="bg-gray-800 border-gray-700">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-green-700">Lines of Code</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-300">Functions</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-green-900">{analysis.line_metrics.total.loc.toLocaleString()}</div>
-                  <div className="text-xs text-green-600 mt-1">
-                    {(analysis.line_metrics.total.comment_density * 100).toFixed(1)}% comments
-                  </div>
+                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.total_functions}</div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200">
+              <Card className="bg-gray-800 border-gray-700">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-purple-700">Code Quality</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-300">Classes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-purple-900">
-                    {analysis.complexity_metrics.maintainability_index.average.toFixed(0)}
-                  </div>
-                  <div className="text-xs text-purple-600 mt-1">Maintainability Index</div>
-                  <Progress 
-                    value={analysis.complexity_metrics.maintainability_index.average} 
-                    className="mt-2"
-                  />
+                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.total_classes}</div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-gradient-to-br from-red-50 to-red-100 border-red-200">
+              <Card className="bg-gray-800 border-gray-700">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-red-700">Issues Found</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-300">Lines of Code</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-red-900">{analysis.issues_summary.total}</div>
-                  <div className="text-xs text-red-600 mt-1">
-                    {analysis.issues_summary.critical} critical, {analysis.issues_summary.functional} functional
-                  </div>
+                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.total_lines}</div>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Repository Structure */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-white">Repository Structure</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-96 overflow-y-auto border rounded-md p-4 bg-gray-900 border-gray-600">
+                  <TreeNode node={analysis.repository_structure} level={0} />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Issues Found */}
+            <Card className="bg-gray-800 border-gray-700">
+              <CardHeader>
+                <CardTitle className="text-sm font-medium text-red-400">Issues Found</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {analysis.issues.map((issue, index) => (
+                    <div key={index} className="border-l-4 border-red-500 pl-4 py-2 bg-gray-900 rounded-r">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant={issue.severity === 'critical' ? 'destructive' : 
+                                     issue.severity === 'major' ? 'default' : 'secondary'}
+                               className={issue.severity === 'critical' ? 'bg-red-600' :
+                                         issue.severity === 'major' ? 'bg-orange-600' : 'bg-gray-600'}>
+                          {issue.severity}
+                        </Badge>
+                        <span className="text-sm text-gray-400">{issue.file}</span>
+                      </div>
+                      <p className="text-white font-medium">{issue.description}</p>
+                      <p className="text-sm text-gray-400 mt-1">{issue.suggestion}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Analysis Tabs */}
             <Tabs defaultValue="structure" className="space-y-4">
@@ -594,4 +571,3 @@ export default function RepoAnalyticsDashboard() {
     </div>
   )
 }
-
