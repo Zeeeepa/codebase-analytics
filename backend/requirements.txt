@@ -1,27 +1,36 @@
 # Enhanced Codebase Analytics Backend Dependencies
+# Python 3.13 Compatible Versions
 
-# Core FastAPI framework
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+# Core FastAPI and server
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
 
-# Data validation and serialization
-pydantic==2.5.0
+# Data validation and serialization (Python 3.13 compatible)
+pydantic==2.10.4
 
-# HTTP client for external requests
-httpx==0.25.2
+# HTTP client
+httpx==0.28.1
 
-# Additional utilities
-python-multipart==0.0.6
+# File upload support
+python-multipart==0.0.17
+
+# JWT and authentication (optional)
 python-jose[cryptography]==3.3.0
 
-# Development and testing
-pytest==7.4.3
-pytest-asyncio==0.21.1
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
 
-# Code analysis dependencies
-gitpython==3.1.40
-tree-sitter==0.20.4
+# Git operations (updated to latest)
+gitpython==3.1.44
 
-# Optional: Enhanced logging and monitoring
-structlog==23.2.0
+# Tree-sitter for code parsing (Python 3.13 compatible)
+tree-sitter==0.23.2
+
+# Logging (latest available version)
+structlog==25.4.0
+
+# Additional utilities
+python-dotenv==1.0.1
+aiofiles==24.1.0
 

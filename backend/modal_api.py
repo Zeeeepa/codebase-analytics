@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from collections import defaultdict
 import re
+import asyncio
 
 import modal
 from fastapi import FastAPI, HTTPException, Request
@@ -25,21 +26,24 @@ from pydantic import BaseModel, HttpUrl, validator
 
 # Modal image configuration with all dependencies
 image = (
-    modal.Image.debian_slim()
+    modal.Image.debian_slim(python_version="3.11")
     .apt_install("git", "curl", "build-essential")
     .pip_install(
-        "fastapi==0.104.1",
-        "uvicorn[standard]==0.24.0", 
-        "pydantic==2.5.0",
-        "httpx==0.25.2",
-        "python-multipart==0.0.6",
-        "gitpython==3.1.40",
-        "tree-sitter==0.20.4"
+        "fastapi==0.115.6",
+        "uvicorn[standard]==0.32.1", 
+        "pydantic==2.10.4",
+        "httpx==0.28.1",
+        "python-multipart==0.0.17",
+        "gitpython==3.1.44",
+        "tree-sitter==0.23.2",
+        "structlog==25.4.0",
+        "python-dotenv==1.0.1",
+        "aiofiles==24.1.0"
     )
 )
 
 # Create Modal app
-app = modal.App("enhanced-codebase-analytics", image=image)
+app = modal.App("codebase-analytics", image=image)
 
 # Pydantic models (same as before)
 class RepositoryRequest(BaseModel):
@@ -529,4 +533,3 @@ if __name__ == "__main__":
     # For local development
     import uvicorn
     uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
-
