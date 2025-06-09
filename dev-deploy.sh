@@ -121,11 +121,11 @@ fi
 if [ "$FRONTEND_ONLY" = false ]; then
     print_status "Starting backend service..."
     
-    # Kill any existing process on port 8000
-    kill_port 8000
+    # Kill any existing process on port 9997
+    kill_port 9997
     
     cd backend
-    print_status "Backend starting on http://localhost:8000"
+    print_status "Backend starting on http://localhost:9997"
     python3 api.py &
     BACKEND_PID=$!
     cd ..
@@ -134,10 +134,10 @@ if [ "$FRONTEND_ONLY" = false ]; then
     sleep 3
     
     # Check if backend is running
-    if curl -f -s "http://localhost:8000/health" > /dev/null 2>&1; then
+    if curl -f -s "http://localhost:9997/health" > /dev/null 2>&1; then
         print_success "Backend is running successfully!"
-        echo "  🔧 API: http://localhost:8000"
-        echo "  📊 API Docs: http://localhost:8000/docs"
+        echo "  🔧 API: http://localhost:9997"
+        echo "  📊 API Docs: http://localhost:9997/docs"
     else
         print_error "Backend failed to start"
         exit 1
@@ -148,13 +148,11 @@ fi
 if [ "$BACKEND_ONLY" = false ]; then
     print_status "Starting frontend service..."
     
-    # Kill any existing process on ports 3000-3010
-    for port in {3000..3010}; do
-        kill_port $port
-    done
+    # Kill any existing process on port 9996
+    kill_port 9996
     
     cd frontend
-    print_status "Frontend starting..."
+    print_status "Frontend starting on http://localhost:9996"
     npm run dev &
     FRONTEND_PID=$!
     cd ..
@@ -163,10 +161,8 @@ if [ "$BACKEND_ONLY" = false ]; then
     sleep 5
     
     print_success "Frontend is starting!"
-    print_status "Frontend will be available at one of these URLs:"
-    echo "  🌐 http://localhost:3000"
-    echo "  🌐 http://localhost:3001"
-    echo "  🌐 http://localhost:3002"
+    print_status "Frontend will be available at:"
+    echo "  🌐 http://localhost:9996"
 fi
 
 # Create a cleanup function
@@ -180,10 +176,8 @@ cleanup() {
     fi
     
     # Kill processes on known ports
-    kill_port 8000
-    for port in {3000..3010}; do
-        kill_port $port
-    done
+    kill_port 9997
+    kill_port 9996
     
     print_success "Services stopped."
 }
@@ -200,7 +194,7 @@ if [ "$BACKEND_ONLY" = false ] && [ "$FRONTEND_ONLY" = false ]; then
     while true; do
         sleep 10
         # Check if services are still running
-        if ! curl -f -s "http://localhost:8000/health" > /dev/null 2>&1; then
+        if ! curl -f -s "http://localhost:9997/health" > /dev/null 2>&1; then
             print_warning "Backend appears to be down"
         fi
     done
@@ -208,7 +202,7 @@ elif [ "$BACKEND_ONLY" = true ]; then
     print_status "Backend service is running. Monitoring..."
     while true; do
         sleep 10
-        if ! curl -f -s "http://localhost:8000/health" > /dev/null 2>&1; then
+        if ! curl -f -s "http://localhost:9997/health" > /dev/null 2>&1; then
             print_error "Backend has stopped"
             break
         fi
@@ -217,4 +211,3 @@ else
     print_status "Frontend service is running in background."
     wait $FRONTEND_PID
 fi
-
