@@ -1,70 +1,46 @@
-"use client"
+'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { SessionProvider } from 'next-auth/react'
-import { GitHubAuth } from './github-auth'
-import { GitHubRepo } from '@/lib/github'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { 
   BarChart3, 
-  GitBranch, 
-  RefreshCw, 
-  XCircle, 
+  TrendingUp, 
+  AlertTriangle, 
   CheckCircle, 
-  Settings, 
-  Zap, 
-  Database,
-  FileText,
-  AlertTriangle,
-  TrendingUp,
-  Code,
+  File, 
+  FolderOpen, 
+  GitBranch,
   Users,
-  Star,
-  GitFork,
-  Eye,
-  ChevronDown,
-  ChevronRight,
-  Folder,
-  FolderOpen,
-  File,
+  Clock,
   Activity,
-  Calendar,
+  Zap,
   Shield,
   Target,
   Layers,
-  Cloud,
+  Code,
+  Bug,
+  Lightbulb,
+  RefreshCw,
+  Play,
+  Pause,
+  Square,
+  ExternalLink,
   Download,
-  Share,
-  Info
-} from "lucide-react"
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  PieChart,
-  Pie,
-  Cell,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
-  LineChart,
-  Line
-} from 'recharts'
+  Upload,
+  Settings,
+  Info,
+  ChevronRight,
+  ChevronDown
+} from 'lucide-react'
+import { AnalysisModal } from './analysis-modal'
+import { RepositoryAnalysis } from '@/types/analysis'
 
 // Type definitions
 interface AnalysisData {
@@ -129,7 +105,7 @@ interface FileNode {
 interface DeploymentConfig {
   mode: 'local' | 'modal' | 'docker'
   status: 'idle' | 'deploying' | 'deployed' | 'failed'
-  endpoint: string
+  url: string | null
   lastDeployed: Date | null
 }
 
@@ -251,11 +227,6 @@ const EnhancedRepositoryTree: React.FC<{
 }
 
 // File Detail Modal Component
-const FileDetailModal: React.FC<{
-  file: RepositoryNode | null;
-  isOpen: boolean;
-  onClose: () => void;
-}> = ({ file, isOpen, onClose }) => {
   if (!file) return null;
 
   return (
@@ -316,7 +287,6 @@ const FileDetailModal: React.FC<{
         </div>
       </DialogContent>
     </Dialog>
-  )
 }
 
 // Deployment Status Component
@@ -384,22 +354,19 @@ const DeploymentStatus: React.FC<{
         )}
       </CardContent>
     </Card>
-  )
 }
 
 // Main Enhanced Dashboard Component
 export default function EnhancedAnalyticsDashboard() {
   const [repoUrl, setRepoUrl] = useState('')
   const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null)
-  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [selectedFile, setSelectedFile] = useState<FileNode | null>(null)
+  const [selectedFile, setSelectedFile] = useState<RepositoryNode | null>(null)
   const [isFileModalOpen, setIsFileModalOpen] = useState(false)
+  const [analysisData, setAnalysisData] = useState<RepositoryAnalysis | null>(null)
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig>({
     mode: 'local',
     status: 'idle',
-    endpoint: 'http://localhost:9997',
+    url: null,
     lastDeployed: null
   })
 
@@ -458,9 +425,45 @@ export default function EnhancedAnalyticsDashboard() {
     }, 3000)
   }
 
-  const handleFileSelect = (file: RepositoryNode) => {
+  const handleFileClick = (file: RepositoryNode) => {
     setSelectedFile(file)
     setIsFileModalOpen(true)
+    // Convert file data to analysis format for the modal
+    if (file) {
+      const mockAnalysis: RepositoryAnalysis = {
+        repository: {
+          name: file.name,
+          description: `Analysis for ${file.name}`
+        },
+        metrics: {
+          files: 1,
+          functions: file.functions || 0,
+          classes: file.classes || 0,
+          modules: 1
+        },
+        structure: {
+          name: file.name,
+          path: file.path,
+          type: 'file',
+          issues: {
+            critical: file.critical_issues || 0,
+            functional: file.functional_issues || 0,
+            minor: file.minor_issues || 0
+          },
+          language: file.language,
+          size: file.size
+        },
+        issues: file.issues || [],
+        summary: {
+          total_issues: (file.critical_issues || 0) + (file.functional_issues || 0) + (file.minor_issues || 0),
+          critical_issues: file.critical_issues || 0,
+          functional_issues: file.functional_issues || 0,
+          minor_issues: file.minor_issues || 0
+        },
+        analysis_timestamp: new Date().toISOString()
+      }
+      setAnalysisData(mockAnalysis)
+    }
   }
 
   // Prepare enhanced chart data
@@ -807,14 +810,26 @@ export default function EnhancedAnalyticsDashboard() {
                   </Card>
                 </TabsContent>
               </Tabs>
+
+              {/* Enhanced Analysis Modal */}
+              <AnalysisModal
+                analysis={analysisData}
+                isOpen={isFileModalOpen}
+                onClose={() => {
+                  setIsFileModalOpen(false)
+                  setAnalysisData(null)
+                }}
+                onRefresh={() => {
+                  // Refresh analysis data
+                  if (selectedFile) {
+                    handleFileClick(selectedFile)
+                  }
+                }}
+              />
             </div>
           )}
 
           {/* File Detail Modal */}
-          <FileDetailModal
-            file={selectedFile}
-            isOpen={isFileModalOpen}
-            onClose={() => setIsFileModalOpen(false)}
           />
         </div>
       </div>

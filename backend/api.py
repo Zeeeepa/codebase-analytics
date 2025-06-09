@@ -32,6 +32,14 @@ graph_sitter_path = current_dir.parent / "src" / "graph_sitter"
 if graph_sitter_path.exists():
     sys.path.insert(0, str(graph_sitter_path.parent))
 
+# Import the new graph-sitter integration
+try:
+    from analysis.graph_sitter_integration import get_analysis_for_frontend
+    GRAPH_SITTER_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"Graph-sitter integration not available: {e}")
+    GRAPH_SITTER_AVAILABLE = False
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -429,7 +437,7 @@ async def health_check():
 
 @app.post("/analyze_repo", response_model=RepositoryAnalysis)
 async def analyze_repository(request: RepositoryRequest):
-    """Analyze a repository and return comprehensive metrics"""
+    """Analyze a repository and return comprehensive metrics using graph-sitter integration"""
     repo_url = str(request.repo_url)
     temp_dir = None
     
@@ -440,7 +448,14 @@ async def analyze_repository(request: RepositoryRequest):
         repo_path = clone_repository(repo_url)
         temp_dir = repo_path.parent
         
-        # Initialize analyzer
+        # Use graph-sitter integration if available
+        if GRAPH_SITTER_AVAILABLE:
+            logger.info("Using graph-sitter integration for analysis")
+            analysis_result = get_analysis_for_frontend(str(repo_path))
+            return RepositoryAnalysis(**analysis_result)
+        
+        # Fallback to original analyzer if graph-sitter is not available
+        logger.info("Falling back to original analyzer")
         analyzer = CodeAnalyzer()
         
         # Analyze all files
