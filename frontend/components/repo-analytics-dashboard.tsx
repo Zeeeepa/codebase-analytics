@@ -7,6 +7,14 @@ import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+
+// Import new analysis components
+import { CodebaseSummary } from "./analysis/codebase-summary"
+import { FileSummary } from "./analysis/file-summary"
+import { ClassSummary } from "./analysis/class-summary"
+import { FunctionSummary } from "./analysis/function-summary"
+import { SymbolSummary } from "./analysis/symbol-summary"
 
 const mockRepoData = {
   name: "vercel/next.js",
@@ -62,6 +70,35 @@ interface RepoAnalyticsResponse {
   num_functions: number;
   num_classes: number;
   monthly_commits: Record<string, number>;
+  // New graph-sitter analysis data
+  graph_sitter_analysis?: {
+    codebase_summary: string;
+    file_summaries: Array<{
+      file_path: string;
+      summary: string;
+      error?: string;
+    }>;
+    class_summaries: Array<{
+      class_name: string;
+      file_path: string;
+      summary: string;
+      error?: string;
+    }>;
+    function_summaries: Array<{
+      function_name: string;
+      file_path: string;
+      summary: string;
+      error?: string;
+    }>;
+    symbol_summaries: Array<{
+      symbol_name: string;
+      symbol_type: string;
+      summary: string;
+      error?: string;
+    }>;
+    ai_context: string;
+  };
+  error?: string;
 }
 
 interface RepoData {
@@ -87,6 +124,7 @@ export default function RepoAnalyticsDashboard() {
   const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
+  const [analysisData, setAnalysisData] = useState<RepoAnalyticsResponse | null>(null)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -142,6 +180,9 @@ export default function RepoAnalyticsDashboard() {
         numberOfFunctions: data.num_functions,
         numberOfClasses: data.num_classes,
       });
+
+      // Set the analysis data for the new graph-sitter analysis
+      setAnalysisData(data);
 
       const transformedCommitData = Object.entries(data.monthly_commits)
         .map(([date, commits]) => ({
@@ -409,29 +450,87 @@ function calculateCodebaseGrade(data: RepoData) {
               </CardContent>
             </Card>
             <div className="grid gap-6 md:grid-cols-2">
-              <Card className="mt-6">
-                <CardContent className="pt-5 flex justify-between items-center">
-                  <div>
-                    <CardTitle>Codebase Grade</CardTitle>
-                    <CardDescription>Overall grade based on code metrics</CardDescription>
-                  </div>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Codebase Grade</CardTitle>
+                  <Settings className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
                   <div className="text-4xl font-bold text-right">
                     {calculateCodebaseGrade(repoData)}
                   </div>
                 </CardContent>
               </Card>
-              <Card className="mt-6">
-                <CardContent className="pt-5 flex justify-between items-center">
-                  <div>
-                    <CardTitle>Codebase Complexity</CardTitle>
-                    <CardDescription>Judgment based on size and complexity</CardDescription>
-                  </div>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Codebase Complexity</CardTitle>
+                  <RefreshCcw className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
                   <div className="text-2xl font-bold text-right">
                   {repoData.numberOfFiles > 1000 ? "Large" : "Moderate"}
                   </div>
                 </CardContent>
               </Card>
             </div>
+
+            {/* New Graph-Sitter Analysis Section */}
+            {analysisData && analysisData.graph_sitter_analysis && (
+              <div className="mt-8">
+                <h2 className="text-2xl font-bold mb-4">Advanced Code Analysis</h2>
+                <Tabs defaultValue="overview" className="w-full">
+                  <TabsList className="grid w-full grid-cols-5">
+                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="files">Files</TabsTrigger>
+                    <TabsTrigger value="classes">Classes</TabsTrigger>
+                    <TabsTrigger value="functions">Functions</TabsTrigger>
+                    <TabsTrigger value="symbols">Symbols</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="overview" className="mt-4">
+                    <CodebaseSummary 
+                      summary={analysisData.graph_sitter_analysis.codebase_summary}
+                      error={analysisData.error}
+                    />
+                    {analysisData.graph_sitter_analysis.ai_context && (
+                      <Card className="mt-4">
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Brain className="h-5 w-5" />
+                            AI Context
+                          </CardTitle>
+                          <CardDescription>
+                            Formatted context for AI analysis
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-4 rounded-lg border max-h-64 overflow-y-auto">
+                            {analysisData.graph_sitter_analysis.ai_context}
+                          </pre>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </TabsContent>
+                  
+                  <TabsContent value="files" className="mt-4">
+                    <FileSummary fileSummaries={analysisData.graph_sitter_analysis.file_summaries} />
+                  </TabsContent>
+                  
+                  <TabsContent value="classes" className="mt-4">
+                    <ClassSummary classSummaries={analysisData.graph_sitter_analysis.class_summaries} />
+                  </TabsContent>
+                  
+                  <TabsContent value="functions" className="mt-4">
+                    <FunctionSummary functionSummaries={analysisData.graph_sitter_analysis.function_summaries} />
+                  </TabsContent>
+                  
+                  <TabsContent value="symbols" className="mt-4">
+                    <SymbolSummary symbolSummaries={analysisData.graph_sitter_analysis.symbol_summaries} />
+                  </TabsContent>
+                </Tabs>
+              </div>
+            )}
+
           </main>
           <footer className="w-full text-center text-xs text-muted-foreground py-4">
           built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
