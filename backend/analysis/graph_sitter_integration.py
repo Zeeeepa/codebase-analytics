@@ -23,12 +23,22 @@ try:
     from graph_sitter.python.file import PyFile
     from graph_sitter.python.function import PyFunction
     from graph_sitter.python.class_ import PyClass
-    from graph_sitter.typescript.file import TsFile
+    # TypeScript imports - may not be available
+    try:
+        from graph_sitter.typescript.file import TsFile
+    except ImportError:
+        TsFile = None
     from graph_sitter.shared.base_symbol import BaseSymbol
     GRAPH_SITTER_AVAILABLE = True
 except ImportError as e:
     logging.warning(f"Graph-sitter not available: {e}")
     GRAPH_SITTER_AVAILABLE = False
+    # Define dummy classes for type hints
+    TsFile = None
+    PyFile = None
+    PyFunction = None
+    PyClass = None
+    BaseSymbol = None
 
 @dataclass
 class IssueLocation:
@@ -151,10 +161,14 @@ class GraphSitterAnalyzer:
                 file_obj = PyFile(file_path, context)
                 self.metrics.files += 1
                 self._analyze_python_file(file_obj)
-            elif file_path.endswith(('.ts', '.tsx', '.js', '.jsx')):
+            elif file_path.endswith(('.ts', '.tsx', '.js', '.jsx')) and TsFile:
                 file_obj = TsFile(file_path, context)
                 self.metrics.files += 1
                 self._analyze_typescript_file(file_obj)
+            elif file_path.endswith(('.ts', '.tsx', '.js', '.jsx')):
+                # Fallback for TypeScript files when TsFile is not available
+                self.metrics.files += 1
+                self._analyze_typescript_file(None)
                 
         except Exception as e:
             logging.error(f"Failed to analyze file {file_path}: {e}")
@@ -163,25 +177,20 @@ class GraphSitterAnalyzer:
         """Analyze Python file for metrics and issues."""
         try:
             # Count functions and classes
-            functions = file_obj.get_functions()
-            classes = file_obj.get_classes()
+            for symbol in file_obj.symbols:
+                if hasattr(symbol, '__class__') and 'Function' in symbol.__class__.__name__:
+                    self.metrics.functions += 1
+                    self._analyze_python_function(symbol, file_obj.path)
+                elif hasattr(symbol, '__class__') and 'Class' in symbol.__class__.__name__:
+                    self.metrics.classes += 1
+                    self._analyze_python_class(symbol, file_obj.path)
             
-            self.metrics.functions += len(functions)
-            self.metrics.classes += len(classes)
             self.metrics.modules += 1
             
-            # Analyze functions for issues
-            for func in functions:
-                self._analyze_python_function(func, file_obj.file_path)
-                
-            # Analyze classes for issues
-            for cls in classes:
-                self._analyze_python_class(cls, file_obj.file_path)
-                
         except Exception as e:
             logging.error(f"Python file analysis failed: {e}")
     
-    def _analyze_typescript_file(self, file_obj: TsFile):
+    def _analyze_typescript_file(self, file_obj):
         """Analyze TypeScript file for metrics and issues."""
         try:
             # Basic TypeScript analysis
@@ -191,79 +200,39 @@ class GraphSitterAnalyzer:
         except Exception as e:
             logging.error(f"TypeScript file analysis failed: {e}")
     
-    def _analyze_python_function(self, func: PyFunction, file_path: str):
+    def _analyze_python_function(self, func, file_path: str):
         """Analyze Python function for potential issues."""
         try:
-            # Check for common issues based on the provided examples
+            # Example issue detection logic
+            func_name = getattr(func, 'name', 'unknown')
             
-            # Check for misspelled decorators/function names
-            if hasattr(func, 'name') and 'commiter' in func.name:
-                self.issues.append(CodeIssue(
-                    id=f"misspelled_{func.name}_{len(self.issues)}",
-                    severity="critical",
-                    type="naming_error",
-                    title="Misspelled function name",
-                    description=f"Function name '{func.name}' appears to be misspelled. Should be 'committer' not 'commiter'",
-                    location=IssueLocation(
-                        file=file_path,
-                        function=func.name
-                    ),
-                    suggestion="Rename function to use correct spelling",
-                    category="naming"
-                ))
-            
-            # Check for incorrect decorator logic
+            # Check for common issues
             if hasattr(func, 'decorators'):
                 decorators = getattr(func, 'decorators', [])
-                if any('@staticmethod' in str(dec) for dec in decorators):
-                    # Check if this might be a class method check error
-                    if hasattr(func, 'name') and 'class_method' in func.name:
-                        self.issues.append(CodeIssue(
-                            id=f"decorator_logic_{func.name}_{len(self.issues)}",
-                            severity="critical",
-                            type="logic_error",
-                            title="Incorrect decorator check",
-                            description="Function checks for @staticmethod instead of @classmethod",
-                            location=IssueLocation(
-                                file=file_path,
-                                function=func.name
-                            ),
-                            suggestion="Change decorator check from @staticmethod to @classmethod",
-                            category="logic"
-                        ))
-            
-            # Check for TODO comments (functional issues)
-            if hasattr(func, 'body') or hasattr(func, 'source'):
-                source = getattr(func, 'source', '') or getattr(func, 'body', '')
-                if 'TODO' in str(source):
-                    self.issues.append(CodeIssue(
-                        id=f"todo_{func.name}_{len(self.issues)}",
-                        severity="functional",
-                        type="incomplete_implementation",
-                        title="Contains TODOs indicating incomplete implementation",
-                        description=f"Function '{func.name}' contains TODO comments indicating incomplete implementation",
-                        location=IssueLocation(
-                            file=file_path,
-                            function=func.name
-                        ),
-                        suggestion="Complete the implementation or remove TODO comments",
-                        category="implementation"
-                    ))
-            
+                if '@staticmethod' in decorators and 'class_method' in func_name.lower():
+                    self._add_issue(
+                        'critical',
+                        f"Function {func_name} may have incorrect decorator",
+                        f"Function appears to be a class method but uses @staticmethod",
+                        file_path,
+                        getattr(func, 'line_number', 0)
+                    )
+                    
         except Exception as e:
             logging.error(f"Function analysis failed: {e}")
     
-    def _analyze_python_class(self, cls: PyClass, file_path: str):
+    def _analyze_python_class(self, cls, file_path: str):
         """Analyze Python class for potential issues."""
         try:
-            # Basic class analysis
-            methods = getattr(cls, 'methods', [])
-            self.metrics.functions += len(methods)
+            # Example class analysis
+            class_name = getattr(cls, 'name', 'unknown')
             
-            # Analyze each method
-            for method in methods:
-                self._analyze_python_function(method, file_path)
-                
+            # Basic class analysis
+            if hasattr(cls, 'methods'):
+                methods = getattr(cls, 'methods', [])
+                for method in methods:
+                    self._analyze_python_function(method, file_path)
+                    
         except Exception as e:
             logging.error(f"Class analysis failed: {e}")
     
@@ -479,4 +448,3 @@ def analyze_repository(repository_path: str) -> Dict[str, Any]:
 def get_analysis_for_frontend(repository_path: str) -> Dict[str, Any]:
     """Get analysis data formatted for frontend consumption."""
     return analyze_repository(repository_path)
-
