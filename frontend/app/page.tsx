@@ -1,6 +1,15 @@
-import RepoAnalyticsDashboard from '@/components/repo-analytics-dashboard'
+'use client'
+
+import { SessionProvider } from 'next-auth/react'
+import EnhancedAnalyticsDashboard from '@/components/enhanced-analytics-dashboard'
 
 export default function Home() {
-  return <RepoAnalyticsDashboard />
+  return (
+    <SessionProvider>
+      <main>
+        <EnhancedAnalyticsDashboard />
+      </main>
+    </SessionProvider>
+  )
 }
 

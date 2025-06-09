@@ -1,6 +1,9 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
+import { SessionProvider } from 'next-auth/react'
+import { GitHubAuth } from './github-auth'
+import { GitHubRepo } from '@/lib/github'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -329,10 +332,11 @@ const DeploymentStatus: React.FC<{
 // Main Enhanced Dashboard Component
 export default function EnhancedAnalyticsDashboard() {
   const [repoUrl, setRepoUrl] = useState('')
-  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
+  const [selectedRepo, setSelectedRepo] = useState<GitHubRepo | null>(null)
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [selectedFile, setSelectedFile] = useState<RepositoryNode | null>(null)
+  const [selectedFile, setSelectedFile] = useState<FileNode | null>(null)
   const [isFileModalOpen, setIsFileModalOpen] = useState(false)
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig>({
     mode: 'local',
@@ -342,8 +346,8 @@ export default function EnhancedAnalyticsDashboard() {
   })
 
   const analyzeRepository = async () => {
-    if (!repoUrl.trim()) {
-      setError('Please enter a repository URL')
+    if (!selectedRepo && !repoUrl.trim()) {
+      setError('Please select a repository from GitHub or enter a repository URL')
       return
     }
 
@@ -351,21 +355,24 @@ export default function EnhancedAnalyticsDashboard() {
     setError('')
     
     try {
-      const response = await fetch(`${deploymentConfig.endpoint}/analyze_repo`, {
+      const urlToAnalyze = selectedRepo ? selectedRepo.clone_url : repoUrl
+      const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ repo_url: repoUrl }),
+        body: JSON.stringify({ 
+          repo_url: urlToAnalyze,
+          repo_name: selectedRepo ? selectedRepo.name : urlToAnalyze.split('/').pop()?.replace('.git', '') || 'repository'
+        }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.detail || 'Analysis failed')
+        throw new Error('Failed to analyze repository')
       }
 
-      const result = await response.json()
-      setAnalysis(result)
+      const data = await response.json()
+      setAnalysisData(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -399,366 +406,360 @@ export default function EnhancedAnalyticsDashboard() {
   }
 
   // Prepare enhanced chart data
-  const complexityRadarData = analysis ? [
-    { metric: 'Complexity', value: analysis.complexity_metrics.cyclomatic_complexity.average },
-    { metric: 'Maintainability', value: analysis.complexity_metrics.maintainability_index.average },
-    { metric: 'Code Quality', value: Math.max(0, 100 - analysis.issues_summary.total) },
-    { metric: 'Documentation', value: analysis.line_metrics.total.comment_density * 100 },
+  const complexityRadarData = analysisData ? [
+    { metric: 'Complexity', value: analysisData.complexity_metrics.cyclomatic_complexity.average },
+    { metric: 'Maintainability', value: analysisData.complexity_metrics.maintainability_index.average },
+    { metric: 'Code Quality', value: Math.max(0, 100 - analysisData.issues_summary.total) },
+    { metric: 'Documentation', value: analysisData.line_metrics.total.comment_density * 100 },
     { metric: 'Test Coverage', value: 75 }, // Mock data
   ] : []
 
-  const issueDistributionData = analysis ? [
-    { name: 'Critical', value: analysis.issues_summary.critical, color: '#ef4444' },
-    { name: 'Functional', value: analysis.issues_summary.functional, color: '#f59e0b' },
-    { name: 'Minor', value: analysis.issues_summary.minor, color: '#3b82f6' },
+  const issueDistributionData = analysisData ? [
+    { name: 'Critical', value: analysisData.issues_summary.critical, color: '#ef4444' },
+    { name: 'Functional', value: analysisData.issues_summary.functional, color: '#f59e0b' },
+    { name: 'Minor', value: analysisData.issues_summary.minor, color: '#3b82f6' },
   ] : []
 
-  const commitData = analysis ? Object.entries(analysis.monthly_commits).map(([month, commits]) => ({
+  const commitData = analysisData ? Object.entries(analysisData.monthly_commits).map(([month, commits]) => ({
     month,
     commits
   })) : []
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <div className="max-w-7xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-4">
-          <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-            🚀 Enhanced Codebase Analytics
-          </h1>
-          <p className="text-xl text-gray-300">
-            Comprehensive repository analysis with advanced deployment options
-          </p>
-        </div>
-
-        {/* Deployment Status */}
-        <DeploymentStatus 
-          config={deploymentConfig}
-          onDeploy={handleDeploy}
-        />
-
-        {/* Input Section */}
-        <Card className="border-2 border-dashed border-gray-600 hover:border-blue-400 transition-colors bg-gray-800">
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2 text-white">
-              <GitBranch className="h-5 w-5" />
-              <span>Repository Analysis</span>
-            </CardTitle>
-            <CardDescription className="text-gray-300">
-              Enter a GitHub repository URL to analyze code quality, structure, and issues
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex space-x-2">
-              <Input
-                placeholder="https://github.com/owner/repository"
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                className="flex-1 bg-gray-700 border-gray-600 text-white"
-              />
-              <Button 
-                onClick={analyzeRepository} 
-                disabled={loading || deploymentConfig.status === 'deploying'}
-                className="px-6 bg-blue-600 hover:bg-blue-700"
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <BarChart3 className="mr-2 h-4 w-4" />
-                    Analyze Repository
-                  </>
-                )}
-              </Button>
-            </div>
-            
-            {error && (
-              <Alert variant="destructive" className="bg-red-900 border-red-700">
-                <XCircle className="h-4 w-4" />
-                <AlertDescription className="text-red-100">{error}</AlertDescription>
-              </Alert>
-            )}
-            
-            {deploymentConfig.status === 'deployed' && (
-              <Alert className="bg-green-900 border-green-700">
-                <CheckCircle className="h-4 w-4" />
-                <AlertDescription className="text-green-100">
-                  Connected to {deploymentConfig.mode} deployment at {deploymentConfig.endpoint}
-                </AlertDescription>
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Results */}
-        {analysis && (
-          <div className="space-y-6">
-            {/* Overview Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="bg-gradient-to-br from-blue-800 to-blue-900 border-blue-600">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-blue-200">Total Files</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-blue-100">{analysis.basic_metrics.files}</div>
-                  <div className="text-xs text-blue-300 mt-1">
-                    {analysis.basic_metrics.functions} functions, {analysis.basic_metrics.classes} classes
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-green-800 to-green-900 border-green-600">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-green-200">Lines of Code</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-green-100">{analysis.line_metrics.total.loc.toLocaleString()}</div>
-                  <div className="text-xs text-green-300 mt-1">
-                    {(analysis.line_metrics.total.comment_density * 100).toFixed(1)}% comments
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-purple-800 to-purple-900 border-purple-600">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-purple-200">Code Quality</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-purple-100">
-                    {analysis.complexity_metrics.maintainability_index.average.toFixed(0)}
-                  </div>
-                  <div className="text-xs text-purple-300 mt-1">Maintainability Index</div>
-                  <Progress 
-                    value={analysis.complexity_metrics.maintainability_index.average} 
-                    className="mt-2"
-                  />
-                </CardContent>
-              </Card>
-
-              <Card className="bg-gradient-to-br from-red-800 to-red-900 border-red-600">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-red-200">Issues Found</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-red-100">{analysis.issues_summary.total}</div>
-                  <div className="text-xs text-red-300 mt-1">
-                    {analysis.issues_summary.critical} critical, {analysis.issues_summary.functional} functional
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Analysis Tabs */}
-            <Tabs defaultValue="structure" className="space-y-4">
-              <TabsList className="grid w-full grid-cols-5 bg-gray-800">
-                <TabsTrigger value="structure" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Structure</TabsTrigger>
-                <TabsTrigger value="issues" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Issues</TabsTrigger>
-                <TabsTrigger value="complexity" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Complexity</TabsTrigger>
-                <TabsTrigger value="metrics" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Metrics</TabsTrigger>
-                <TabsTrigger value="deployment" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Deploy</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="structure">
-                <Card className="bg-gray-800 border-gray-700">
-                  <CardHeader>
-                    <CardTitle className="text-white">Repository Structure</CardTitle>
-                    <CardDescription className="text-gray-300">
-                      Interactive file tree with detailed analysis
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="max-h-96 overflow-y-auto border rounded-md p-4 bg-gray-900 border-gray-600">
-                      <TreeNode node={analysis.repository_structure} level={0} />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="issues">
-                <Card className="bg-gray-800 border-gray-700">
-                  <CardHeader>
-                    <CardTitle className="text-red-400">Issues Found</CardTitle>
-                    <CardDescription className="text-gray-300">
-                      Code quality issues and suggestions for improvement
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {analysis.issues.map((issue, index) => (
-                        <div key={index} className="border-l-4 border-red-500 pl-4 py-2 bg-gray-900 rounded-r">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge variant={issue.severity === 'critical' ? 'destructive' : 
-                                         issue.severity === 'major' ? 'default' : 'secondary'}
-                                   className={issue.severity === 'critical' ? 'bg-red-600' :
-                                             issue.severity === 'major' ? 'bg-orange-600' : 'bg-gray-600'}>
-                              {issue.severity}
-                            </Badge>
-                            <span className="text-sm text-gray-400">{issue.file}</span>
-                          </div>
-                          <p className="text-white font-medium">{issue.description}</p>
-                          <p className="text-sm text-gray-400 mt-1">{issue.suggestion}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="complexity" className="space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Quality Radar</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={250}>
-                        <RadarChart data={complexityRadarData}>
-                          <PolarGrid />
-                          <PolarAngleAxis dataKey="metric" />
-                          <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                          <Radar
-                            name="Quality Metrics"
-                            dataKey="value"
-                            stroke="#3b82f6"
-                            fill="#3b82f6"
-                            fillOpacity={0.3}
-                          />
-                        </RadarChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Issue Distribution</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={250}>
-                        <PieChart>
-                          <Pie
-                            data={issueDistributionData}
-                            cx="50%"
-                            cy="50%"
-                            outerRadius={80}
-                            dataKey="value"
-                            label={({ name, value }) => `${name}: ${value}`}
-                          >
-                            {issueDistributionData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="metrics" className="space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Lines of Code</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-green-900">{analysis.line_metrics.total.loc.toLocaleString()}</div>
-                      <div className="text-xs text-green-600 mt-1">
-                        {(analysis.line_metrics.total.comment_density * 100).toFixed(1)}% comments
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Complexity Metrics</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-purple-900">
-                        {analysis.complexity_metrics.cyclomatic_complexity.average.toFixed(0)}
-                      </div>
-                      <div className="text-xs text-purple-600 mt-1">Cyclomatic Complexity</div>
-                      <Progress 
-                        value={analysis.complexity_metrics.cyclomatic_complexity.average} 
-                        className="mt-2"
-                      />
-                    </CardContent>
-                  </Card>
-                </div>
-              </TabsContent>
-
-              <TabsContent value="deployment" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Deployment Status</CardTitle>
-                    <CardDescription>
-                      Current deployment configuration and status
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">Mode: {deploymentConfig.mode}</div>
-                        <div className="text-sm text-gray-600">Endpoint: {deploymentConfig.endpoint}</div>
-                      </div>
-                      <Badge className={getStatusColor(deploymentConfig.status)}>
-                        {deploymentConfig.status}
-                      </Badge>
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-2">
-                      <Button 
-                        variant={deploymentConfig.mode === 'local' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => onDeploy('local')}
-                        disabled={deploymentConfig.status === 'deploying'}
-                      >
-                        <Settings size={16} className="mr-1" />
-                        Local
-                      </Button>
-                      <Button 
-                        variant={deploymentConfig.mode === 'modal' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => onDeploy('modal')}
-                        disabled={deploymentConfig.status === 'deploying'}
-                      >
-                        <Zap size={16} className="mr-1" />
-                        Modal
-                      </Button>
-                      <Button 
-                        variant={deploymentConfig.mode === 'docker' ? 'default' : 'outline'}
-                        size="sm"
-                        onClick={() => onDeploy('docker')}
-                        disabled={deploymentConfig.status === 'deploying'}
-                      >
-                        <Database size={16} className="mr-1" />
-                        Docker
-                      </Button>
-                    </div>
-                    
-                    {deploymentConfig.status === 'deploying' && (
-                      <div className="space-y-2">
-                        <Progress value={66} className="w-full" />
-                        <div className="text-sm text-gray-600">Deploying {deploymentConfig.mode} environment...</div>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
+    <SessionProvider>
+      <div className="min-h-screen bg-gray-950 text-gray-100">
+        <div className="container mx-auto p-6 space-y-6">
+          <div className="text-center space-y-2">
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+              🔍 Enhanced Codebase Analytics
+            </h1>
+            <p className="text-gray-400 text-lg">
+              Advanced repository analysis with deployment capabilities
+            </p>
           </div>
-        )}
 
-        {/* File Detail Modal */}
-        <FileDetailModal
-          file={selectedFile}
-          isOpen={isFileModalOpen}
-          onClose={() => setIsFileModalOpen(false)}
-        />
+          {/* GitHub Authentication */}
+          <GitHubAuth 
+            onRepoSelect={setSelectedRepo}
+            selectedRepo={selectedRepo}
+          />
+
+          {/* Repository Input */}
+          <Card className="bg-gray-900 border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-gray-100">Repository Analysis</CardTitle>
+              <CardDescription className="text-gray-400">
+                {selectedRepo 
+                  ? `Analyze ${selectedRepo.name} or enter a different repository URL`
+                  : 'Enter a repository URL to analyze or select from your GitHub repositories above'
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-2">
+                <Input
+                  type="url"
+                  placeholder="https://github.com/username/repository"
+                  value={repoUrl}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  className="flex-1 bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-400"
+                />
+                <Button 
+                  onClick={analyzeRepository} 
+                  disabled={loading || (!selectedRepo && !repoUrl.trim())}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  {loading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                      Analyzing...
+                    </>
+                  ) : (
+                    'Analyze Repository'
+                  )}
+                </Button>
+              </div>
+              {error && (
+                <div className="text-red-400 text-sm bg-red-900/20 p-3 rounded border border-red-800">
+                  {error}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Deployment Status */}
+          <DeploymentStatus 
+            config={deploymentConfig}
+            onDeploy={handleDeploy}
+          />
+
+          {/* Results */}
+          {analysisData && (
+            <div className="space-y-6">
+              {/* Overview Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="bg-gradient-to-br from-blue-800 to-blue-900 border-blue-600">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-blue-200">Total Files</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-blue-100">{analysisData.basic_metrics.files}</div>
+                    <div className="text-xs text-blue-300 mt-1">
+                      {analysisData.basic_metrics.functions} functions, {analysisData.basic_metrics.classes} classes
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-green-800 to-green-900 border-green-600">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-green-200">Lines of Code</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-green-100">{analysisData.line_metrics.total.loc.toLocaleString()}</div>
+                    <div className="text-xs text-green-300 mt-1">
+                      {(analysisData.line_metrics.total.comment_density * 100).toFixed(1)}% comments
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-purple-800 to-purple-900 border-purple-600">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-purple-200">Code Quality</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-purple-100">
+                      {analysisData.complexity_metrics.maintainability_index.average.toFixed(0)}
+                    </div>
+                    <div className="text-xs text-purple-300 mt-1">Maintainability Index</div>
+                    <Progress 
+                      value={analysisData.complexity_metrics.maintainability_index.average} 
+                      className="mt-2"
+                    />
+                  </CardContent>
+                </Card>
+
+                <Card className="bg-gradient-to-br from-red-800 to-red-900 border-red-600">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium text-red-200">Issues Found</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-red-100">{analysisData.issues_summary.total}</div>
+                    <div className="text-xs text-red-300 mt-1">
+                      {analysisData.issues_summary.critical} critical, {analysisData.issues_summary.functional} functional
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Analysis Tabs */}
+              <Tabs defaultValue="structure" className="space-y-4">
+                <TabsList className="grid w-full grid-cols-5 bg-gray-800">
+                  <TabsTrigger value="structure" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Structure</TabsTrigger>
+                  <TabsTrigger value="issues" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Issues</TabsTrigger>
+                  <TabsTrigger value="complexity" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Complexity</TabsTrigger>
+                  <TabsTrigger value="metrics" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Metrics</TabsTrigger>
+                  <TabsTrigger value="deployment" className="data-[state=active]:bg-gray-700 data-[state=active]:text-white">Deploy</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="structure">
+                  <Card className="bg-gray-800 border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-white">Repository Structure</CardTitle>
+                      <CardDescription className="text-gray-300">
+                        Interactive file tree with detailed analysis
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="max-h-96 overflow-y-auto border rounded-md p-4 bg-gray-900 border-gray-600">
+                        <TreeNode node={analysisData.repository_structure} level={0} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="issues">
+                  <Card className="bg-gray-800 border-gray-700">
+                    <CardHeader>
+                      <CardTitle className="text-red-400">Issues Found</CardTitle>
+                      <CardDescription className="text-gray-300">
+                        Code quality issues and suggestions for improvement
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {analysisData.issues.map((issue, index) => (
+                          <div key={index} className="border-l-4 border-red-500 pl-4 py-2 bg-gray-900 rounded-r">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Badge variant={issue.severity === 'critical' ? 'destructive' : 
+                                           issue.severity === 'major' ? 'default' : 'secondary'}
+                                     className={issue.severity === 'critical' ? 'bg-red-600' :
+                                               issue.severity === 'major' ? 'bg-orange-600' : 'bg-gray-600'}>
+                                {issue.severity}
+                              </Badge>
+                              <span className="text-sm text-gray-400">{issue.file}</span>
+                            </div>
+                            <p className="text-white font-medium">{issue.description}</p>
+                            <p className="text-sm text-gray-400 mt-1">{issue.suggestion}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="complexity" className="space-y-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Quality Radar</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <RadarChart data={complexityRadarData}>
+                            <PolarGrid />
+                            <PolarAngleAxis dataKey="metric" />
+                            <PolarRadiusAxis angle={90} domain={[0, 100]} />
+                            <Radar
+                              name="Quality Metrics"
+                              dataKey="value"
+                              stroke="#3b82f6"
+                              fill="#3b82f6"
+                              fillOpacity={0.3}
+                            />
+                          </RadarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Issue Distribution</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <PieChart>
+                            <Pie
+                              data={issueDistributionData}
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={80}
+                              dataKey="value"
+                              label={({ name, value }) => `${name}: ${value}`}
+                            >
+                              {issueDistributionData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="metrics" className="space-y-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Lines of Code</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-green-900">{analysisData.line_metrics.total.loc.toLocaleString()}</div>
+                        <div className="text-xs text-green-600 mt-1">
+                          {(analysisData.line_metrics.total.comment_density * 100).toFixed(1)}% comments
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Complexity Metrics</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-purple-900">
+                          {analysisData.complexity_metrics.cyclomatic_complexity.average.toFixed(0)}
+                        </div>
+                        <div className="text-xs text-purple-600 mt-1">Cyclomatic Complexity</div>
+                        <Progress 
+                          value={analysisData.complexity_metrics.cyclomatic_complexity.average} 
+                          className="mt-2"
+                        />
+                      </CardContent>
+                    </Card>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="deployment" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Deployment Status</CardTitle>
+                      <CardDescription>
+                        Current deployment configuration and status
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="font-medium">Mode: {deploymentConfig.mode}</div>
+                          <div className="text-sm text-gray-600">Endpoint: {deploymentConfig.endpoint}</div>
+                        </div>
+                        <Badge className={getStatusColor(deploymentConfig.status)}>
+                          {deploymentConfig.status}
+                        </Badge>
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2">
+                        <Button 
+                          variant={deploymentConfig.mode === 'local' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onDeploy('local')}
+                          disabled={deploymentConfig.status === 'deploying'}
+                        >
+                          <Settings size={16} className="mr-1" />
+                          Local
+                        </Button>
+                        <Button 
+                          variant={deploymentConfig.mode === 'modal' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onDeploy('modal')}
+                          disabled={deploymentConfig.status === 'deploying'}
+                        >
+                          <Zap size={16} className="mr-1" />
+                          Modal
+                        </Button>
+                        <Button 
+                          variant={deploymentConfig.mode === 'docker' ? 'default' : 'outline'}
+                          size="sm"
+                          onClick={() => onDeploy('docker')}
+                          disabled={deploymentConfig.status === 'deploying'}
+                        >
+                          <Database size={16} className="mr-1" />
+                          Docker
+                        </Button>
+                      </div>
+                      
+                      {deploymentConfig.status === 'deploying' && (
+                        <div className="space-y-2">
+                          <Progress value={66} className="w-full" />
+                          <div className="text-sm text-gray-600">Deploying {deploymentConfig.mode} environment...</div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+
+          {/* File Detail Modal */}
+          <FileDetailModal
+            file={selectedFile}
+            isOpen={isFileModalOpen}
+            onClose={() => setIsFileModalOpen(false)}
+          />
+        </div>
       </div>
-    </div>
+    </SessionProvider>
   )
 }
