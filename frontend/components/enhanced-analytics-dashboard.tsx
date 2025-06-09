@@ -14,16 +14,124 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, Area, AreaChart, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar
+  BarChart3, 
+  GitBranch, 
+  RefreshCw, 
+  XCircle, 
+  CheckCircle, 
+  Settings, 
+  Zap, 
+  Database,
+  FileText,
+  AlertTriangle,
+  TrendingUp,
+  Code,
+  Users,
+  Star,
+  GitFork,
+  Eye,
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  FolderOpen,
+  File,
+  Activity,
+  Calendar,
+  Shield,
+  Target,
+  Layers,
+  Cloud,
+  Download,
+  Share,
+  Info
+} from "lucide-react"
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  LineChart,
+  Line
 } from 'recharts'
-import { 
-  GitBranch, FileText, Code, AlertTriangle, CheckCircle, 
-  XCircle, Info, ChevronDown, ChevronRight, Folder, 
-  FolderOpen, File, Activity, TrendingUp, Users, Calendar,
-  Zap, Shield, Target, Layers, Database, Cloud, Settings,
-  Download, Share, RefreshCw, Eye, BarChart3
-} from 'lucide-react'
+
+// Type definitions
+interface AnalysisData {
+  basic_metrics: {
+    files: number
+    functions: number
+    classes: number
+    modules: number
+  }
+  line_metrics: {
+    total: {
+      loc: number
+      comment_density: number
+    }
+  }
+  complexity_metrics: {
+    cyclomatic_complexity: {
+      average: number
+    }
+    maintainability_index: {
+      average: number
+    }
+  }
+  issues_summary: {
+    total: number
+    critical: number
+    functional: number
+    minor: number
+  }
+  issues: Array<{
+    severity: string
+    file: string
+    description: string
+    suggestion: string
+  }>
+  repository_structure: FileNode
+  monthly_commits: Record<string, number>
+}
+
+// Utility functions
+const getStatusColor = (status: string) => {
+  switch (status) {
+    case 'deployed': return 'text-green-600 bg-green-50'
+    case 'deploying': return 'text-yellow-600 bg-yellow-50'
+    case 'failed': return 'text-red-600 bg-red-50'
+    default: return 'text-gray-600 bg-gray-50'
+  }
+}
+
+interface FileNode {
+  name: string
+  type: 'file' | 'directory'
+  children?: FileNode[]
+  issues?: IssueItem[]
+  path: string
+  issue_count: number
+  critical_issues: number
+  functional_issues: number
+  minor_issues: number
+}
+
+interface DeploymentConfig {
+  mode: 'local' | 'modal' | 'docker'
+  status: 'idle' | 'deploying' | 'deployed' | 'failed'
+  endpoint: string
+  lastDeployed: Date | null
+}
 
 // Enhanced Types with Modal Integration
 interface RepositoryNode {
@@ -45,47 +153,6 @@ interface IssueItem {
   issue_type: string
   description: string
   suggestion?: string
-}
-
-interface AnalysisResult {
-  repo_url: string
-  description: string
-  basic_metrics: {
-    files: number
-    functions: number
-    classes: number
-    modules: number
-  }
-  line_metrics: {
-    total: {
-      loc: number
-      lloc: number
-      sloc: number
-      comments: number
-      comment_density: number
-    }
-  }
-  complexity_metrics: {
-    cyclomatic_complexity: { average: number }
-    maintainability_index: { average: number }
-    halstead_metrics: { total_volume: number; average_volume: number }
-  }
-  repository_structure: RepositoryNode
-  issues_summary: {
-    total: number
-    critical: number
-    functional: number
-    minor: number
-  }
-  detailed_issues: IssueItem[]
-  monthly_commits: Record<string, number>
-}
-
-interface DeploymentConfig {
-  mode: 'local' | 'modal' | 'docker'
-  status: 'idle' | 'deploying' | 'deployed' | 'error'
-  endpoint: string
-  lastDeployed: string | null
 }
 
 // Enhanced Repository Tree Component with Modal Features
@@ -257,15 +324,6 @@ const DeploymentStatus: React.FC<{
   config: DeploymentConfig;
   onDeploy: (mode: 'local' | 'modal' | 'docker') => void;
 }> = ({ config, onDeploy }) => {
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'deployed': return 'text-green-600 bg-green-50'
-      case 'deploying': return 'text-yellow-600 bg-yellow-50'
-      case 'error': return 'text-red-600 bg-red-50'
-      default: return 'text-gray-600 bg-gray-50'
-    }
-  }
-
   return (
     <Card>
       <CardHeader>
@@ -395,7 +453,7 @@ export default function EnhancedAnalyticsDashboard() {
         mode,
         endpoint: endpoints[mode],
         status: 'deployed',
-        lastDeployed: new Date().toISOString()
+        lastDeployed: new Date()
       })
     }, 3000)
   }
@@ -571,7 +629,7 @@ export default function EnhancedAnalyticsDashboard() {
                     </CardHeader>
                     <CardContent>
                       <div className="max-h-96 overflow-y-auto border rounded-md p-4 bg-gray-900 border-gray-600">
-                        <TreeNode node={analysisData.repository_structure} level={0} />
+                        <EnhancedRepositoryTree node={analysisData.repository_structure} level={0} />
                       </div>
                     </CardContent>
                   </Card>
@@ -713,7 +771,7 @@ export default function EnhancedAnalyticsDashboard() {
                         <Button 
                           variant={deploymentConfig.mode === 'local' ? 'default' : 'outline'}
                           size="sm"
-                          onClick={() => onDeploy('local')}
+                          onClick={() => handleDeploy('local')}
                           disabled={deploymentConfig.status === 'deploying'}
                         >
                           <Settings size={16} className="mr-1" />
@@ -722,7 +780,7 @@ export default function EnhancedAnalyticsDashboard() {
                         <Button 
                           variant={deploymentConfig.mode === 'modal' ? 'default' : 'outline'}
                           size="sm"
-                          onClick={() => onDeploy('modal')}
+                          onClick={() => handleDeploy('modal')}
                           disabled={deploymentConfig.status === 'deploying'}
                         >
                           <Zap size={16} className="mr-1" />
@@ -731,7 +789,7 @@ export default function EnhancedAnalyticsDashboard() {
                         <Button 
                           variant={deploymentConfig.mode === 'docker' ? 'default' : 'outline'}
                           size="sm"
-                          onClick={() => onDeploy('docker')}
+                          onClick={() => handleDeploy('docker')}
                           disabled={deploymentConfig.status === 'deploying'}
                         >
                           <Database size={16} className="mr-1" />

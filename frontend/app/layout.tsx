@@ -1,12 +1,10 @@
-import "@/styles/globals.css"
-import type { Metadata } from "next"
-import type React from "react" // Import React
-
-import { ThemeProvider } from "@/components/theme-provider"
+import './globals.css'
+import type { Metadata } from 'next'
+import type React from 'react'
 
 export const metadata: Metadata = {
-  title: "Codebase Analytics Dashboard",
-  description: "Analytics dashboard for public GitHub repositories",
+  title: 'Codebase Analytics Dashboard',
+  description: 'Advanced repository analysis with GitHub integration',
 }
 
 export default function RootLayout({
@@ -16,15 +14,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          {children}
-        </ThemeProvider>
+      <body className="min-h-screen bg-background font-sans antialiased">
+        {children}
       </body>
     </html>
   )
 }
 
-
-
-import './globals.css'

@@ -11,7 +11,7 @@ export interface GitHubRepo {
   language: string | null
   stargazers_count: number
   forks_count: number
-  updated_at: string
+  updated_at: string | null
 }
 
 export class GitHubService {
@@ -63,4 +63,3 @@ export class GitHubService {
     }
   }
 }
-

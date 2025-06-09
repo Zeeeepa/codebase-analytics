@@ -14,11 +14,11 @@ import {
   LineChart, Line, PieChart, Pie, Cell, Area, AreaChart
 } from 'recharts'
 import { 
-  GitBranch, FileText, Code, AlertTriangle, CheckCircle, 
   XCircle, Info, ChevronDown, ChevronRight, Folder, 
   FolderOpen, File, Activity, TrendingUp, Users, Calendar,
   Zap, Shield, Target, Layers, Database, Cloud, Settings,
-  Download, Share, RefreshCw, Eye, BarChart3
+  Download, Share, RefreshCw, Eye, BarChart3, AlertCircle, 
+  FileText, GitBranch, Clock, Code, Bug, CheckCircle
 } from 'lucide-react'
 
 // Types
@@ -148,6 +148,81 @@ const TreeNode: React.FC<{
         <div>
           {node.children.map((child, index) => (
             <TreeNode 
+              key={index} 
+              node={child} 
+              level={level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Enhanced Repository Tree Component
+const EnhancedRepositoryTree: React.FC<{ 
+  node: RepositoryNode; 
+  level?: number;
+}> = ({ node, level = 0 }) => {
+  const [isExpanded, setIsExpanded] = useState(level < 2)
+  
+  const hasIssues = node.issue_count > 0
+  const isDirectory = node.type === 'directory'
+
+  return (
+    <div className="space-y-1">
+      <div 
+        className={`flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50 cursor-pointer transition-colors ${
+          hasIssues ? 'border-l-4 border-l-red-200 bg-red-50/30' : ''
+        }`}
+        style={{ paddingLeft: `${level * 20 + 8}px` }}
+        onClick={() => {
+          if (isDirectory) {
+            setIsExpanded(!isExpanded)
+          }
+        }}
+      >
+        {isDirectory && (
+          <span className="text-gray-400 transition-transform">
+            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </span>
+        )}
+        
+        <span className="text-gray-500">
+          {isDirectory ? (
+            isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />
+          ) : (
+            <File size={16} />
+          )}
+        </span>
+        
+        <span className="font-medium text-gray-900 flex-1">{node.name}</span>
+        
+        {hasIssues && (
+          <div className="flex space-x-1">
+            {node.critical_issues > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {node.critical_issues}
+              </Badge>
+            )}
+            {node.functional_issues > 0 && (
+              <Badge className="text-xs bg-yellow-100 text-yellow-800">
+                {node.functional_issues}
+              </Badge>
+            )}
+            {node.minor_issues > 0 && (
+              <Badge variant="outline" className="text-xs">
+                {node.minor_issues}
+              </Badge>
+            )}
+          </div>
+        )}
+      </div>
+
+      {isDirectory && isExpanded && node.children && (
+        <div>
+          {node.children.map((child, index) => (
+            <EnhancedRepositoryTree 
               key={index} 
               node={child} 
               level={level + 1}
@@ -353,7 +428,7 @@ export default function RepoAnalyticsDashboard() {
                   <CardTitle className="text-sm font-medium text-gray-300">Total Files</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.total_files}</div>
+                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.files}</div>
                 </CardContent>
               </Card>
 
@@ -362,7 +437,7 @@ export default function RepoAnalyticsDashboard() {
                   <CardTitle className="text-sm font-medium text-gray-300">Functions</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.total_functions}</div>
+                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.functions}</div>
                 </CardContent>
               </Card>
 
@@ -371,16 +446,16 @@ export default function RepoAnalyticsDashboard() {
                   <CardTitle className="text-sm font-medium text-gray-300">Classes</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.total_classes}</div>
+                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.classes}</div>
                 </CardContent>
               </Card>
 
               <Card className="bg-gray-800 border-gray-700">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium text-gray-300">Lines of Code</CardTitle>
+                  <CardTitle className="text-sm font-medium text-gray-300">Modules</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.total_lines}</div>
+                  <div className="text-2xl font-bold text-white">{analysis.basic_metrics.modules}</div>
                 </CardContent>
               </Card>
             </div>
@@ -391,8 +466,8 @@ export default function RepoAnalyticsDashboard() {
                 <CardTitle className="text-white">Repository Structure</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="max-h-96 overflow-y-auto border rounded-md p-4 bg-gray-900 border-gray-600">
-                  <TreeNode node={analysis.repository_structure} level={0} />
+                <div className="max-h-96 overflow-y-auto border rounded-md p-4 bg-white">
+                  <EnhancedRepositoryTree node={analysis.repository_structure} level={0} />
                 </div>
               </CardContent>
             </Card>
@@ -404,16 +479,16 @@ export default function RepoAnalyticsDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {analysis.issues.map((issue, index) => (
+                  {analysis.detailed_issues.map((issue, index) => (
                     <div key={index} className="border-l-4 border-red-500 pl-4 py-2 bg-gray-900 rounded-r">
                       <div className="flex items-center gap-2 mb-1">
                         <Badge variant={issue.severity === 'critical' ? 'destructive' : 
-                                     issue.severity === 'major' ? 'default' : 'secondary'}
+                                     issue.severity === 'functional' ? 'default' : 'secondary'}
                                className={issue.severity === 'critical' ? 'bg-red-600' :
-                                         issue.severity === 'major' ? 'bg-orange-600' : 'bg-gray-600'}>
+                                         issue.severity === 'functional' ? 'bg-orange-600' : 'bg-gray-600'}>
                           {issue.severity}
                         </Badge>
-                        <span className="text-sm text-gray-400">{issue.file}</span>
+                        <span className="text-sm text-gray-400">{issue.file_path}</span>
                       </div>
                       <p className="text-white font-medium">{issue.description}</p>
                       <p className="text-sm text-gray-400 mt-1">{issue.suggestion}</p>
@@ -442,7 +517,7 @@ export default function RepoAnalyticsDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="max-h-96 overflow-y-auto border rounded-md p-4 bg-white">
-                      <RepositoryTree node={analysis.repository_structure} />
+                      <EnhancedRepositoryTree node={analysis.repository_structure} level={0} />
                     </div>
                   </CardContent>
                 </Card>
@@ -518,7 +593,7 @@ export default function RepoAnalyticsDashboard() {
                         issue.severity === 'functional' ? 'border-yellow-200 bg-yellow-50' :
                         'border-blue-200 bg-blue-50'
                       }>
-                        <AlertTriangle className="h-4 w-4" />
+                        <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
                           <div className="flex justify-between items-start">
                             <div>

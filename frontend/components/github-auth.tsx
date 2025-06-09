@@ -21,7 +21,7 @@ export function GitHubAuth({ onRepoSelect, selectedRepo }: GitHubAuthProps) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (session?.accessToken) {
+    if (session?.user) {
       fetchRepos()
     }
   }, [session])
@@ -226,4 +226,3 @@ export function GitHubAuth({ onRepoSelect, selectedRepo }: GitHubAuthProps) {
     </Card>
   )
 }
-

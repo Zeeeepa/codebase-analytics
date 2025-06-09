@@ -2,19 +2,34 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { GitHubService } from '@/lib/github'
+import { Octokit } from '@octokit/rest'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const session = await getServerSession(authOptions)
-    
-    if (!session?.accessToken) {
+
+    if (!session?.user) {
       return NextResponse.json(
         { error: 'Not authenticated' },
         { status: 401 }
       )
     }
 
-    const githubService = new GitHubService(session.accessToken)
+    // Get the access token from the session
+    const accessToken = (session as any).accessToken
+    
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'No access token available' },
+        { status: 401 }
+      )
+    }
+
+    const octokit = new Octokit({
+      auth: accessToken,
+    })
+
+    const githubService = new GitHubService(accessToken)
     const repos = await githubService.getUserRepos()
 
     return NextResponse.json(repos)
@@ -26,4 +41,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
