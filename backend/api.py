@@ -165,7 +165,36 @@ def cc_rank(complexity):
 
 def calculate_doi(cls):
     """Calculate the depth of inheritance for a given class."""
-    return len(cls.superclasses)
+    if not hasattr(cls, 'parent_classes') or not cls.parent_classes:
+        return 0
+    
+    max_depth = 0
+    for parent in cls.parent_classes:
+        if hasattr(parent, 'parent_classes'):
+            depth = 1 + calculate_doi(parent)
+            max_depth = max(max_depth, depth)
+        else:
+            max_depth = max(max_depth, 1)
+    
+    return max_depth
+
+
+def calculate_maintainability_index(
+    halstead_volume: float, cyclomatic_complexity: float, lines_of_code: float
+) -> float:
+    """Calculate the Maintainability Index for a function."""
+    if lines_of_code == 0:
+        return 0
+    
+    # Maintainability Index formula
+    mi = (
+        171
+        - 5.2 * math.log(halstead_volume)
+        - 0.23 * cyclomatic_complexity
+        - 16.2 * math.log(lines_of_code)
+    )
+    
+    return max(0, mi)  # Ensure non-negative
 
 
 def get_operators_and_operands(function):
@@ -282,40 +311,6 @@ def count_lines(source: str):
             continued_line = True
 
     return loc, lloc, sloc, comments
-
-
-def calculate_maintainability_index(
-    halstead_volume: float, cyclomatic_complexity: float, loc: int
-) -> int:
-    """Calculate the normalized maintainability index for a given function."""
-    if loc <= 0:
-        return 100
-
-    try:
-        raw_mi = (
-            171
-            - 5.2 * math.log(max(1, halstead_volume))
-            - 0.23 * cyclomatic_complexity
-            - 16.2 * math.log(max(1, loc))
-        )
-        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
-        return int(normalized_mi)
-    except (ValueError, TypeError):
-        return 0
-
-
-def get_maintainability_rank(mi_score: float) -> str:
-    """Convert maintainability index score to a letter grade."""
-    if mi_score >= 85:
-        return "A"
-    elif mi_score >= 65:
-        return "B"
-    elif mi_score >= 45:
-        return "C"
-    elif mi_score >= 25:
-        return "D"
-    else:
-        return "F"
 
 
 def get_github_repo_description(repo_url):
@@ -480,6 +475,21 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
         except Exception as e:
             print(f"Error calculating line metrics: {e}")
         
+        # Calculate DOI (Depth of Inheritance) for classes
+        total_doi = 0
+        doi_count = 0
+        try:
+            for file in codebase.source_files:
+                if hasattr(file, 'classes'):
+                    for cls in file.classes:
+                        doi = calculate_doi(cls)
+                        total_doi += doi
+                        doi_count += 1
+        except Exception as e:
+            print(f"Error calculating DOI: {e}")
+        
+        average_doi = total_doi / doi_count if doi_count > 0 else 0
+        
         # Build comprehensive response with both legacy and new analysis
         results = {
             "repo_url": repo_url,
@@ -512,7 +522,7 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
             
             # Placeholder values for metrics that require more complex analysis
             "cyclomatic_complexity": {"average": 0},
-            "depth_of_inheritance": {"average": 0},
+            "depth_of_inheritance": {"average": average_doi},  # Now using actual DOI calculation
             "halstead_metrics": {"total_volume": 0, "average_volume": 0},
             "maintainability_index": {"average": 0},
         }
