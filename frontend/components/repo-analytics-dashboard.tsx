@@ -1,443 +1,480 @@
 "use client"
 
-import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain } from "lucide-react"
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
-
-import { Button } from "@/components/ui/button"
+import React, { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell, Area, AreaChart
+} from 'recharts'
+import { 
+  GitBranch, FileText, Code, AlertTriangle, CheckCircle, 
+  XCircle, Info, ChevronDown, ChevronRight, Folder, 
+  FolderOpen, File, Activity, TrendingUp, Users, Calendar
+} from 'lucide-react'
 
-const mockRepoData = {
-  name: "vercel/next.js",
-  description: "The React Framework for the Web",
-  linesOfCode: 154321,
-  cyclomaticComplexity: 15.7,
-  depthOfInheritance: 3.2,
-  halsteadVolume: 987654,
-  maintainabilityIndex: 85,
-  commentDensity: 18.5,
-  sloc: 132456,
-  lloc: 98765,
-  numberOfFiles: 1200,
-  numberOfFunctions: 4500,
-  numberOfClasses: 300,
+// Types
+interface RepositoryNode {
+  name: string
+  path: string
+  type: 'file' | 'directory'
+  issue_count: number
+  critical_issues: number
+  functional_issues: number
+  minor_issues: number
+  children?: RepositoryNode[]
+  issues?: IssueItem[]
 }
 
-const mockCommitData = [
-  { month: "October", commits: 130 },
-  { month: "September", commits: 150 },
-  { month: "August", commits: 120 },
-  { month: "July", commits: 110 },
-  { month: "June", commits: 140 },
-  { month: "May", commits: 160 },
-  { month: "April", commits: 170 },
-  { month: "March", commits: 180 },
-  { month: "February", commits: 190 },
-  { month: "January", commits: 200 },
-  { month: "December", commits: 210 },
-  { month: "November", commits: 220 },
-];
+interface IssueItem {
+  file_path: string
+  line_number: number
+  severity: 'critical' | 'functional' | 'minor'
+  issue_type: string
+  description: string
+  suggestion?: string
+}
 
-interface RepoAnalyticsResponse {
-  repo_url: string;
+interface AnalysisResult {
+  repo_url: string
+  description: string
+  basic_metrics: {
+    files: number
+    functions: number
+    classes: number
+    modules: number
+  }
   line_metrics: {
     total: {
-      loc: number;
-      lloc: number;
-      sloc: number;
-      comments: number;
-      comment_density: number;
+      loc: number
+      lloc: number
+      sloc: number
+      comments: number
+      comment_density: number
     }
-  };
-  cyclomatic_complexity: { average: number };
-  depth_of_inheritance: { average: number };
-  halstead_metrics: { 
-    total_volume: number;
-    average_volume: number;
-  };
-  maintainability_index: { average: number };
-  description: string;
-  num_files: number;
-  num_functions: number;
-  num_classes: number;
-  monthly_commits: Record<string, number>;
+  }
+  complexity_metrics: {
+    cyclomatic_complexity: { average: number }
+    maintainability_index: { average: number }
+    halstead_metrics: { total_volume: number; average_volume: number }
+  }
+  repository_structure: RepositoryNode
+  issues_summary: {
+    total: number
+    critical: number
+    functional: number
+    minor: number
+  }
+  detailed_issues: IssueItem[]
+  monthly_commits: Record<string, number>
 }
 
-interface RepoData {
-  name: string;
-  description: string;
-  linesOfCode: number;
-  cyclomaticComplexity: number;
-  depthOfInheritance: number;
-  halsteadVolume: number;
-  maintainabilityIndex: number;
-  commentDensity: number;
-  sloc: number;
-  lloc: number;
-  numberOfFiles: number;
-  numberOfFunctions: number;
-  numberOfClasses: number;
-}
-
-export default function RepoAnalyticsDashboard() {
-  const [repoUrl, setRepoUrl] = useState("")
-  const [repoData, setRepoData] = useState(mockRepoData)
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null)
-  const [commitData, setCommitData] = useState(mockCommitData)
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLandingPage, setIsLandingPage] = useState(true)
-
-  const parseRepoUrl = (input: string): string => {
-    if (input.includes('github.com')) {
-      const url = new URL(input);
-      const pathParts = url.pathname.split('/').filter(Boolean);
-      if (pathParts.length >= 2) {
-        return `${pathParts[0]}/${pathParts[1]}`;
-      }
-    }
-    return input;
-  };
-
-  const handleFetchRepo = async () => {
-    console.log("Fetching repo data...");
-    
-    const parsedRepoUrl = parseRepoUrl(repoUrl);
-    console.log(parsedRepoUrl);
-    
-    setIsLoading(true);
-    setIsLandingPage(false);
-    
-    try {
-      console.log("Fetching repo data...");
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app.modal.run/analyze_repo
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo
-      const response = await fetch('https://codegen-sh--analytics-app-fastapi-modal-app.modal.run/analyze_repo', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ repo_url: parsedRepoUrl }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data: RepoAnalyticsResponse = await response.json();
-      
-      setRepoData({
-        name: parsedRepoUrl,
-        description: data.description,
-        linesOfCode: data.line_metrics.total.loc,
-        cyclomaticComplexity: data.cyclomatic_complexity.average,
-        depthOfInheritance: data.depth_of_inheritance.average,
-        halsteadVolume: data.halstead_metrics.total_volume,
-        maintainabilityIndex: data.maintainability_index.average,
-        commentDensity: data.line_metrics.total.comment_density,
-        sloc: data.line_metrics.total.sloc,
-        lloc: data.line_metrics.total.lloc,
-        numberOfFiles: data.num_files,
-        numberOfFunctions: data.num_functions,
-        numberOfClasses: data.num_classes,
-      });
-
-      const transformedCommitData = Object.entries(data.monthly_commits)
-        .map(([date, commits]) => ({
-          month: new Date(date).toLocaleString('default', { month: 'long' }),
-          commits,
-        }))
-        .slice(0, 12)
-        .reverse();
-
-      setCommitData(transformedCommitData);
-    } catch (error) {
-      console.error('Error fetching repo data:', error);
-      alert('Error fetching repository data. Please check the URL and try again.');
-      setIsLandingPage(true);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleMouseEnter = (cardName: string) => {
-    setHoveredCard(cardName)
-  }
-
-  const handleMouseLeave = () => {
-    setHoveredCard(null)
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      handleFetchRepo(); 
-    }
-  }
-
-function calculateCodebaseGrade(data: RepoData) {
-  const { maintainabilityIndex } = data;
+// Repository Tree Component
+const RepositoryTree: React.FC<{ node: RepositoryNode; level?: number }> = ({ node, level = 0 }) => {
+  const [isExpanded, setIsExpanded] = useState(level < 2)
   
-  if (maintainabilityIndex >= 90) return 'A+';
-  if (maintainabilityIndex >= 85) return 'A';
-  if (maintainabilityIndex >= 80) return 'A-';
-  if (maintainabilityIndex >= 75) return 'B+';
-  if (maintainabilityIndex >= 70) return 'B';
-  if (maintainabilityIndex >= 65) return 'B-';
-  if (maintainabilityIndex >= 60) return 'C+';
-  if (maintainabilityIndex >= 55) return 'C';
-  if (maintainabilityIndex >= 50) return 'C-';
-  if (maintainabilityIndex >= 45) return 'D+';
-  if (maintainabilityIndex >= 40) return 'D';
-  return 'F';
-}
+  const getSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'text-red-600 bg-red-50'
+      case 'functional': return 'text-yellow-600 bg-yellow-50'
+      case 'minor': return 'text-blue-600 bg-blue-50'
+      default: return 'text-gray-600 bg-gray-50'
+    }
+  }
 
-
-
+  const hasIssues = node.issue_count > 0
+  const isDirectory = node.type === 'directory'
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {isLandingPage ? (
-        <div className="flex flex-col items-center justify-center min-h-screen p-4">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold flex items-center justify-center gap-3 mb-4">
-              <img src="cg.png" alt="CG Logo" className="h-12 w-12" />
-              <span>Codebase Analytics</span>
-            </h1>
-            <p className="text-muted-foreground">Effortlessly calculate GitHub repository metrics in seconds</p>
+    <div className="space-y-1">
+      <div 
+        className={`flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50 cursor-pointer ${
+          hasIssues ? 'border-l-4 border-l-red-200' : ''
+        }`}
+        style={{ paddingLeft: `${level * 20 + 8}px` }}
+        onClick={() => isDirectory && setIsExpanded(!isExpanded)}
+      >
+        {isDirectory && (
+          <span className="text-gray-400">
+            {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </span>
+        )}
+        
+        <span className="text-gray-500">
+          {isDirectory ? (
+            isExpanded ? <FolderOpen size={16} /> : <Folder size={16} />
+          ) : (
+            <File size={16} />
+          )}
+        </span>
+        
+        <span className="font-medium text-gray-900">{node.name}</span>
+        
+        {hasIssues && (
+          <div className="flex space-x-1">
+            {node.critical_issues > 0 && (
+              <Badge variant="destructive" className="text-xs">
+                {node.critical_issues} Critical
+              </Badge>
+            )}
+            {node.functional_issues > 0 && (
+              <Badge variant="secondary" className="text-xs bg-yellow-100 text-yellow-800">
+                {node.functional_issues} Functional
+              </Badge>
+            )}
+            {node.minor_issues > 0 && (
+              <Badge variant="outline" className="text-xs">
+                {node.minor_issues} Minor
+              </Badge>
+            )}
           </div>
-          <div className="flex items-center gap-3 w-full max-w-lg">
-            <Input
-              type="text"
-              placeholder="Enter the GitHub repo link or owner/repo"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              onKeyPress={handleKeyPress}
-              className="flex-1"
-              title="Format: https://github.com/owner/repo or owner/repo"
-            />
-            <Button 
-              onClick={handleFetchRepo} 
-              disabled={isLoading}
-            >
-              {isLoading ? "Loading..." : "Analyze"}
+        )}
+      </div>
+
+      {isDirectory && isExpanded && node.children && (
+        <div>
+          {node.children.map((child, index) => (
+            <RepositoryTree key={index} node={child} level={level + 1} />
+          ))}
+        </div>
+      )}
+
+      {!isDirectory && node.issues && node.issues.length > 0 && (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" size="sm" className="ml-8 text-xs">
+              View {node.issues.length} issues
             </Button>
-          </div>
-          <footer className="absolute bottom-0 w-full text-center text-xs text-muted-foreground py-4">
-            built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
-          </footer>
-        </div>
-      ) : isLoading ? (
-        <div className="flex flex-col items-center justify-center min-h-screen">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold mb-4">Analyzing Repository</h2>
-            <p className="text-muted-foreground">Please wait while we calculate codebase metrics with Codegen...</p>
-          </div>
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-        </div>
-      ) : (
-        <div className="flex flex-col min-h-screen">
-          <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="w-full px-8 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex-shrink-0">
-                  <h1
-                    className="text-2xl font-bold flex items-center space-x-3 cursor-pointer"
-                    onClick={() => window.location.reload()}
-                  >
-                    <img src="cg.png" alt="CG Logo" className="h-8 w-8" />
-                    <span>Codebase Analytics</span>
-                  </h1>
-                </div>
-                <div className="flex items-center gap-3 ml-auto">
-                  <Input
-                    type="text"
-                    placeholder="Enter the GitHub repo link or owner/repo"
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    className="w-[320px]"
-                    title="Format: https://github.com/owner/repo or owner/repo"
-                  />
-                  <Button onClick={handleFetchRepo} disabled={isLoading}>
-                    {isLoading ? "Loading..." : "Analyze"}
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </header>
-          <main className="p-6 flex-grow">
-            <div className="grid mb-5 gap-6 grid-cols-1">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Repository</CardTitle>
-                  <Github className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <a href={`https://github.com/${repoData.name}`} target="_blank" rel="noopener noreferrer" className="block">
-                    <div className="text-2xl font-bold">{repoData.name}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{repoData.description}</p>
-                  </a>
-                  <div className="flex flex-wrap mt-4 gap-4">
-                    <div className="flex items-center">
-                      <FileCode2 className="h-4 w-4 text-muted-foreground mr-2" />
-                      <span className="text-sm font-medium">{repoData.numberOfFiles.toLocaleString()} Files</span>
-                    </div>
-                    <div className="flex items-center">
-                      <Code className="h-4 w-4 text-muted-foreground mr-2" />
-                      <span className="text-sm font-medium">{repoData.numberOfFunctions.toLocaleString()} Functions</span>
-                    </div>
-                    <div className="flex items-center">
-                      <BarChart3 className="h-4 w-4 text-muted-foreground mr-2" />
-                      <span className="text-sm font-medium">{repoData.numberOfClasses.toLocaleString()} Classes</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="grid gap-6 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4">
-              <Card onMouseEnter={() => handleMouseEnter('Maintainability Index')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Maintainability Index</CardTitle>
-                  <Settings className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.maintainabilityIndex}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Maintainability Index' ? 'This evaluates how easy it is to understand, modify, and maintain a codebase (ranging from 0 to 100).' : 'Code maintainability score (0-100)'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Cyclomatic Complexity')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Cyclomatic Complexity</CardTitle>
-                  <RefreshCcw className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.cyclomaticComplexity.toFixed(1)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Cyclomatic Complexity' ? 'This measures the number of independent paths through a program\'s source code' : 'Average complexity score'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Halstead Volume')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Halstead Volume</CardTitle>
-                  <PaintBucket className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.halsteadVolume.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Halstead Volume' ? 'This quantifies the amount of information in a program by measuring the size and complexity of its code using operators and operands.' : 'Code volume metric'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Depth of Inheritance')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Depth of Inheritance</CardTitle>
-                  <GitBranch className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.depthOfInheritance.toFixed(1)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Depth of Inheritance' ? 'This is the average measure of the number of classes that a class inherits from.' : 'Average inheritance depth'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Lines of Code')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Lines of Code</CardTitle>
-                  <Code2 className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.linesOfCode.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Lines of Code' ? 'This is the total number of lines of code within this codebase.' : 'Total lines in the repository'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('SLOC')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">SLOC</CardTitle>
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.sloc.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'SLOC' ? 'This is the number of textual lines of code within the codebase, ignoring whitespace and comments.' : 'Source Lines of Code'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('LLOC')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">LLOC</CardTitle>
-                  <Brain className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.lloc.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'LLOC' ? 'This is the number of lines of code that contribute to executable statements in the codebase.' : 'Logical Lines of Code'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Comment Density')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Comment Density</CardTitle>
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.commentDensity.toFixed(1)}%</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Comment Density' ? 'This is the percentage of the lines in the codebase that are comments.' : 'Percentage of comments in code'}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Monthly Commits</CardTitle>
-                <CardDescription>Number of commits, batched by month over the past year</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={commitData}>
-                    <XAxis dataKey="month" stroke="#888888" />
-                    <YAxis stroke="#888888" />
-                    <Bar dataKey="commits" fill="#2563eb" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card className="mt-6">
-                <CardContent className="pt-5 flex justify-between items-center">
-                  <div>
-                    <CardTitle>Codebase Grade</CardTitle>
-                    <CardDescription>Overall grade based on code metrics</CardDescription>
-                  </div>
-                  <div className="text-4xl font-bold text-right">
-                    {calculateCodebaseGrade(repoData)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="mt-6">
-                <CardContent className="pt-5 flex justify-between items-center">
-                  <div>
-                    <CardTitle>Codebase Complexity</CardTitle>
-                    <CardDescription>Judgment based on size and complexity</CardDescription>
-                  </div>
-                  <div className="text-2xl font-bold text-right">
-                  {repoData.numberOfFiles > 1000 ? "Large" : "Moderate"}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </main>
-          <footer className="w-full text-center text-xs text-muted-foreground py-4">
-          built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
-          </footer>
-        </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="ml-8 space-y-2">
+            {node.issues.map((issue, index) => (
+              <Alert key={index} className={`text-xs ${getSeverityColor(issue.severity)}`}>
+                <AlertTriangle className="h-3 w-3" />
+                <AlertDescription>
+                  <div className="font-medium">Line {issue.line_number}: {issue.description}</div>
+                  {issue.suggestion && (
+                    <div className="text-xs mt-1 opacity-75">{issue.suggestion}</div>
+                  )}
+                </AlertDescription>
+              </Alert>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
       )}
     </div>
   )
 }
+
+// Main Dashboard Component
+export default function RepoAnalyticsDashboard() {
+  const [repoUrl, setRepoUrl] = useState('')
+  const [analysis, setAnalysis] = useState<AnalysisResult | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  const analyzeRepository = async () => {
+    if (!repoUrl.trim()) {
+      setError('Please enter a repository URL')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    
+    try {
+      const response = await fetch('/api/analyze_repo', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ repo_url: repoUrl }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Analysis failed')
+      }
+
+      const result = await response.json()
+      setAnalysis(result)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Prepare chart data
+  const complexityData = analysis ? [
+    { name: 'Cyclomatic Complexity', value: analysis.complexity_metrics.cyclomatic_complexity.average },
+    { name: 'Maintainability Index', value: analysis.complexity_metrics.maintainability_index.average },
+  ] : []
+
+  const issueDistributionData = analysis ? [
+    { name: 'Critical', value: analysis.issues_summary.critical, color: '#ef4444' },
+    { name: 'Functional', value: analysis.issues_summary.functional, color: '#f59e0b' },
+    { name: 'Minor', value: analysis.issues_summary.minor, color: '#3b82f6' },
+  ] : []
+
+  const commitData = analysis ? Object.entries(analysis.monthly_commits).map(([month, commits]) => ({
+    month,
+    commits
+  })) : []
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-6">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Header */}
+        <div className="text-center space-y-4">
+          <h1 className="text-4xl font-bold text-gray-900">
+            📊 Enhanced Codebase Analytics
+          </h1>
+          <p className="text-lg text-gray-600">
+            Comprehensive repository analysis with issue detection and metrics
+          </p>
+        </div>
+
+        {/* Input Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <GitBranch className="h-5 w-5" />
+              <span>Repository Analysis</span>
+            </CardTitle>
+            <CardDescription>
+              Enter a GitHub repository URL to analyze code quality, structure, and issues
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex space-x-2">
+              <Input
+                placeholder="https://github.com/owner/repository"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                className="flex-1"
+              />
+              <Button 
+                onClick={analyzeRepository} 
+                disabled={loading}
+                className="px-6"
+              >
+                {loading ? 'Analyzing...' : 'Analyze Repository'}
+              </Button>
+            </div>
+            
+            {error && (
+              <Alert variant="destructive">
+                <XCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Results */}
+        {analysis && (
+          <div className="space-y-6">
+            {/* Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">Total Files</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{analysis.basic_metrics.files}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {analysis.basic_metrics.functions} functions, {analysis.basic_metrics.classes} classes
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">Lines of Code</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{analysis.line_metrics.total.loc.toLocaleString()}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {(analysis.line_metrics.total.comment_density * 100).toFixed(1)}% comments
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">Code Quality</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {analysis.complexity_metrics.maintainability_index.average.toFixed(0)}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">Maintainability Index</div>
+                  <Progress 
+                    value={analysis.complexity_metrics.maintainability_index.average} 
+                    className="mt-2"
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium text-gray-600">Issues Found</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-red-600">{analysis.issues_summary.total}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {analysis.issues_summary.critical} critical, {analysis.issues_summary.functional} functional
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Detailed Analysis Tabs */}
+            <Tabs defaultValue="structure" className="space-y-4">
+              <TabsList className="grid w-full grid-cols-4">
+                <TabsTrigger value="structure">Repository Structure</TabsTrigger>
+                <TabsTrigger value="metrics">Metrics & Charts</TabsTrigger>
+                <TabsTrigger value="issues">Issues Analysis</TabsTrigger>
+                <TabsTrigger value="activity">Git Activity</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="structure" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Interactive Repository Tree</CardTitle>
+                    <CardDescription>
+                      Navigate through your repository structure and view issues by file
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="max-h-96 overflow-y-auto border rounded-md p-4">
+                      <RepositoryTree node={analysis.repository_structure} />
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="metrics" className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Complexity Metrics</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={complexityData}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Bar dataKey="value" fill="#3b82f6" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Issue Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <PieChart>
+                          <Pie
+                            data={issueDistributionData}
+                            cx="50%"
+                            cy="50%"
+                            outerRadius={80}
+                            dataKey="value"
+                            label={({ name, value }) => `${name}: ${value}`}
+                          >
+                            {issueDistributionData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="issues" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Detailed Issues Report</CardTitle>
+                    <CardDescription>
+                      Critical issues that need immediate attention
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {analysis.detailed_issues.slice(0, 10).map((issue, index) => (
+                      <Alert key={index} className={
+                        issue.severity === 'critical' ? 'border-red-200 bg-red-50' :
+                        issue.severity === 'functional' ? 'border-yellow-200 bg-yellow-50' :
+                        'border-blue-200 bg-blue-50'
+                      }>
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <div className="font-medium">
+                                {issue.file_path}:{issue.line_number}
+                              </div>
+                              <div className="text-sm mt-1">{issue.description}</div>
+                              {issue.suggestion && (
+                                <div className="text-xs mt-2 opacity-75">
+                                  💡 {issue.suggestion}
+                                </div>
+                              )}
+                            </div>
+                            <Badge variant={
+                              issue.severity === 'critical' ? 'destructive' :
+                              issue.severity === 'functional' ? 'secondary' : 'outline'
+                            }>
+                              {issue.severity}
+                            </Badge>
+                          </div>
+                        </AlertDescription>
+                      </Alert>
+                    ))}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="activity" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Git Commit Activity</CardTitle>
+                    <CardDescription>
+                      Repository activity over the last 12 months
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={commitData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Tooltip />
+                        <Area type="monotone" dataKey="commits" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.3} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+

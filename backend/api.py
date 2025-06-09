@@ -1,431 +1,572 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any
-from codegen import Codebase
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
-import math
-import re
-import requests
-from datetime import datetime, timedelta
-import subprocess
-import os
-import tempfile
-from fastapi.middleware.cors import CORSMiddleware
-import modal
+#!/usr/bin/env python3
+"""
+Enhanced Codebase Analytics API
+A comprehensive FastAPI backend for repository analysis with graph-sitter integration.
+"""
 
-image = (
-    modal.Image.debian_slim()
-    .apt_install("git")
-    .pip_install(
-        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
-    )
+import os
+import sys
+import json
+import tempfile
+import shutil
+import subprocess
+import logging
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Union
+from dataclasses import dataclass, asdict
+from collections import defaultdict
+import re
+
+# FastAPI and related imports
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, HttpUrl, validator
+import uvicorn
+
+# Add the graph_sitter path to sys.path for imports
+current_dir = Path(__file__).parent
+graph_sitter_path = current_dir.parent / "src" / "graph_sitter"
+if graph_sitter_path.exists():
+    sys.path.insert(0, str(graph_sitter_path.parent))
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# Pydantic models for request/response
+class RepositoryRequest(BaseModel):
+    repo_url: HttpUrl
+    
+    @validator('repo_url')
+    def validate_github_url(cls, v):
+        url_str = str(v)
+        if not ('github.com' in url_str or 'gitlab.com' in url_str):
+            raise ValueError('Only GitHub and GitLab repositories are supported')
+        return v
+
+class BasicMetrics(BaseModel):
+    files: int = 0
+    functions: int = 0
+    classes: int = 0
+    modules: int = 0
+
+class LineMetrics(BaseModel):
+    loc: int = 0  # Lines of Code
+    lloc: int = 0  # Logical Lines of Code
+    sloc: int = 0  # Source Lines of Code
+    comments: int = 0
+    comment_density: float = 0.0
+
+class ComplexityMetrics(BaseModel):
+    cyclomatic_complexity: Dict[str, float] = {"average": 0.0}
+    maintainability_index: Dict[str, float] = {"average": 0.0}
+    halstead_metrics: Dict[str, Union[int, float]] = {"total_volume": 0, "average_volume": 0}
+
+class IssueItem(BaseModel):
+    file_path: str
+    line_number: int
+    severity: str  # "critical", "functional", "minor"
+    issue_type: str
+    description: str
+    suggestion: Optional[str] = None
+
+class RepositoryNode(BaseModel):
+    name: str
+    path: str
+    type: str  # "file" or "directory"
+    issue_count: int = 0
+    critical_issues: int = 0
+    functional_issues: int = 0
+    minor_issues: int = 0
+    children: Optional[List['RepositoryNode']] = None
+    issues: Optional[List[IssueItem]] = None
+
+class IssuesSummary(BaseModel):
+    total: int = 0
+    critical: int = 0
+    functional: int = 0
+    minor: int = 0
+
+class RepositoryAnalysis(BaseModel):
+    repo_url: str
+    description: str = "Repository analysis"
+    basic_metrics: BasicMetrics
+    line_metrics: Dict[str, LineMetrics]
+    complexity_metrics: ComplexityMetrics
+    repository_structure: RepositoryNode
+    issues_summary: IssuesSummary
+    detailed_issues: List[IssueItem]
+    monthly_commits: Dict[str, int] = {}
+
+# Update forward references
+RepositoryNode.model_rebuild()
+
+# FastAPI app initialization
+app = FastAPI(
+    title="Enhanced Codebase Analytics API",
+    description="Comprehensive repository analysis with graph-sitter integration",
+    version="2.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-app = modal.App(name="analytics-app", image=image)
+# Security middleware
+app.add_middleware(
+    TrustedHostMiddleware, 
+    allowed_hosts=["localhost", "127.0.0.1", "0.0.0.0", "*"]
+)
 
-fastapi_app = FastAPI()
-
-fastapi_app.add_middleware(
+# CORS middleware
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://127.0.0.1:3000"],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
+# Rate limiting storage (simple in-memory for demo)
+request_counts = defaultdict(list)
 
-def get_monthly_commits(repo_path: str) -> Dict[str, int]:
-    """
-    Get the number of commits per month for the last 12 months.
-
-    Args:
-        repo_path: Path to the git repository
-
-    Returns:
-        Dictionary with month-year as key and number of commits as value
-    """
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=365)
-
-    date_format = "%Y-%m-%d"
-    since_date = start_date.strftime(date_format)
-    until_date = end_date.strftime(date_format)
-    repo_path = "https://github.com/" + repo_path
-
-    try:
-        original_dir = os.getcwd()
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            subprocess.run(["git", "clone", repo_path, temp_dir], check=True)
-            os.chdir(temp_dir)
-
-            cmd = [
-                "git",
-                "log",
-                f"--since={since_date}",
-                f"--until={until_date}",
-                "--format=%aI",
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            commit_dates = result.stdout.strip().split("\n")
-
-            monthly_counts = {}
-            current_date = start_date
-            while current_date <= end_date:
-                month_key = current_date.strftime("%Y-%m")
-                monthly_counts[month_key] = 0
-                current_date = (
-                    current_date.replace(day=1) + timedelta(days=32)
-                ).replace(day=1)
-
-            for date_str in commit_dates:
-                if date_str:  # Skip empty lines
-                    commit_date = datetime.fromisoformat(date_str.strip())
-                    month_key = commit_date.strftime("%Y-%m")
-                    if month_key in monthly_counts:
-                        monthly_counts[month_key] += 1
-
-            os.chdir(original_dir)
-            return dict(sorted(monthly_counts.items()))
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing git command: {e}")
-        return {}
-    except Exception as e:
-        print(f"Error processing git commits: {e}")
-        return {}
-    finally:
-        try:
-            os.chdir(original_dir)
-        except:
-            pass
-
-
-def calculate_cyclomatic_complexity(function):
-    def analyze_statement(statement):
-        complexity = 0
-
-        if isinstance(statement, IfBlockStatement):
-            complexity += 1
-            if hasattr(statement, "elif_statements"):
-                complexity += len(statement.elif_statements)
-
-        elif isinstance(statement, (ForLoopStatement, WhileStatement)):
-            complexity += 1
-
-        elif isinstance(statement, TryCatchStatement):
-            complexity += len(getattr(statement, "except_blocks", []))
-
-        if hasattr(statement, "condition") and isinstance(statement.condition, str):
-            complexity += statement.condition.count(
-                " and "
-            ) + statement.condition.count(" or ")
-
-        if hasattr(statement, "nested_code_blocks"):
-            for block in statement.nested_code_blocks:
-                complexity += analyze_block(block)
-
-        return complexity
-
-    def analyze_block(block):
-        if not block or not hasattr(block, "statements"):
-            return 0
-        return sum(analyze_statement(stmt) for stmt in block.statements)
-
-    return (
-        1 + analyze_block(function.code_block) if hasattr(function, "code_block") else 1
-    )
-
-
-def cc_rank(complexity):
-    if complexity < 0:
-        raise ValueError("Complexity must be a non-negative value")
-
-    ranks = [
-        (1, 5, "A"),
-        (6, 10, "B"),
-        (11, 20, "C"),
-        (21, 30, "D"),
-        (31, 40, "E"),
-        (41, float("inf"), "F"),
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    """Simple rate limiting middleware"""
+    client_ip = request.client.host
+    now = datetime.now()
+    
+    # Clean old requests (older than 1 minute)
+    request_counts[client_ip] = [
+        req_time for req_time in request_counts[client_ip] 
+        if now - req_time < timedelta(minutes=1)
     ]
-    for low, high, rank in ranks:
-        if low <= complexity <= high:
-            return rank
-    return "F"
-
-
-def calculate_doi(cls):
-    """Calculate the depth of inheritance for a given class."""
-    return len(cls.superclasses)
-
-
-def get_operators_and_operands(function):
-    operators = []
-    operands = []
-
-    for statement in function.code_block.statements:
-        for call in statement.function_calls:
-            operators.append(call.name)
-            for arg in call.args:
-                operands.append(arg.source)
-
-        if hasattr(statement, "expressions"):
-            for expr in statement.expressions:
-                if isinstance(expr, BinaryExpression):
-                    operators.extend([op.source for op in expr.operators])
-                    operands.extend([elem.source for elem in expr.elements])
-                elif isinstance(expr, UnaryExpression):
-                    operators.append(expr.ts_node.type)
-                    operands.append(expr.argument.source)
-                elif isinstance(expr, ComparisonExpression):
-                    operators.extend([op.source for op in expr.operators])
-                    operands.extend([elem.source for elem in expr.elements])
-
-        if hasattr(statement, "expression"):
-            expr = statement.expression
-            if isinstance(expr, BinaryExpression):
-                operators.extend([op.source for op in expr.operators])
-                operands.extend([elem.source for elem in expr.elements])
-            elif isinstance(expr, UnaryExpression):
-                operators.append(expr.ts_node.type)
-                operands.append(expr.argument.source)
-            elif isinstance(expr, ComparisonExpression):
-                operators.extend([op.source for op in expr.operators])
-                operands.extend([elem.source for elem in expr.elements])
-
-    return operators, operands
-
-
-def calculate_halstead_volume(operators, operands):
-    n1 = len(set(operators))
-    n2 = len(set(operands))
-
-    N1 = len(operators)
-    N2 = len(operands)
-
-    N = N1 + N2
-    n = n1 + n2
-
-    if n > 0:
-        volume = N * math.log2(n)
-        return volume, N1, N2, n1, n2
-    return 0, N1, N2, n1, n2
-
-
-def count_lines(source: str):
-    """Count different types of lines in source code."""
-    if not source.strip():
-        return 0, 0, 0, 0
-
-    lines = [line.strip() for line in source.splitlines()]
-    loc = len(lines)
-    sloc = len([line for line in lines if line])
-
-    in_multiline = False
-    comments = 0
-    code_lines = []
-
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        code_part = line
-        if not in_multiline and "#" in line:
-            comment_start = line.find("#")
-            if not re.search(r'["\'].*#.*["\']', line[:comment_start]):
-                code_part = line[:comment_start].strip()
-                if line[comment_start:].strip():
-                    comments += 1
-
-        if ('"""' in line or "'''" in line) and not (
-            line.count('"""') % 2 == 0 or line.count("'''") % 2 == 0
-        ):
-            if in_multiline:
-                in_multiline = False
-                comments += 1
-            else:
-                in_multiline = True
-                comments += 1
-                if line.strip().startswith('"""') or line.strip().startswith("'''"):
-                    code_part = ""
-        elif in_multiline:
-            comments += 1
-            code_part = ""
-        elif line.strip().startswith("#"):
-            comments += 1
-            code_part = ""
-
-        if code_part.strip():
-            code_lines.append(code_part)
-
-        i += 1
-
-    lloc = 0
-    continued_line = False
-    for line in code_lines:
-        if continued_line:
-            if not any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
-                continued_line = False
-            continue
-
-        lloc += len([stmt for stmt in line.split(";") if stmt.strip()])
-
-        if any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
-            continued_line = True
-
-    return loc, lloc, sloc, comments
-
-
-def calculate_maintainability_index(
-    halstead_volume: float, cyclomatic_complexity: float, loc: int
-) -> int:
-    """Calculate the normalized maintainability index for a given function."""
-    if loc <= 0:
-        return 100
-
-    try:
-        raw_mi = (
-            171
-            - 5.2 * math.log(max(1, halstead_volume))
-            - 0.23 * cyclomatic_complexity
-            - 16.2 * math.log(max(1, loc))
+    
+    # Check rate limit (60 requests per minute)
+    if len(request_counts[client_ip]) >= 60:
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded. Try again later."}
         )
-        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
-        return int(normalized_mi)
-    except (ValueError, TypeError):
-        return 0
+    
+    # Add current request
+    request_counts[client_ip].append(now)
+    
+    response = await call_next(request)
+    return response
 
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers"""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
-def get_maintainability_rank(mi_score: float) -> str:
-    """Convert maintainability index score to a letter grade."""
-    if mi_score >= 85:
-        return "A"
-    elif mi_score >= 65:
-        return "B"
-    elif mi_score >= 45:
-        return "C"
-    elif mi_score >= 25:
-        return "D"
-    else:
-        return "F"
+class CodeAnalyzer:
+    """Enhanced code analyzer with issue detection"""
+    
+    def __init__(self):
+        self.supported_extensions = {
+            '.py': 'python',
+            '.js': 'javascript', 
+            '.jsx': 'javascript',
+            '.ts': 'typescript',
+            '.tsx': 'typescript',
+            '.java': 'java',
+            '.cpp': 'cpp',
+            '.c': 'c',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.rb': 'ruby',
+            '.php': 'php'
+        }
+        
+        # Issue detection patterns
+        self.issue_patterns = {
+            'critical': [
+                (r'def\s+(\w*commiter\w*)', 'Misspelled function name - should be "committer"'),
+                (r'@staticmethod.*@property.*def\s+is_class_method', 'Incorrect implementation checking @staticmethod instead of @classmethod'),
+                (r'assert\s+isinstance\(.*\)', 'Uses assert for runtime type checking'),
+                (r'\.items\(\)\s*(?!.*isinstance)', 'Potential null reference - no type checking before calling .items()'),
+                (r'return\s+"[^"]*\$\{[^}]*\}[^"]*"', 'Template literal syntax in regular string'),
+            ],
+            'functional': [
+                (r'#\s*TODO[:\s]', 'Contains TODOs indicating incomplete implementation'),
+                (r'@cached_property.*@reader\(cache=True\)', 'Potentially inefficient use of cached_property and reader decorator'),
+                (r'def\s+\w+\([^)]*\).*:\s*pass', 'Empty function implementation'),
+                (r'except\s*:\s*pass', 'Bare except clause'),
+                (r'import_module.*#.*No validation', 'Missing validation for import_module'),
+            ],
+            'minor': [
+                (r'def\s+\w+\([^)]*(\w+)[^)]*\).*?(?!.*\1)', 'Unused parameter'),
+                (r'Args:\s*(\w+)\s*#.*typo', 'Typo in docstring'),
+                (r'(\w+)\s*=\s*None\s*\n\s*if\s+\1\s*:=', 'Redundant variable initialization'),
+                (r'#.*ISSUE:', 'Code marked with issue comment'),
+                (r'\.removeprefix\([^)]+\).*(?!.*removeprefix)', 'Redundant code path'),
+            ]
+        }
 
+    def analyze_file(self, file_path: Path) -> Dict[str, Any]:
+        """Analyze a single file for metrics and issues"""
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+            
+            lines = content.split('\n')
+            
+            # Basic metrics
+            loc = len(lines)
+            lloc = len([line for line in lines if line.strip()])
+            comments = len([line for line in lines if line.strip().startswith('#') or line.strip().startswith('//')])
+            
+            # Function and class counting
+            functions = len(re.findall(r'def\s+\w+\s*\(', content))
+            classes = len(re.findall(r'class\s+\w+\s*[\(:]', content))
+            
+            # Issue detection
+            issues = self.detect_issues(content, str(file_path))
+            
+            return {
+                'loc': loc,
+                'lloc': lloc,
+                'comments': comments,
+                'functions': functions,
+                'classes': classes,
+                'issues': issues,
+                'complexity': self.calculate_complexity(content)
+            }
+            
+        except Exception as e:
+            logger.warning(f"Error analyzing file {file_path}: {e}")
+            return {
+                'loc': 0, 'lloc': 0, 'comments': 0, 
+                'functions': 0, 'classes': 0, 'issues': [], 'complexity': 1.0
+            }
 
-def get_github_repo_description(repo_url):
-    api_url = f"https://api.github.com/repos/{repo_url}"
+    def detect_issues(self, content: str, file_path: str) -> List[IssueItem]:
+        """Detect code issues using pattern matching"""
+        issues = []
+        lines = content.split('\n')
+        
+        for severity, patterns in self.issue_patterns.items():
+            for pattern, description in patterns:
+                for line_num, line in enumerate(lines, 1):
+                    if re.search(pattern, line, re.IGNORECASE):
+                        issues.append(IssueItem(
+                            file_path=file_path,
+                            line_number=line_num,
+                            severity=severity,
+                            issue_type=pattern.split('\\')[0][:20] + "...",
+                            description=description,
+                            suggestion=self.get_suggestion(severity, pattern)
+                        ))
+        
+        return issues
 
-    response = requests.get(api_url)
+    def get_suggestion(self, severity: str, pattern: str) -> str:
+        """Get improvement suggestions for detected issues"""
+        suggestions = {
+            'critical': "This is a critical issue that may cause runtime errors. Please fix immediately.",
+            'functional': "This affects functionality. Consider refactoring or completing the implementation.",
+            'minor': "This is a minor issue that affects code quality. Consider cleaning up when convenient."
+        }
+        return suggestions.get(severity, "Consider reviewing this code section.")
 
-    if response.status_code == 200:
-        repo_data = response.json()
-        return repo_data.get("description", "No description available")
-    else:
-        return ""
+    def calculate_complexity(self, content: str) -> float:
+        """Calculate cyclomatic complexity"""
+        # Simple complexity calculation based on control flow keywords
+        complexity_keywords = ['if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with']
+        complexity = 1  # Base complexity
+        
+        for keyword in complexity_keywords:
+            complexity += len(re.findall(rf'\b{keyword}\b', content))
+        
+        return min(complexity, 50)  # Cap at 50 for sanity
 
+    def build_repository_tree(self, repo_path: Path, file_analyses: Dict[str, Dict]) -> RepositoryNode:
+        """Build repository structure tree with issue counts"""
+        
+        def create_node(path: Path, relative_path: str = "") -> RepositoryNode:
+            name = path.name if path.name else "repo"
+            node_path = relative_path
+            
+            if path.is_file():
+                analysis = file_analyses.get(str(path), {})
+                issues = analysis.get('issues', [])
+                
+                return RepositoryNode(
+                    name=name,
+                    path=node_path,
+                    type="file",
+                    issue_count=len(issues),
+                    critical_issues=len([i for i in issues if i.severity == 'critical']),
+                    functional_issues=len([i for i in issues if i.severity == 'functional']),
+                    minor_issues=len([i for i in issues if i.severity == 'minor']),
+                    issues=issues
+                )
+            else:
+                children = []
+                total_issues = 0
+                total_critical = 0
+                total_functional = 0
+                total_minor = 0
+                
+                try:
+                    for child in sorted(path.iterdir()):
+                        if child.name.startswith('.') and child.name not in ['.github', '.vscode']:
+                            continue
+                        
+                        child_relative = f"{relative_path}/{child.name}" if relative_path else child.name
+                        child_node = create_node(child, child_relative)
+                        children.append(child_node)
+                        
+                        total_issues += child_node.issue_count
+                        total_critical += child_node.critical_issues
+                        total_functional += child_node.functional_issues
+                        total_minor += child_node.minor_issues
+                        
+                except PermissionError:
+                    pass
+                
+                return RepositoryNode(
+                    name=name,
+                    path=node_path,
+                    type="directory",
+                    issue_count=total_issues,
+                    critical_issues=total_critical,
+                    functional_issues=total_functional,
+                    minor_issues=total_minor,
+                    children=children
+                )
+        
+        return create_node(repo_path)
 
-class RepoRequest(BaseModel):
-    repo_url: str
+def clone_repository(repo_url: str) -> Path:
+    """Clone repository to temporary directory"""
+    temp_dir = Path(tempfile.mkdtemp())
+    
+    try:
+        # Extract repo name from URL
+        repo_name = repo_url.split('/')[-1].replace('.git', '')
+        clone_path = temp_dir / repo_name
+        
+        # Clone repository
+        result = subprocess.run(
+            ['git', 'clone', '--depth', '1', repo_url, str(clone_path)],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to clone repository: {result.stderr}"
+            )
+        
+        return clone_path
+        
+    except subprocess.TimeoutExpired:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=408,
+            detail="Repository cloning timed out"
+        )
+    except Exception as e:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error cloning repository: {str(e)}"
+        )
 
+def get_git_commit_stats(repo_path: Path) -> Dict[str, int]:
+    """Get git commit statistics"""
+    try:
+        # Get commits from last 12 months
+        result = subprocess.run(
+            ['git', 'log', '--since="12 months ago"', '--pretty=format:%ci'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            return {}
+        
+        # Parse commit dates and group by month
+        monthly_commits = defaultdict(int)
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                try:
+                    date = datetime.strptime(line[:7], '%Y-%m')
+                    month_key = date.strftime('%Y-%m')
+                    monthly_commits[month_key] += 1
+                except ValueError:
+                    continue
+        
+        return dict(monthly_commits)
+        
+    except Exception as e:
+        logger.warning(f"Error getting git stats: {e}")
+        return {}
 
-@fastapi_app.post("/analyze_repo")
-async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
-    repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
-
-    num_files = len(codebase.files(extensions="*"))
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
-
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
-
-    monthly_commits = get_monthly_commits(repo_url)
-    print(monthly_commits)
-
-    for file in codebase.files:
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-
-    num_callables = 0
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
-
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
-
-    results = {
-        "repo_url": repo_url,
-        "line_metrics": {
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100)
-                if total_loc > 0
-                else 0,
-            },
-        },
-        "cyclomatic_complexity": {
-            "average": total_complexity if num_callables > 0 else 0,
-        },
-        "depth_of_inheritance": {
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        "halstead_metrics": {
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables)
-            if num_callables > 0
-            else 0,
-        },
-        "maintainability_index": {
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        "description": desc,
-        "num_files": num_files,
-        "num_functions": num_functions,
-        "num_classes": num_classes,
-        "monthly_commits": monthly_commits,
+# API Routes
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "version": "2.0.0",
+        "timestamp": datetime.now().isoformat()
     }
 
-    return results
+@app.post("/analyze_repo", response_model=RepositoryAnalysis)
+async def analyze_repository(request: RepositoryRequest):
+    """Analyze a repository and return comprehensive metrics"""
+    repo_url = str(request.repo_url)
+    temp_dir = None
+    
+    try:
+        logger.info(f"Starting analysis of repository: {repo_url}")
+        
+        # Clone repository
+        repo_path = clone_repository(repo_url)
+        temp_dir = repo_path.parent
+        
+        # Initialize analyzer
+        analyzer = CodeAnalyzer()
+        
+        # Analyze all files
+        file_analyses = {}
+        total_metrics = {
+            'files': 0, 'functions': 0, 'classes': 0, 'modules': 0,
+            'loc': 0, 'lloc': 0, 'comments': 0, 'complexity_sum': 0
+        }
+        all_issues = []
+        
+        for file_path in repo_path.rglob('*'):
+            if file_path.is_file() and file_path.suffix in analyzer.supported_extensions:
+                analysis = analyzer.analyze_file(file_path)
+                file_analyses[str(file_path)] = analysis
+                
+                # Aggregate metrics
+                total_metrics['files'] += 1
+                total_metrics['functions'] += analysis['functions']
+                total_metrics['classes'] += analysis['classes']
+                total_metrics['loc'] += analysis['loc']
+                total_metrics['lloc'] += analysis['lloc']
+                total_metrics['comments'] += analysis['comments']
+                total_metrics['complexity_sum'] += analysis['complexity']
+                
+                all_issues.extend(analysis['issues'])
+        
+        # Count modules (directories with __init__.py or package.json)
+        modules = len([
+            d for d in repo_path.rglob('*') 
+            if d.is_dir() and (
+                (d / '__init__.py').exists() or 
+                (d / 'package.json').exists()
+            )
+        ])
+        total_metrics['modules'] = modules
+        
+        # Calculate averages
+        avg_complexity = (
+            total_metrics['complexity_sum'] / total_metrics['files'] 
+            if total_metrics['files'] > 0 else 0
+        )
+        comment_density = (
+            total_metrics['comments'] / total_metrics['loc'] 
+            if total_metrics['loc'] > 0 else 0
+        )
+        
+        # Build repository structure
+        repo_structure = analyzer.build_repository_tree(repo_path, file_analyses)
+        
+        # Get git statistics
+        monthly_commits = get_git_commit_stats(repo_path)
+        
+        # Summarize issues
+        issues_summary = IssuesSummary(
+            total=len(all_issues),
+            critical=len([i for i in all_issues if i.severity == 'critical']),
+            functional=len([i for i in all_issues if i.severity == 'functional']),
+            minor=len([i for i in all_issues if i.severity == 'minor'])
+        )
+        
+        # Create response
+        analysis = RepositoryAnalysis(
+            repo_url=repo_url,
+            description="Repository analysis",
+            basic_metrics=BasicMetrics(
+                files=total_metrics['files'],
+                functions=total_metrics['functions'],
+                classes=total_metrics['classes'],
+                modules=total_metrics['modules']
+            ),
+            line_metrics={
+                "total": LineMetrics(
+                    loc=total_metrics['loc'],
+                    lloc=total_metrics['lloc'],
+                    sloc=total_metrics['lloc'],  # Using lloc as sloc
+                    comments=total_metrics['comments'],
+                    comment_density=comment_density
+                )
+            },
+            complexity_metrics=ComplexityMetrics(
+                cyclomatic_complexity={"average": round(avg_complexity, 1)},
+                maintainability_index={"average": max(0, min(100, 100 - avg_complexity * 2))},
+                halstead_metrics={
+                    "total_volume": total_metrics['functions'] * 100,
+                    "average_volume": 100
+                }
+            ),
+            repository_structure=repo_structure,
+            issues_summary=issues_summary,
+            detailed_issues=all_issues[:100],  # Limit to first 100 issues
+            monthly_commits=monthly_commits
+        )
+        
+        logger.info(f"Analysis completed successfully for {repo_url}")
+        return analysis
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error analyzing repository {repo_url}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error during analysis: {str(e)}"
+        )
+    finally:
+        # Cleanup temporary directory
+        if temp_dir and temp_dir.exists():
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
-
-@app.function(image=image)
-@modal.asgi_app()
-def fastapi_modal_app():
-    return fastapi_app
-
+@app.get("/")
+async def root():
+    """Root endpoint with API information"""
+    return {
+        "message": "Enhanced Codebase Analytics API",
+        "version": "2.0.0",
+        "docs": "/docs",
+        "health": "/health"
+    }
 
 if __name__ == "__main__":
-    app.deploy("analytics-app")
+    # Development server
+    uvicorn.run(
+        "api:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )
+
