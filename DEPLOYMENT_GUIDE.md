@@ -1,35 +1,32 @@
-# 🚀 Enhanced Deployment Guide
+# 🚀 Enhanced Codebase Analytics - Deployment Guide
 
 This guide covers all deployment options for the Enhanced Codebase Analytics application, including local development, Docker containers, and Modal serverless deployment.
 
 ## 📋 Prerequisites
 
-### Required Software
-- **Python 3.11+**: Backend runtime
-- **Node.js 18+**: Frontend development
-- **Git**: Repository management
-- **Docker** (optional): Container deployment
-- **Modal CLI** (optional): Serverless deployment
+### System Requirements
+- **Python**: 3.11+ (Python 3.13 compatible with updated dependencies)
+- **Node.js**: 18+ (for frontend)
+- **Git**: Latest version
+- **Docker**: 20.10+ (for Docker deployment)
+- **Modal Account**: For serverless deployment
 
-### Installation Commands
+### Python 3.13 Compatibility
+This version includes updated dependencies that are fully compatible with Python 3.13:
+- `pydantic==2.10.4` (with compatible pydantic-core)
+- `fastapi==0.115.6`
+- `tree-sitter==0.23.2`
+- All other dependencies updated to latest compatible versions
+
+### Environment Setup
 ```bash
-# Python (via pyenv recommended)
-curl https://pyenv.run | bash
-pyenv install 3.11.0
-pyenv global 3.11.0
+# Recommended: Use pyenv for Python version management
+pyenv install 3.11.0  # or 3.13.0
+pyenv local 3.11.0    # or 3.13.0
 
-# Node.js (via nvm recommended)
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash
-nvm install 18
-nvm use 18
-
-# Docker
-curl -fsSL https://get.docker.com -o get-docker.sh
-sh get-docker.sh
-
-# Modal CLI
-pip install modal
-modal token new  # Authenticate with Modal
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
 ## 🎯 Deployment Options
@@ -473,4 +470,3 @@ sudo certbot --nginx -d your-domain.com
 | Modal Prod | `./deploy-modal.sh --deploy` | Serverless Prod | https://your-modal-app.modal.run |
 
 **Need help?** Check the troubleshooting section or create an issue on GitHub! 🚀
-
