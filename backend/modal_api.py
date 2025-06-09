@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Enhanced Codebase Analytics API
-A comprehensive FastAPI backend for repository analysis with graph-sitter integration.
+Enhanced Modal-based Codebase Analytics API
+Serverless deployment with Modal for scalable repository analysis
 """
 
 import os
@@ -14,32 +14,34 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
-from dataclasses import dataclass, asdict
 from collections import defaultdict
 import re
 
-# FastAPI and related imports
+import modal
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, HttpUrl, validator
-import uvicorn
 
-# Add the graph_sitter path to sys.path for imports
-current_dir = Path(__file__).parent
-graph_sitter_path = current_dir.parent / "src" / "graph_sitter"
-if graph_sitter_path.exists():
-    sys.path.insert(0, str(graph_sitter_path.parent))
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+# Modal image configuration with all dependencies
+image = (
+    modal.Image.debian_slim()
+    .apt_install("git", "curl", "build-essential")
+    .pip_install(
+        "fastapi==0.104.1",
+        "uvicorn[standard]==0.24.0", 
+        "pydantic==2.5.0",
+        "httpx==0.25.2",
+        "python-multipart==0.0.6",
+        "gitpython==3.1.40",
+        "tree-sitter==0.20.4"
+    )
 )
-logger = logging.getLogger(__name__)
 
-# Pydantic models for request/response
+# Create Modal app
+app = modal.App("enhanced-codebase-analytics", image=image)
+
+# Pydantic models (same as before)
 class RepositoryRequest(BaseModel):
     repo_url: HttpUrl
     
@@ -57,9 +59,9 @@ class BasicMetrics(BaseModel):
     modules: int = 0
 
 class LineMetrics(BaseModel):
-    loc: int = 0  # Lines of Code
-    lloc: int = 0  # Logical Lines of Code
-    sloc: int = 0  # Source Lines of Code
+    loc: int = 0
+    lloc: int = 0
+    sloc: int = 0
     comments: int = 0
     comment_density: float = 0.0
 
@@ -71,7 +73,7 @@ class ComplexityMetrics(BaseModel):
 class IssueItem(BaseModel):
     file_path: str
     line_number: int
-    severity: str  # "critical", "functional", "minor"
+    severity: str
     issue_type: str
     description: str
     suggestion: Optional[str] = None
@@ -79,7 +81,7 @@ class IssueItem(BaseModel):
 class RepositoryNode(BaseModel):
     name: str
     path: str
-    type: str  # "file" or "directory"
+    type: str
     issue_count: int = 0
     critical_issues: int = 0
     functional_issues: int = 0
@@ -107,70 +109,24 @@ class RepositoryAnalysis(BaseModel):
 # Update forward references
 RepositoryNode.model_rebuild()
 
-# FastAPI app initialization
-app = FastAPI(
-    title="Enhanced Codebase Analytics API",
-    description="Comprehensive repository analysis with graph-sitter integration",
-    version="2.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
-)
-
-# Security middleware
-app.add_middleware(
-    TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "0.0.0.0", "*"]
+# FastAPI app for Modal
+fastapi_app = FastAPI(
+    title="Enhanced Codebase Analytics API (Modal)",
+    description="Serverless repository analysis with Modal",
+    version="2.0.0"
 )
 
 # CORS middleware
-app.add_middleware(
+fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002", "http://127.0.0.1:3000"],
+    allow_origins=["*"],  # More permissive for serverless
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
 
-# Rate limiting storage (simple in-memory for demo)
-request_counts = defaultdict(list)
-
-@app.middleware("http")
-async def rate_limit_middleware(request: Request, call_next):
-    """Simple rate limiting middleware"""
-    client_ip = request.client.host
-    now = datetime.now()
-    
-    # Clean old requests (older than 1 minute)
-    request_counts[client_ip] = [
-        req_time for req_time in request_counts[client_ip] 
-        if now - req_time < timedelta(minutes=1)
-    ]
-    
-    # Check rate limit (60 requests per minute)
-    if len(request_counts[client_ip]) >= 60:
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Rate limit exceeded. Try again later."}
-        )
-    
-    # Add current request
-    request_counts[client_ip].append(now)
-    
-    response = await call_next(request)
-    return response
-
-@app.middleware("http")
-async def security_headers_middleware(request: Request, call_next):
-    """Add security headers"""
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    return response
-
 class CodeAnalyzer:
-    """Enhanced code analyzer with issue detection"""
+    """Enhanced code analyzer for Modal deployment"""
     
     def __init__(self):
         self.supported_extensions = {
@@ -244,7 +200,7 @@ class CodeAnalyzer:
             }
             
         except Exception as e:
-            logger.warning(f"Error analyzing file {file_path}: {e}")
+            print(f"Error analyzing file {file_path}: {e}")
             return {
                 'loc': 0, 'lloc': 0, 'comments': 0, 
                 'functions': 0, 'classes': 0, 'issues': [], 'complexity': 1.0
@@ -281,14 +237,13 @@ class CodeAnalyzer:
 
     def calculate_complexity(self, content: str) -> float:
         """Calculate cyclomatic complexity"""
-        # Simple complexity calculation based on control flow keywords
         complexity_keywords = ['if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with']
-        complexity = 1  # Base complexity
+        complexity = 1
         
         for keyword in complexity_keywords:
             complexity += len(re.findall(rf'\b{keyword}\b', content))
         
-        return min(complexity, 50)  # Cap at 50 for sanity
+        return min(complexity, 50)
 
     def build_repository_tree(self, repo_path: Path, file_analyses: Dict[str, Dict]) -> RepositoryNode:
         """Build repository structure tree with issue counts"""
@@ -348,9 +303,16 @@ class CodeAnalyzer:
         
         return create_node(repo_path)
 
-def clone_repository(repo_url: str) -> Path:
-    """Clone repository to temporary directory"""
-    temp_dir = Path(tempfile.mkdtemp())
+@app.function(
+    image=image,
+    timeout=600,  # 10 minute timeout for large repos
+    memory=2048,  # 2GB memory
+    cpu=2.0       # 2 CPU cores
+)
+def clone_repository(repo_url: str) -> str:
+    """Clone repository to temporary directory in Modal"""
+    temp_dir = Path("/tmp") / f"repo_{datetime.now().timestamp()}"
+    temp_dir.mkdir(exist_ok=True)
     
     try:
         # Extract repo name from URL
@@ -362,83 +324,32 @@ def clone_repository(repo_url: str) -> Path:
             ['git', 'clone', '--depth', '1', repo_url, str(clone_path)],
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=300
         )
         
         if result.returncode != 0:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to clone repository: {result.stderr}"
-            )
+            raise Exception(f"Failed to clone repository: {result.stderr}")
         
-        return clone_path
+        return str(clone_path)
         
     except subprocess.TimeoutExpired:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(
-            status_code=408,
-            detail="Repository cloning timed out"
-        )
+        raise Exception("Repository cloning timed out")
     except Exception as e:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error cloning repository: {str(e)}"
-        )
+        raise Exception(f"Error cloning repository: {str(e)}")
 
-def get_git_commit_stats(repo_path: Path) -> Dict[str, int]:
-    """Get git commit statistics"""
+@app.function(
+    image=image,
+    timeout=600,
+    memory=2048,
+    cpu=2.0
+)
+def analyze_repository_modal(repo_url: str) -> Dict[str, Any]:
+    """Main analysis function for Modal"""
     try:
-        # Get commits from last 12 months
-        result = subprocess.run(
-            ['git', 'log', '--since="12 months ago"', '--pretty=format:%ci'],
-            cwd=repo_path,
-            capture_output=True,
-            text=True
-        )
-        
-        if result.returncode != 0:
-            return {}
-        
-        # Parse commit dates and group by month
-        monthly_commits = defaultdict(int)
-        for line in result.stdout.strip().split('\n'):
-            if line:
-                try:
-                    date = datetime.strptime(line[:7], '%Y-%m')
-                    month_key = date.strftime('%Y-%m')
-                    monthly_commits[month_key] += 1
-                except ValueError:
-                    continue
-        
-        return dict(monthly_commits)
-        
-    except Exception as e:
-        logger.warning(f"Error getting git stats: {e}")
-        return {}
-
-# API Routes
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "version": "2.0.0",
-        "timestamp": datetime.now().isoformat()
-    }
-
-@app.post("/analyze_repo", response_model=RepositoryAnalysis)
-async def analyze_repository(request: RepositoryRequest):
-    """Analyze a repository and return comprehensive metrics"""
-    repo_url = str(request.repo_url)
-    temp_dir = None
-    
-    try:
-        logger.info(f"Starting analysis of repository: {repo_url}")
+        print(f"Starting analysis of repository: {repo_url}")
         
         # Clone repository
-        repo_path = clone_repository(repo_url)
-        temp_dir = repo_path.parent
+        repo_path = Path(clone_repository.remote(repo_url))
         
         # Initialize analyzer
         analyzer = CodeAnalyzer()
@@ -467,7 +378,7 @@ async def analyze_repository(request: RepositoryRequest):
                 
                 all_issues.extend(analysis['issues'])
         
-        # Count modules (directories with __init__.py or package.json)
+        # Count modules
         modules = len([
             d for d in repo_path.rglob('*') 
             if d.is_dir() and (
@@ -494,79 +405,128 @@ async def analyze_repository(request: RepositoryRequest):
         monthly_commits = get_git_commit_stats(repo_path)
         
         # Summarize issues
-        issues_summary = IssuesSummary(
-            total=len(all_issues),
-            critical=len([i for i in all_issues if i.severity == 'critical']),
-            functional=len([i for i in all_issues if i.severity == 'functional']),
-            minor=len([i for i in all_issues if i.severity == 'minor'])
-        )
+        issues_summary = {
+            'total': len(all_issues),
+            'critical': len([i for i in all_issues if i.severity == 'critical']),
+            'functional': len([i for i in all_issues if i.severity == 'functional']),
+            'minor': len([i for i in all_issues if i.severity == 'minor'])
+        }
         
         # Create response
-        analysis = RepositoryAnalysis(
-            repo_url=repo_url,
-            description="Repository analysis",
-            basic_metrics=BasicMetrics(
-                files=total_metrics['files'],
-                functions=total_metrics['functions'],
-                classes=total_metrics['classes'],
-                modules=total_metrics['modules']
-            ),
-            line_metrics={
-                "total": LineMetrics(
-                    loc=total_metrics['loc'],
-                    lloc=total_metrics['lloc'],
-                    sloc=total_metrics['lloc'],  # Using lloc as sloc
-                    comments=total_metrics['comments'],
-                    comment_density=comment_density
-                )
+        analysis = {
+            'repo_url': repo_url,
+            'description': "Repository analysis",
+            'basic_metrics': {
+                'files': total_metrics['files'],
+                'functions': total_metrics['functions'],
+                'classes': total_metrics['classes'],
+                'modules': total_metrics['modules']
             },
-            complexity_metrics=ComplexityMetrics(
-                cyclomatic_complexity={"average": round(avg_complexity, 1)},
-                maintainability_index={"average": max(0, min(100, 100 - avg_complexity * 2))},
-                halstead_metrics={
+            'line_metrics': {
+                "total": {
+                    'loc': total_metrics['loc'],
+                    'lloc': total_metrics['lloc'],
+                    'sloc': total_metrics['lloc'],
+                    'comments': total_metrics['comments'],
+                    'comment_density': comment_density
+                }
+            },
+            'complexity_metrics': {
+                'cyclomatic_complexity': {"average": round(avg_complexity, 1)},
+                'maintainability_index': {"average": max(0, min(100, 100 - avg_complexity * 2))},
+                'halstead_metrics': {
                     "total_volume": total_metrics['functions'] * 100,
                     "average_volume": 100
                 }
-            ),
-            repository_structure=repo_structure,
-            issues_summary=issues_summary,
-            detailed_issues=all_issues[:100],  # Limit to first 100 issues
-            monthly_commits=monthly_commits
-        )
+            },
+            'repository_structure': repo_structure.dict(),
+            'issues_summary': issues_summary,
+            'detailed_issues': [issue.dict() for issue in all_issues[:100]],
+            'monthly_commits': monthly_commits
+        }
         
-        logger.info(f"Analysis completed successfully for {repo_url}")
+        print(f"Analysis completed successfully for {repo_url}")
         return analysis
         
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Error analyzing repository {repo_url}: {e}")
+        print(f"Error analyzing repository {repo_url}: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+def get_git_commit_stats(repo_path: Path) -> Dict[str, int]:
+    """Get git commit statistics"""
+    try:
+        result = subprocess.run(
+            ['git', 'log', '--since="12 months ago"', '--pretty=format:%ci'],
+            cwd=repo_path,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode != 0:
+            return {}
+        
+        monthly_commits = defaultdict(int)
+        for line in result.stdout.strip().split('\n'):
+            if line:
+                try:
+                    date = datetime.strptime(line[:7], '%Y-%m')
+                    month_key = date.strftime('%Y-%m')
+                    monthly_commits[month_key] += 1
+                except ValueError:
+                    continue
+        
+        return dict(monthly_commits)
+        
+    except Exception as e:
+        print(f"Error getting git stats: {e}")
+        return {}
+
+# FastAPI routes
+@fastapi_app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "version": "2.0.0",
+        "deployment": "modal",
+        "timestamp": datetime.now().isoformat()
+    }
+
+@fastapi_app.post("/analyze_repo")
+async def analyze_repository_endpoint(request: RepositoryRequest):
+    """Analyze a repository using Modal serverless functions"""
+    repo_url = str(request.repo_url)
+    
+    try:
+        # Call the Modal function
+        result = analyze_repository_modal.remote(repo_url)
+        return result
+        
+    except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Internal server error during analysis: {str(e)}"
+            detail=f"Analysis failed: {str(e)}"
         )
-    finally:
-        # Cleanup temporary directory
-        if temp_dir and temp_dir.exists():
-            shutil.rmtree(temp_dir, ignore_errors=True)
 
-@app.get("/")
+@fastapi_app.get("/")
 async def root():
     """Root endpoint with API information"""
     return {
-        "message": "Enhanced Codebase Analytics API",
+        "message": "Enhanced Codebase Analytics API (Modal)",
         "version": "2.0.0",
+        "deployment": "modal",
         "docs": "/docs",
         "health": "/health"
     }
 
+# Mount the FastAPI app to Modal
+@app.function(image=image)
+@modal.asgi_app()
+def fastapi_app_modal():
+    return fastapi_app
+
 if __name__ == "__main__":
-    # Development server
-    uvicorn.run(
-        "api:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        log_level="info"
-    )
+    # For local development
+    import uvicorn
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
 
