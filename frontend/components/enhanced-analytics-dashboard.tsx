@@ -80,8 +80,9 @@ interface AnalysisResult {
 
 interface DeploymentConfig {
   mode: 'local' | 'modal' | 'docker'
-  endpoint: string
   status: 'idle' | 'deploying' | 'deployed' | 'error'
+  endpoint: string
+  lastDeployed: string | null
 }
 
 // Enhanced Repository Tree Component with Modal Features
@@ -335,8 +336,9 @@ export default function EnhancedAnalyticsDashboard() {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false)
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig>({
     mode: 'local',
-    endpoint: 'http://localhost:8000',
-    status: 'idle'
+    status: 'idle',
+    endpoint: 'http://localhost:9997',
+    lastDeployed: null
   })
 
   const analyzeRepository = async () => {
@@ -377,15 +379,16 @@ export default function EnhancedAnalyticsDashboard() {
     // Simulate deployment process
     setTimeout(() => {
       const endpoints = {
-        local: 'http://localhost:8000',
+        local: 'http://localhost:9997',
         modal: 'https://your-modal-app.modal.run',
-        docker: 'http://localhost:80/api'
+        docker: 'http://localhost:9997'
       }
       
       setDeploymentConfig({
         mode,
         endpoint: endpoints[mode],
-        status: 'deployed'
+        status: 'deployed',
+        lastDeployed: new Date().toISOString()
       })
     }, 3000)
   }
