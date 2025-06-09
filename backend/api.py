@@ -1,14 +1,15 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any
-from codegen import Codebase
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
+from typing import Dict, List, Tuple, Any, Optional
+from graph_sitter.core import Codebase
+from graph_sitter.codebase.codebase_analysis import (
+    get_codebase_summary,
+    get_file_summary,
+    get_class_summary,
+    get_function_summary,
+    get_symbol_summary
+)
+from graph_sitter.codebase.codebase_ai import generate_context
 import math
 import re
 import requests
@@ -23,7 +24,7 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
+        "graph-sitter", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
     )
 )
 
@@ -318,15 +319,122 @@ def get_maintainability_rank(mi_score: float) -> str:
 
 
 def get_github_repo_description(repo_url):
-    api_url = f"https://api.github.com/repos/{repo_url}"
-
-    response = requests.get(api_url)
-
-    if response.status_code == 200:
-        repo_data = response.json()
+    """Get repository description from GitHub API."""
+    try:
+        # Extract owner and repo name from URL
+        parts = repo_url.replace("https://github.com/", "").split("/")
+        if len(parts) >= 2:
+            owner, repo = parts[0], parts[1]
+            api_url = f"https://api.github.com/repos/{owner}/{repo}"
+            response = requests.get(api_url)
+            if response.status_code == 200:
+                repo_data = response.json()
+                return repo_data.get("description", "No description available")
         return repo_data.get("description", "No description available")
     else:
         return ""
+
+
+def analyze_codebase_summary(codebase: Codebase) -> str:
+    """Get high-level statistical overview of the entire codebase."""
+    try:
+        return get_codebase_summary(codebase)
+    except Exception as e:
+        return f"Error analyzing codebase summary: {str(e)}"
+
+
+def analyze_file_summaries(codebase: Codebase) -> List[Dict[str, Any]]:
+    """Analyze all source files and return their summaries."""
+    file_summaries = []
+    try:
+        for file in codebase.source_files:
+            summary = get_file_summary(file)
+            file_summaries.append({
+                "file_path": file.path if hasattr(file, 'path') else str(file),
+                "summary": summary
+            })
+    except Exception as e:
+        file_summaries.append({
+            "error": f"Error analyzing file summaries: {str(e)}"
+        })
+    return file_summaries
+
+
+def analyze_class_summaries(codebase: Codebase) -> List[Dict[str, Any]]:
+    """Analyze all classes and return their summaries."""
+    class_summaries = []
+    try:
+        for file in codebase.source_files:
+            if hasattr(file, 'classes'):
+                for cls in file.classes:
+                    summary = get_class_summary(cls)
+                    class_summaries.append({
+                        "class_name": cls.name if hasattr(cls, 'name') else str(cls),
+                        "file_path": file.path if hasattr(file, 'path') else str(file),
+                        "summary": summary
+                    })
+    except Exception as e:
+        class_summaries.append({
+            "error": f"Error analyzing class summaries: {str(e)}"
+        })
+    return class_summaries
+
+
+def analyze_function_summaries(codebase: Codebase) -> List[Dict[str, Any]]:
+    """Analyze all functions and return their summaries."""
+    function_summaries = []
+    try:
+        for file in codebase.source_files:
+            if hasattr(file, 'functions'):
+                for func in file.functions:
+                    summary = get_function_summary(func)
+                    function_summaries.append({
+                        "function_name": func.name if hasattr(func, 'name') else str(func),
+                        "file_path": file.path if hasattr(file, 'path') else str(file),
+                        "summary": summary
+                    })
+    except Exception as e:
+        function_summaries.append({
+            "error": f"Error analyzing function summaries: {str(e)}"
+        })
+    return function_summaries
+
+
+def analyze_symbol_summaries(codebase: Codebase) -> List[Dict[str, Any]]:
+    """Analyze all symbols and return their summaries."""
+    symbol_summaries = []
+    try:
+        # Get all symbols from the codebase
+        all_symbols = []
+        for file in codebase.source_files:
+            if hasattr(file, 'symbols'):
+                all_symbols.extend(file.symbols)
+        
+        for symbol in all_symbols:
+            summary = get_symbol_summary(symbol)
+            symbol_summaries.append({
+                "symbol_name": symbol.name if hasattr(symbol, 'name') else str(symbol),
+                "symbol_type": type(symbol).__name__,
+                "summary": summary
+            })
+    except Exception as e:
+        symbol_summaries.append({
+            "error": f"Error analyzing symbol summaries: {str(e)}"
+        })
+    return symbol_summaries
+
+
+def generate_ai_context(codebase: Codebase, elements: List[Any] = None) -> str:
+    """Generate AI-formatted context strings for code elements."""
+    try:
+        if elements is None:
+            # Generate context for the entire codebase
+            return generate_context(codebase)
+        else:
+            # Generate context for specific elements
+            return generate_context(elements)
+    except Exception as e:
+        return f"Error generating AI context: {str(e)}"
 
 
 class RepoRequest(BaseModel):
@@ -335,90 +443,106 @@ class RepoRequest(BaseModel):
 
 @fastapi_app.post("/analyze_repo")
 async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
+    """Analyze a repository and return comprehensive metrics using graph-sitter."""
     repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
-
-    num_files = len(codebase.files(extensions="*"))
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
-
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
-
-    monthly_commits = get_monthly_commits(repo_url)
-    print(monthly_commits)
-
-    for file in codebase.files:
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-
-    num_callables = 0
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
-
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
-
-    results = {
-        "repo_url": repo_url,
-        "line_metrics": {
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100)
-                if total_loc > 0
-                else 0,
+    
+    try:
+        # Initialize graph-sitter codebase
+        codebase = Codebase(repo_path=repo_url)
+        
+        # Get basic repository information
+        desc = get_github_repo_description(repo_url)
+        monthly_commits = get_monthly_commits(repo_url)
+        
+        # Perform graph-sitter analysis
+        codebase_summary = analyze_codebase_summary(codebase)
+        file_summaries = analyze_file_summaries(codebase)
+        class_summaries = analyze_class_summaries(codebase)
+        function_summaries = analyze_function_summaries(codebase)
+        symbol_summaries = analyze_symbol_summaries(codebase)
+        ai_context = generate_ai_context(codebase)
+        
+        # Extract basic metrics for backward compatibility
+        num_files = len(codebase.source_files) if hasattr(codebase, 'source_files') else 0
+        num_functions = len(function_summaries)
+        num_classes = len(class_summaries)
+        
+        # Calculate basic line metrics from codebase summary
+        total_loc = total_lloc = total_sloc = total_comments = 0
+        try:
+            for file in codebase.source_files:
+                if hasattr(file, 'source'):
+                    loc, lloc, sloc, comments = count_lines(file.source)
+                    total_loc += loc
+                    total_lloc += lloc
+                    total_sloc += sloc
+                    total_comments += comments
+        except Exception as e:
+            print(f"Error calculating line metrics: {e}")
+        
+        # Build comprehensive response with both legacy and new analysis
+        results = {
+            "repo_url": repo_url,
+            "description": desc,
+            "monthly_commits": monthly_commits,
+            
+            # Legacy metrics for backward compatibility
+            "line_metrics": {
+                "total": {
+                    "loc": total_loc,
+                    "lloc": total_lloc,
+                    "sloc": total_sloc,
+                    "comments": total_comments,
+                    "comment_density": (total_comments / total_loc * 100) if total_loc > 0 else 0,
+                },
             },
-        },
-        "cyclomatic_complexity": {
-            "average": total_complexity if num_callables > 0 else 0,
-        },
-        "depth_of_inheritance": {
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        "halstead_metrics": {
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables)
-            if num_callables > 0
-            else 0,
-        },
-        "maintainability_index": {
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        "description": desc,
-        "num_files": num_files,
-        "num_functions": num_functions,
-        "num_classes": num_classes,
-        "monthly_commits": monthly_commits,
-    }
-
-    return results
+            "num_files": num_files,
+            "num_functions": num_functions,
+            "num_classes": num_classes,
+            
+            # New graph-sitter analysis results
+            "graph_sitter_analysis": {
+                "codebase_summary": codebase_summary,
+                "file_summaries": file_summaries,
+                "class_summaries": class_summaries,
+                "function_summaries": function_summaries,
+                "symbol_summaries": symbol_summaries,
+                "ai_context": ai_context
+            },
+            
+            # Placeholder values for metrics that require more complex analysis
+            "cyclomatic_complexity": {"average": 0},
+            "depth_of_inheritance": {"average": 0},
+            "halstead_metrics": {"total_volume": 0, "average_volume": 0},
+            "maintainability_index": {"average": 0},
+        }
+        
+        return results
+        
+    except Exception as e:
+        # Return error response with basic structure
+        return {
+            "repo_url": repo_url,
+            "error": f"Analysis failed: {str(e)}",
+            "description": get_github_repo_description(repo_url),
+            "monthly_commits": {},
+            "line_metrics": {"total": {"loc": 0, "lloc": 0, "sloc": 0, "comments": 0, "comment_density": 0}},
+            "num_files": 0,
+            "num_functions": 0,
+            "num_classes": 0,
+            "graph_sitter_analysis": {
+                "codebase_summary": f"Error: {str(e)}",
+                "file_summaries": [],
+                "class_summaries": [],
+                "function_summaries": [],
+                "symbol_summaries": [],
+                "ai_context": ""
+            },
+            "cyclomatic_complexity": {"average": 0},
+            "depth_of_inheritance": {"average": 0},
+            "halstead_metrics": {"total_volume": 0, "average_volume": 0},
+            "maintainability_index": {"average": 0},
+        }
 
 
 @app.function(image=image)
