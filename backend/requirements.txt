@@ -1,4 +1,4 @@
-# Enhanced Codebase Analytics Backend Dependencies
+# Consolidated Codebase Analytics Backend Dependencies
 # Python 3.13 Compatible Versions
 
 # Core FastAPI and server
@@ -26,6 +26,16 @@ gitpython==3.1.44
 
 # Tree-sitter for code parsing (Python 3.13 compatible)
 tree-sitter==0.23.2
+tree-sitter-python==0.23.4
+tree-sitter-javascript==0.23.0
+tree-sitter-typescript==0.23.0
+
+# Additional language parsers for graph-sitter
+tree-sitter-java==0.23.2
+tree-sitter-cpp==0.23.1
+tree-sitter-c==0.23.1
+tree-sitter-go==0.23.1
+tree-sitter-rust==0.23.0
 
 # Logging (latest available version)
 structlog==25.4.0
@@ -33,4 +43,13 @@ structlog==25.4.0
 # Additional utilities
 python-dotenv==1.0.1
 aiofiles==24.1.0
+
+# Code analysis utilities
+radon==6.0.1
+mccabe==0.7.0
+flake8==7.1.1
+
+# AST parsing and analysis
+ast-decompiler==0.7.0
+astor==0.8.1
 
