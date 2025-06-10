@@ -131,7 +131,191 @@ try:
 - Usage count: {len(getattr(symbol, 'usages', []))}"""
         except Exception as e:
             return f"Error generating symbol summary: {str(e)}"
-            
+
+def get_monthly_commits(repo_path: str) -> Dict[str, int]:
+    """
+    Get the number of commits per month for the last 12 months.
+    Args:
+        repo_path: Path to the git repository
+    Returns:
+        Dictionary with month-year as key and number of commits as value
+    """
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)
+
+    date_format = "%Y-%m-%d"
+    since_date = start_date.strftime(date_format)
+    until_date = end_date.strftime(date_format)
+    repo_path = "https://github.com/" + repo_path
+
+    try:
+        original_dir = os.getcwd()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subprocess.run(["git", "clone", repo_path, temp_dir], check=True)
+            os.chdir(temp_dir)
+
+            cmd = [
+                "git",
+                "log",
+                f"--since={since_date}",
+                f"--until={until_date}",
+                "--format=%aI",
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            commit_dates = result.stdout.strip().split("\n")
+
+            monthly_counts = {}
+            current_date = start_date
+            while current_date <= end_date:
+                month_key = current_date.strftime("%Y-%m")
+                monthly_counts[month_key] = 0
+                current_date = (
+                    current_date.replace(day=1) + timedelta(days=32)
+                ).replace(day=1)
+
+            for date_str in commit_dates:
+                if date_str:  # Skip empty lines
+                    commit_date = datetime.fromisoformat(date_str.strip())
+                    month_key = commit_date.strftime("%Y-%m")
+                    if month_key in monthly_counts:
+                        monthly_counts[month_key] += 1
+
+            os.chdir(original_dir)
+            return dict(sorted(monthly_counts.items()))
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing git command: {e}")
+        return {}
+    except Exception as e:
+        print(f"Error processing git commits: {e}")
+        return {}
+    finally:
+        try:
+            os.chdir(original_dir)
+        except:
+            pass
+
+
+def calculate_cyclomatic_complexity(function):
+    def analyze_statement(statement):
+        complexity = 0
+
+        if isinstance(statement, IfBlockStatement):
+            complexity += 1
+            if hasattr(statement, "elif_statements"):
+                complexity += len(statement.elif_statements)
+
+        elif isinstance(statement, (ForLoopStatement, WhileStatement)):
+            complexity += 1
+
+        elif isinstance(statement, TryCatchStatement):
+            complexity += len(getattr(statement, "except_blocks", []))
+
+        if hasattr(statement, "condition") and isinstance(statement.condition, str):
+            complexity += statement.condition.count(
+                " and "
+            ) + statement.condition.count(" or ")
+
+        if hasattr(statement, "nested_code_blocks"):
+            for block in statement.nested_code_blocks:
+                complexity += analyze_block(block)
+
+        return complexity
+
+    def analyze_block(block):
+        if not block or not hasattr(block, "statements"):
+            return 0
+        return sum(analyze_statement(stmt) for stmt in block.statements)
+
+    return (
+        1 + analyze_block(function.code_block) if hasattr(function, "code_block") else 1
+    )
+
+
+    def cc_rank(complexity):
+        if complexity < 0:
+            raise ValueError("Complexity must be a non-negative value")
+    
+        ranks = [
+            (1, 5, "A"),
+            (6, 10, "B"),
+            (11, 20, "C"),
+            (21, 30, "D"),
+            (31, 40, "E"),
+            (41, float("inf"), "F"),
+        ]
+        for low, high, rank in ranks:
+            if low <= complexity <= high:
+                return rank
+        return "F"
+    
+    
+    def calculate_doi(cls):
+        """Calculate the depth of inheritance for a given class."""
+        return len(cls.superclasses)
+    
+    
+    def get_operators_and_operands(function):
+        operators = []
+        operands = []
+    
+        for statement in function.code_block.statements:
+            for call in statement.function_calls:
+                operators.append(call.name)
+                for arg in call.args:
+                    operands.append(arg.source)
+    
+            if hasattr(statement, "expressions"):
+                for expr in statement.expressions:
+                    if isinstance(expr, BinaryExpression):
+                        operators.extend([op.source for op in expr.operators])
+                        operands.extend([elem.source for elem in expr.elements])
+                    elif isinstance(expr, UnaryExpression):
+                        operators.append(expr.ts_node.type)
+                        operands.append(expr.argument.source)
+                    elif isinstance(expr, ComparisonExpression):
+                        operators.extend([op.source for op in expr.operators])
+                        operands.extend([elem.source for elem in expr.elements])
+    
+            if hasattr(statement, "expression"):
+                expr = statement.expression
+                if isinstance(expr, BinaryExpression):
+                    operators.extend([op.source for op in expr.operators])
+                    operands.extend([elem.source for elem in expr.elements])
+                elif isinstance(expr, UnaryExpression):
+                    operators.append(expr.ts_node.type)
+                    operands.append(expr.argument.source)
+                elif isinstance(expr, ComparisonExpression):
+                    operators.extend([op.source for op in expr.operators])
+                    operands.extend([elem.source for elem in expr.elements])
+    
+        return operators, operands
+    
+    
+    def calculate_halstead_volume(operators, operands):
+        n1 = len(set(operators))
+        n2 = len(set(operands))
+    
+        N1 = len(operators)
+        N2 = len(operands)
+    
+        N = N1 + N2
+        n = n1 + n2
+    
+        if n > 0:
+            volume = N * math.log2(n)
+            return volume, N1, N2, n1, n2
+        return 0, N1, N2, n1, n2
+    
+    
+    def count_lines(source: str):
+        """Count different types of lines in source code."""
+        if not source.strip():
+            return 0, 0, 0, 0
+        return loc, lloc, sloc, comments
+
 except ImportError as e:
     logger.warning(f"Graph-sitter not available: {e}")
     GRAPH_SITTER_AVAILABLE = False
