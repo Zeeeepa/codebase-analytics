@@ -124,6 +124,7 @@ export default function EnhancedAnalyticsDashboard() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
   const [selectedIssue, setSelectedIssue] = useState<CodeIssue | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -140,9 +141,10 @@ export default function EnhancedAnalyticsDashboard() {
     const parsedRepoUrl = parseRepoUrl(repoUrl);
     setIsLoading(true);
     setIsLandingPage(false);
+    setError(null);
 
     try {
-      const response = await fetch('https://codegen-sh--analytics-app-fastapi-modal-app.modal.run/analyze_repo', {
+      const response = await fetch('/api/analyze_repo', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -159,7 +161,7 @@ export default function EnhancedAnalyticsDashboard() {
       setRepoData(data);
     } catch (error) {
       console.error('Error fetching repo data:', error);
-      alert('Error fetching repository data. Please check the URL and try again.');
+      setError('Error fetching repository data. Please check the URL and try again.');
       setIsLandingPage(true);
     } finally {
       setIsLoading(false);
@@ -217,7 +219,7 @@ export default function EnhancedAnalyticsDashboard() {
               <img src="cg.png" alt="CG Logo" className="h-12 w-12" />
               <span>Enhanced Codebase Analytics</span>
             </h1>
-            <p className="text-muted-foreground">Comprehensive code quality analysis with rich visualizations and error detection</p>
+            <p className="text-muted-foreground">Comprehensive code quality analysis with rich visualizations and error detection using graph-sitter</p>
           </div>
           <div className="flex items-center gap-3 w-full max-w-lg">
             <Input
@@ -228,19 +230,28 @@ export default function EnhancedAnalyticsDashboard() {
               onKeyPress={handleKeyPress}
               className="flex-1"
               title="Format: https://github.com/owner/repo or owner/repo"
+              aria-label="Repository URL input"
             />
             <Button
               onClick={handleFetchRepo}
               disabled={isLoading}
+              aria-label={isLoading ? "Analyzing repository" : "Analyze repository"}
             >
               {isLoading ? "Analyzing..." : "Analyze"}
             </Button>
           </div>
           {isLoading && (
-            <div className="mt-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-sm text-muted-foreground">Performing comprehensive code analysis...</p>
+            <div className="mt-8 text-center" role="status" aria-live="polite">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4" aria-hidden="true"></div>
+              <p className="text-sm text-muted-foreground">Performing comprehensive code analysis with graph-sitter...</p>
             </div>
+          )}
+          {error && (
+            <Alert variant="destructive" className="mt-4 max-w-lg" role="alert">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
         </div>
       </div>
@@ -252,34 +263,38 @@ export default function EnhancedAnalyticsDashboard() {
   return (
     <div className="min-h-screen bg-background text-foreground p-6">
       {/* Header */}
-      <div className="mb-8">
+      <header className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
-              <Github className="h-8 w-8" />
+              <Github className="h-8 w-8" aria-hidden="true" />
               {repoData.repo_url}
             </h1>
             <p className="text-muted-foreground mt-1">{repoData.description}</p>
           </div>
           <div className="flex items-center gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold">{repoData.quality_score}</div>
+              <div className="text-2xl font-bold" aria-label={`Quality score: ${repoData.quality_score} out of 100`}>{repoData.quality_score}</div>
               <div className="text-sm text-muted-foreground">Quality Score</div>
             </div>
-            <Badge variant={repoData.quality_grade === 'A' ? 'default' : repoData.quality_grade === 'B' ? 'secondary' : 'destructive'} className="text-lg px-3 py-1">
+            <Badge 
+              variant={repoData.quality_grade === 'A' ? 'default' : repoData.quality_grade === 'B' ? 'secondary' : 'destructive'} 
+              className="text-lg px-3 py-1"
+              aria-label={`Quality grade: ${repoData.quality_grade}`}
+            >
               Grade {repoData.quality_grade}
             </Badge>
           </div>
         </div>
         
         {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" role="region" aria-label="Repository statistics">
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
-                <FileCode2 className="h-5 w-5 text-blue-500" />
+                <FileCode2 className="h-5 w-5 text-blue-500" aria-hidden="true" />
                 <div>
-                  <div className="text-2xl font-bold">{repoData.num_files}</div>
+                  <div className="text-2xl font-bold" aria-label={`${repoData.num_files} files`}>{repoData.num_files}</div>
                   <div className="text-sm text-muted-foreground">Files</div>
                 </div>
               </div>
@@ -288,9 +303,9 @@ export default function EnhancedAnalyticsDashboard() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
-                <Code className="h-5 w-5 text-green-500" />
+                <Code className="h-5 w-5 text-green-500" aria-hidden="true" />
                 <div>
-                  <div className="text-2xl font-bold">{repoData.num_functions}</div>
+                  <div className="text-2xl font-bold" aria-label={`${repoData.num_functions} functions`}>{repoData.num_functions}</div>
                   <div className="text-sm text-muted-foreground">Functions</div>
                 </div>
               </div>
@@ -299,9 +314,9 @@ export default function EnhancedAnalyticsDashboard() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-orange-500" />
+                <AlertTriangle className="h-5 w-5 text-orange-500" aria-hidden="true" />
                 <div>
-                  <div className="text-2xl font-bold">{repoData.issues.statistics.total}</div>
+                  <div className="text-2xl font-bold" aria-label={`${repoData.issues.statistics.total} issues found`}>{repoData.issues.statistics.total}</div>
                   <div className="text-sm text-muted-foreground">Issues</div>
                 </div>
               </div>
@@ -310,35 +325,35 @@ export default function EnhancedAnalyticsDashboard() {
           <Card>
             <CardContent className="p-4">
               <div className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-purple-500" />
+                <TrendingUp className="h-5 w-5 text-purple-500" aria-hidden="true" />
                 <div>
-                  <div className="text-2xl font-bold">{repoData.line_metrics.total.loc.toLocaleString()}</div>
+                  <div className="text-2xl font-bold" aria-label={`${repoData.line_metrics.total.loc.toLocaleString()} lines of code`}>{repoData.line_metrics.total.loc.toLocaleString()}</div>
                   <div className="text-sm text-muted-foreground">Lines of Code</div>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
-      </div>
+      </header>
 
       {/* Main Content Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="issues">Issues & Errors</TabsTrigger>
-          <TabsTrigger value="complexity">Complexity</TabsTrigger>
-          <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
-          <TabsTrigger value="trends">Trends</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-5" role="tablist" aria-label="Analysis sections">
+          <TabsTrigger value="overview" role="tab" aria-controls="overview-panel">Overview</TabsTrigger>
+          <TabsTrigger value="issues" role="tab" aria-controls="issues-panel">Issues & Errors</TabsTrigger>
+          <TabsTrigger value="complexity" role="tab" aria-controls="complexity-panel">Complexity</TabsTrigger>
+          <TabsTrigger value="dependencies" role="tab" aria-controls="dependencies-panel">Dependencies</TabsTrigger>
+          <TabsTrigger value="trends" role="tab" aria-controls="trends-panel">Trends</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
-        <TabsContent value="overview" className="space-y-6">
+        <TabsContent value="overview" className="space-y-6" role="tabpanel" id="overview-panel" aria-labelledby="overview-tab">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Quality Metrics */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Brain className="h-5 w-5" />
+                  <Brain className="h-5 w-5" aria-hidden="true" />
                   Quality Metrics
                 </CardTitle>
               </CardHeader>
@@ -346,23 +361,23 @@ export default function EnhancedAnalyticsDashboard() {
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Maintainability</span>
-                    <span>{repoData.maintainability_index.average}%</span>
+                    <span aria-label={`Maintainability: ${repoData.maintainability_index.average} percent`}>{repoData.maintainability_index.average}%</span>
                   </div>
-                  <Progress value={repoData.maintainability_index.average} className="h-2" />
+                  <Progress value={repoData.maintainability_index.average} className="h-2" aria-label="Maintainability progress" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Code Quality</span>
-                    <span>{repoData.quality_score}%</span>
+                    <span aria-label={`Code quality: ${repoData.quality_score} percent`}>{repoData.quality_score}%</span>
                   </div>
-                  <Progress value={repoData.quality_score} className="h-2" />
+                  <Progress value={repoData.quality_score} className="h-2" aria-label="Code quality progress" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Comment Density</span>
-                    <span>{repoData.line_metrics.total.comment_density.toFixed(1)}%</span>
+                    <span aria-label={`Comment density: ${repoData.line_metrics.total.comment_density.toFixed(1)} percent`}>{repoData.line_metrics.total.comment_density.toFixed(1)}%</span>
                   </div>
-                  <Progress value={repoData.line_metrics.total.comment_density} className="h-2" />
+                  <Progress value={repoData.line_metrics.total.comment_density} className="h-2" aria-label="Comment density progress" />
                 </div>
               </CardContent>
             </Card>
@@ -371,23 +386,29 @@ export default function EnhancedAnalyticsDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
+                  <Shield className="h-5 w-5" aria-hidden="true" />
                   Risk Distribution
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
+                <div className="space-y-3" role="list" aria-label="Risk distribution breakdown">
+                  <div className="flex justify-between items-center" role="listitem">
                     <span className="text-sm">High Risk Files</span>
-                    <Badge variant="destructive">{repoData.visualizations.risk_distribution.high_risk_files}</Badge>
+                    <Badge variant="destructive" aria-label={`${repoData.visualizations.risk_distribution.high_risk_files} high risk files`}>
+                      {repoData.visualizations.risk_distribution.high_risk_files}
+                    </Badge>
                   </div>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center" role="listitem">
                     <span className="text-sm">Medium Risk Files</span>
-                    <Badge variant="secondary">{repoData.visualizations.risk_distribution.medium_risk_files}</Badge>
+                    <Badge variant="secondary" aria-label={`${repoData.visualizations.risk_distribution.medium_risk_files} medium risk files`}>
+                      {repoData.visualizations.risk_distribution.medium_risk_files}
+                    </Badge>
                   </div>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center" role="listitem">
                     <span className="text-sm">Low Risk Files</span>
-                    <Badge variant="outline">{repoData.visualizations.risk_distribution.low_risk_files}</Badge>
+                    <Badge variant="outline" aria-label={`${repoData.visualizations.risk_distribution.low_risk_files} low risk files`}>
+                      {repoData.visualizations.risk_distribution.low_risk_files}
+                    </Badge>
                   </div>
                 </div>
               </CardContent>
@@ -397,29 +418,32 @@ export default function EnhancedAnalyticsDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5" />
+                  <AlertTriangle className="h-5 w-5" aria-hidden="true" />
                   Issues by Severity
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={issuesBySeverity}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={40}
-                      outerRadius={80}
-                      dataKey="value"
-                    >
-                      {issuesBySeverity.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div aria-label="Issues by severity chart">
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={issuesBySeverity}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={40}
+                        outerRadius={80}
+                        dataKey="value"
+                        aria-label="Issues by severity pie chart"
+                      >
+                        {issuesBySeverity.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -428,25 +452,27 @@ export default function EnhancedAnalyticsDashboard() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <GitBranch className="h-5 w-5" />
+                <GitBranch className="h-5 w-5" aria-hidden="true" />
                 Commit Activity (Last 12 Months)
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={commitData}>
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="commits" fill="#3b82f6" />
-                </BarChart>
-              </ResponsiveContainer>
+              <div aria-label="Commit activity chart for the last 12 months">
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={commitData}>
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="commits" fill="#3b82f6" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
         {/* Issues & Errors Tab */}
-        <TabsContent value="issues" className="space-y-6">
+        <TabsContent value="issues" className="space-y-6" role="tabpanel" id="issues-panel" aria-labelledby="issues-tab">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
             {/* Issues by Category */}
             <Card>
@@ -454,14 +480,16 @@ export default function EnhancedAnalyticsDashboard() {
                 <CardTitle>Issues by Category</CardTitle>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={250}>
-                  <BarChart data={issuesByCategory}>
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#8884d8" />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div aria-label="Issues by category chart">
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={issuesByCategory}>
+                      <XAxis dataKey="name" />
+                      <YAxis />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#8884d8" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </CardContent>
             </Card>
 
@@ -472,7 +500,7 @@ export default function EnhancedAnalyticsDashboard() {
                   <CardTitle className="text-red-600">Critical Issues Detected</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Alert variant="destructive">
+                  <Alert variant="destructive" role="alert">
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Immediate Attention Required</AlertTitle>
                     <AlertDescription>
@@ -493,17 +521,33 @@ export default function EnhancedAnalyticsDashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4 max-h-96 overflow-y-auto">
+              <div className="space-y-4 max-h-96 overflow-y-auto" role="list" aria-label="List of code issues">
                 {repoData.issues.details.map((issue, index) => (
-                  <div key={index} className="border rounded-lg p-4 hover:bg-muted/50 cursor-pointer" onClick={() => setSelectedIssue(issue)}>
+                  <div 
+                    key={index} 
+                    className="border rounded-lg p-4 hover:bg-muted/50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring" 
+                    onClick={() => setSelectedIssue(issue)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedIssue(issue);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="listitem"
+                    aria-label={`Issue: ${issue.type} in ${issue.file_path}`}
+                  >
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <Badge variant={issue.severity === 'critical' ? 'destructive' : issue.severity === 'high' ? 'destructive' : 'secondary'}>
+                        <Badge 
+                          variant={issue.severity === 'critical' ? 'destructive' : issue.severity === 'high' ? 'destructive' : 'secondary'}
+                          aria-label={`Severity: ${issue.severity}`}
+                        >
                           {issue.severity}
                         </Badge>
-                        <Badge variant="outline">{issue.category}</Badge>
+                        <Badge variant="outline" aria-label={`Category: ${issue.category}`}>{issue.category}</Badge>
                       </div>
-                      <span className="text-sm text-muted-foreground">{issue.file_path}</span>
+                      <span className="text-sm text-muted-foreground" aria-label={`File: ${issue.file_path}`}>{issue.file_path}</span>
                     </div>
                     <h4 className="font-medium mb-1">{issue.type}</h4>
                     <p className="text-sm text-muted-foreground mb-2">{issue.message}</p>
@@ -516,24 +560,26 @@ export default function EnhancedAnalyticsDashboard() {
         </TabsContent>
 
         {/* Complexity Tab */}
-        <TabsContent value="complexity" className="space-y-6">
+        <TabsContent value="complexity" className="space-y-6" role="tabpanel" id="complexity-panel" aria-labelledby="complexity-tab">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <HeatMap className="h-5 w-5" />
+                <HeatMap className="h-5 w-5" aria-hidden="true" />
                 Complexity Heatmap
               </CardTitle>
               <CardDescription>Files with highest complexity (top 20)</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={400}>
-                <ScatterChart data={complexityData}>
-                  <XAxis dataKey="lines" name="Lines of Code" />
-                  <YAxis dataKey="complexity" name="Complexity" />
-                  <Tooltip cursor={{ strokeDasharray: '3 3' }} />
-                  <Scatter dataKey="complexity" fill="#8884d8" />
-                </ScatterChart>
-              </ResponsiveContainer>
+              <div aria-label="Complexity vs lines of code scatter plot">
+                <ResponsiveContainer width="100%" height={400}>
+                  <ScatterChart data={complexityData}>
+                    <XAxis dataKey="lines" name="Lines of Code" />
+                    <YAxis dataKey="complexity" name="Complexity" />
+                    <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                    <Scatter dataKey="complexity" fill="#8884d8" />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
 
@@ -544,25 +590,28 @@ export default function EnhancedAnalyticsDashboard() {
             </CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table className="w-full text-sm" role="table" aria-label="File metrics table">
                   <thead>
-                    <tr className="border-b">
-                      <th className="text-left p-2">File</th>
-                      <th className="text-right p-2">LOC</th>
-                      <th className="text-right p-2">Complexity</th>
-                      <th className="text-right p-2">Maintainability</th>
-                      <th className="text-right p-2">Risk Score</th>
+                    <tr className="border-b" role="row">
+                      <th className="text-left p-2" role="columnheader">File</th>
+                      <th className="text-right p-2" role="columnheader">LOC</th>
+                      <th className="text-right p-2" role="columnheader">Complexity</th>
+                      <th className="text-right p-2" role="columnheader">Maintainability</th>
+                      <th className="text-right p-2" role="columnheader">Risk Score</th>
                     </tr>
                   </thead>
                   <tbody>
                     {repoData.visualizations.file_metrics.slice(0, 20).map((file, index) => (
-                      <tr key={index} className="border-b hover:bg-muted/50">
-                        <td className="p-2 font-mono text-sm">{file.name}</td>
-                        <td className="p-2 text-right">{file.loc}</td>
-                        <td className="p-2 text-right">{file.complexity.toFixed(1)}</td>
-                        <td className="p-2 text-right">{file.maintainability.toFixed(1)}%</td>
-                        <td className="p-2 text-right">
-                          <Badge variant={file.risk_score > 70 ? 'destructive' : file.risk_score > 30 ? 'secondary' : 'outline'}>
+                      <tr key={index} className="border-b hover:bg-muted/50" role="row">
+                        <td className="p-2 font-mono text-sm" role="cell">{file.name}</td>
+                        <td className="p-2 text-right" role="cell">{file.loc}</td>
+                        <td className="p-2 text-right" role="cell">{file.complexity.toFixed(1)}</td>
+                        <td className="p-2 text-right" role="cell">{file.maintainability.toFixed(1)}%</td>
+                        <td className="p-2 text-right" role="cell">
+                          <Badge 
+                            variant={file.risk_score > 70 ? 'destructive' : file.risk_score > 30 ? 'secondary' : 'outline'}
+                            aria-label={`Risk score: ${file.risk_score.toFixed(1)}`}
+                          >
                             {file.risk_score.toFixed(1)}
                           </Badge>
                         </td>
@@ -576,30 +625,38 @@ export default function EnhancedAnalyticsDashboard() {
         </TabsContent>
 
         {/* Dependencies Tab */}
-        <TabsContent value="dependencies" className="space-y-6">
+        <TabsContent value="dependencies" className="space-y-6" role="tabpanel" id="dependencies-panel" aria-labelledby="dependencies-tab">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <Network className="h-5 w-5" />
+                <Network className="h-5 w-5" aria-hidden="true" />
                 Dependency Overview
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4" role="region" aria-label="Dependency statistics">
                 <div className="text-center">
-                  <div className="text-2xl font-bold">{repoData.visualizations.dependency_graph.stats.total_nodes}</div>
+                  <div className="text-2xl font-bold" aria-label={`${repoData.visualizations.dependency_graph.stats.total_nodes} total nodes`}>
+                    {repoData.visualizations.dependency_graph.stats.total_nodes}
+                  </div>
                   <div className="text-sm text-muted-foreground">Total Nodes</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold">{repoData.visualizations.dependency_graph.stats.total_edges}</div>
+                  <div className="text-2xl font-bold" aria-label={`${repoData.visualizations.dependency_graph.stats.total_edges} dependencies`}>
+                    {repoData.visualizations.dependency_graph.stats.total_edges}
+                  </div>
                   <div className="text-sm text-muted-foreground">Dependencies</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold">{repoData.visualizations.dependency_graph.stats.file_count}</div>
+                  <div className="text-2xl font-bold" aria-label={`${repoData.visualizations.dependency_graph.stats.file_count} files`}>
+                    {repoData.visualizations.dependency_graph.stats.file_count}
+                  </div>
                   <div className="text-sm text-muted-foreground">Files</div>
                 </div>
                 <div className="text-center">
-                  <div className="text-2xl font-bold">{repoData.visualizations.dependency_graph.stats.function_count}</div>
+                  <div className="text-2xl font-bold" aria-label={`${repoData.visualizations.dependency_graph.stats.function_count} functions`}>
+                    {repoData.visualizations.dependency_graph.stats.function_count}
+                  </div>
                   <div className="text-sm text-muted-foreground">Functions</div>
                 </div>
               </div>
@@ -609,12 +666,12 @@ export default function EnhancedAnalyticsDashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Dependency Graph</CardTitle>
-              <CardDescription>Interactive visualization would be rendered here with a graph library like vis.js or D3.js</CardDescription>
+              <CardDescription>Interactive visualization powered by graph-sitter analysis</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-96 bg-muted/20 rounded-lg flex items-center justify-center">
+              <div className="h-96 bg-muted/20 rounded-lg flex items-center justify-center" role="img" aria-label="Dependency graph visualization placeholder">
                 <div className="text-center">
-                  <Network className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+                  <Network className="h-16 w-16 mx-auto mb-4 text-muted-foreground" aria-hidden="true" />
                   <p className="text-muted-foreground">Interactive dependency graph visualization</p>
                   <p className="text-sm text-muted-foreground mt-2">
                     {repoData.visualizations.dependency_graph.nodes.length} nodes, {repoData.visualizations.dependency_graph.edges.length} edges
@@ -626,23 +683,25 @@ export default function EnhancedAnalyticsDashboard() {
         </TabsContent>
 
         {/* Trends Tab */}
-        <TabsContent value="trends" className="space-y-6">
+        <TabsContent value="trends" className="space-y-6" role="tabpanel" id="trends-panel" aria-labelledby="trends-tab">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5" />
+                <TrendingUp className="h-5 w-5" aria-hidden="true" />
                 Development Activity
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={commitData}>
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="commits" stroke="#3b82f6" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+              <div aria-label="Development activity trend line chart">
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={commitData}>
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="commits" stroke="#3b82f6" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
 
@@ -652,26 +711,26 @@ export default function EnhancedAnalyticsDashboard() {
                 <CardTitle>Quality Trends</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center">
+                <div className="space-y-4" role="list" aria-label="Quality metrics">
+                  <div className="flex justify-between items-center" role="listitem">
                     <span>Overall Quality</span>
                     <div className="flex items-center gap-2">
-                      <Progress value={repoData.quality_score} className="w-24 h-2" />
-                      <span className="text-sm font-medium">{repoData.quality_score}%</span>
+                      <Progress value={repoData.quality_score} className="w-24 h-2" aria-label="Overall quality progress" />
+                      <span className="text-sm font-medium" aria-label={`Overall quality: ${repoData.quality_score} percent`}>{repoData.quality_score}%</span>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center" role="listitem">
                     <span>Maintainability</span>
                     <div className="flex items-center gap-2">
-                      <Progress value={repoData.maintainability_index.average} className="w-24 h-2" />
-                      <span className="text-sm font-medium">{repoData.maintainability_index.average}%</span>
+                      <Progress value={repoData.maintainability_index.average} className="w-24 h-2" aria-label="Maintainability progress" />
+                      <span className="text-sm font-medium" aria-label={`Maintainability: ${repoData.maintainability_index.average} percent`}>{repoData.maintainability_index.average}%</span>
                     </div>
                   </div>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center" role="listitem">
                     <span>Code Coverage</span>
                     <div className="flex items-center gap-2">
-                      <Progress value={repoData.line_metrics.total.comment_density} className="w-24 h-2" />
-                      <span className="text-sm font-medium">{repoData.line_metrics.total.comment_density.toFixed(1)}%</span>
+                      <Progress value={repoData.line_metrics.total.comment_density} className="w-24 h-2" aria-label="Code coverage progress" />
+                      <span className="text-sm font-medium" aria-label={`Code coverage: ${repoData.line_metrics.total.comment_density.toFixed(1)} percent`}>{repoData.line_metrics.total.comment_density.toFixed(1)}%</span>
                     </div>
                   </div>
                 </div>
@@ -683,9 +742,9 @@ export default function EnhancedAnalyticsDashboard() {
                 <CardTitle>Recommendations</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
+                <div className="space-y-3" role="list" aria-label="Improvement recommendations">
                   {repoData.issues.statistics.critical > 0 && (
-                    <Alert variant="destructive">
+                    <Alert variant="destructive" role="listitem">
                       <AlertTriangle className="h-4 w-4" />
                       <AlertDescription>
                         Address {repoData.issues.statistics.critical} critical security issues immediately
@@ -693,14 +752,14 @@ export default function EnhancedAnalyticsDashboard() {
                     </Alert>
                   )}
                   {repoData.cyclomatic_complexity.average > 15 && (
-                    <Alert>
+                    <Alert role="listitem">
                       <AlertDescription>
                         Consider refactoring complex functions to improve maintainability
                       </AlertDescription>
                     </Alert>
                   )}
                   {repoData.line_metrics.total.comment_density < 10 && (
-                    <Alert>
+                    <Alert role="listitem">
                       <AlertDescription>
                         Increase code documentation to improve maintainability
                       </AlertDescription>
@@ -715,4 +774,3 @@ export default function EnhancedAnalyticsDashboard() {
     </div>
   );
 }
-
