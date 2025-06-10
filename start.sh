@@ -168,27 +168,27 @@ get_modal_url_auto() {
     while [ $wait_time -lt $max_wait ]; do
         # Look for any Modal URL pattern with multiple strategies
         if [ -s "$temp_file" ]; then
-            # Strategy 1: Look for FastAPI app URLs (most specific)
-            modal_url=$(grep -o "https://[^[:space:]]*fastapi[^[:space:]]*\.modal\.run" "$temp_file" | head -1)
+            # Strategy 1: Look for FastAPI app URLs (most specific) - handle multiline output
+            modal_url=$(cat "$temp_file" | tr '\n' ' ' | grep -o "https://[^[:space:]]*fastapi-modal-app[^[:space:]]*\.modal\.run" | head -1)
             
-            # Strategy 2: Look for app URLs with common patterns
+            # Strategy 2: Look for FastAPI endpoints in general
             if [ -z "$modal_url" ]; then
-                modal_url=$(grep -o "https://[^[:space:]]*--[^[:space:]]*\.modal\.run" "$temp_file" | head -1)
+                modal_url=$(cat "$temp_file" | tr '\n' ' ' | grep -o "https://[^[:space:]]*fastapi[^[:space:]]*\.modal\.run" | head -1)
             fi
             
-            # Strategy 3: Look for any Modal URL if specific patterns not found
+            # Strategy 3: Look for app URLs with double-dash patterns
+            if [ -z "$modal_url" ]; then
+                modal_url=$(cat "$temp_file" | tr '\n' ' ' | grep -o "https://[^[:space:]]*--[^[:space:]]*\.modal\.run" | head -1)
+            fi
+            
+            # Strategy 4: Look for any Modal URL if specific patterns not found
             if [ -z "$modal_url" ]; then
                 modal_url=$(grep -o "https://[^[:space:]]*\.modal\.run" "$temp_file" | head -1)
             fi
             
-            # Strategy 4: Look for URLs in specific Modal messages
+            # Strategy 5: Look for URLs in specific Modal messages
             if [ -z "$modal_url" ]; then
                 modal_url=$(grep -A 2 -B 2 "View app at\|Serving\|Running\|Available at\|App running at" "$temp_file" | grep -o "https://[^[:space:]]*\.modal\.run" | head -1)
-            fi
-            
-            # Strategy 5: Look for URLs after "=>" or similar indicators
-            if [ -z "$modal_url" ]; then
-                modal_url=$(grep -o "=> https://[^[:space:]]*\.modal\.run" "$temp_file" | sed 's/=> //' | head -1)
             fi
             
             if [ -n "$modal_url" ]; then
@@ -366,4 +366,3 @@ main() {
 
 # Run main function
 main "$@"
-
