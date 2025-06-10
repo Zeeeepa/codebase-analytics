@@ -335,7 +335,7 @@ export default function EnhancedAnalyticsDashboard() {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false)
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig>({
     mode: 'local',
-    endpoint: 'http://localhost:8000',
+    endpoint: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
     status: 'idle'
   })
 
@@ -377,9 +377,9 @@ export default function EnhancedAnalyticsDashboard() {
     // Simulate deployment process
     setTimeout(() => {
       const endpoints = {
-        local: 'http://localhost:8000',
+        local: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
         modal: 'https://your-modal-app.modal.run',
-        docker: 'http://localhost:80/api'
+        docker: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:80/api'
       }
       
       setDeploymentConfig({
@@ -766,4 +766,3 @@ export default function EnhancedAnalyticsDashboard() {
     </div>
   )
 }
-
