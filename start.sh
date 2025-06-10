@@ -145,8 +145,67 @@ start_frontend() {
     fi
 }
 
+# Function to get Modal URL from deployment
+get_modal_url_auto() {
+    print_color $BLUE "🔍 Detecting Modal deployment URL..."
+    
+    # Start Modal in background and capture output
+    cd backend
+    
+    # Create a temporary file to capture Modal output
+    local temp_file=$(mktemp)
+    
+    print_color $YELLOW "🚀 Starting Modal deployment..."
+    modal serve api.py > "$temp_file" 2>&1 &
+    local modal_pid=$!
+    
+    # Wait for Modal to start and extract URL
+    local max_wait=60  # Wait up to 60 seconds
+    local wait_time=0
+    local modal_url=""
+    
+    while [ $wait_time -lt $max_wait ]; do
+        if grep -q "https://.*\.modal\.run" "$temp_file"; then
+            # Extract the main app URL (not individual function URLs)
+            modal_url=$(grep "https://.*\.modal\.run" "$temp_file" | grep -E "(fastapi_modal_app|main)" | head -1 | sed 's/.*\(https:\/\/[^[:space:]]*\.modal\.run\).*/\1/')
+            
+            if [ -n "$modal_url" ]; then
+                print_color $GREEN "✅ Modal URL detected: $modal_url"
+                break
+            fi
+        fi
+        
+        sleep 2
+        wait_time=$((wait_time + 2))
+        print_color $CYAN "⏳ Waiting for Modal deployment... (${wait_time}s)"
+    done
+    
+    # Clean up temp file
+    rm -f "$temp_file"
+    cd ..
+    
+    if [ -z "$modal_url" ]; then
+        print_color $RED "❌ Could not detect Modal URL automatically"
+        print_color $YELLOW "📝 Please provide the Modal backend URL manually:"
+        print_color $CYAN "   (e.g., https://your-app--endpoint.modal.run)"
+        read -p "Modal URL: " modal_url
+        
+        if [ -z "$modal_url" ]; then
+            print_color $RED "❌ No URL provided. Using default local backend."
+            modal_url="http://localhost:8000"
+        fi
+    fi
+    
+    # Store the Modal PID for cleanup
+    MODAL_PID=$modal_pid
+    
+    echo "$modal_url"
+}
+
+# Function to get Modal URL from user (fallback)
+get_modal_url_manual() {
 # Function to get Modal URL from user
-get_modal_url() {
+
     echo ""
     print_color $YELLOW "📝 Please provide the Modal backend URL:"
     print_color $CYAN "   (e.g., https://your-app--endpoint.modal.run)"
@@ -180,11 +239,11 @@ run_in_background() {
             ;;
         5)
             # Backend modal + Frontend
-            print_color $BLUE "🔄 Please start Modal backend in another terminal first:"
-            print_color $CYAN "   cd backend && modal serve api.py"
-            echo ""
+            print_color $BLUE "🔄 Starting Modal backend and frontend..."
+            print_color $CYAN "🤖 Automatically detecting Modal URL..."
             
-            modal_url=$(get_modal_url)
+            modal_url=$(get_modal_url_auto)
+
             start_frontend "$modal_url"
             ;;
     esac
@@ -196,6 +255,13 @@ cleanup() {
         print_color $YELLOW "🛑 Stopping background backend process..."
         kill $BACKEND_PID 2>/dev/null || true
     fi
+    
+    if [ ! -z "$MODAL_PID" ]; then
+        print_color $YELLOW "🛑 Stopping Modal deployment..."
+        kill $MODAL_PID 2>/dev/null || true
+    fi
+    
+
     exit 0
 }
 
@@ -212,7 +278,8 @@ show_menu() {
     print_color $PURPLE "2) ☁️  Backend - Modal Cloud"
     print_color $CYAN "3) 🎨 Frontend - Build and Start"
     print_color $YELLOW "4) 🔄 Backend Local + Frontend"
-    print_color $GREEN "5) 🌐 Backend Modal + Frontend"
+    print_color $GREEN "5) ���� Backend Modal + Frontend"
+
     echo ""
     print_color $RED "0) ❌ Exit"
     echo ""
