@@ -18,9 +18,10 @@ import {
   GitBranch, FileText, Code, AlertTriangle, CheckCircle, 
   XCircle, Info, ChevronDown, ChevronRight, Folder, 
   FolderOpen, File, Activity, TrendingUp, Users, Calendar,
-  Zap, Shield, Target, Layers, Database, Cloud, Settings,
-  Download, Share, RefreshCw, Eye, BarChart3
+  Clock, Target, Zap, Shield, Settings, Cloud, Upload, Download,
+  Search, Filter, MoreHorizontal, Eye, EyeOff, RefreshCw, BarChart3
 } from 'lucide-react'
+import config from '@/lib/config'
 
 // Enhanced Types with Modal Integration
 interface RepositoryNode {
@@ -83,6 +84,7 @@ interface DeploymentConfig {
   endpoint: string
   status: 'idle' | 'deploying' | 'deployed' | 'error'
 }
+
 
 // Enhanced Repository Tree Component with Modal Features
 const EnhancedRepositoryTree: React.FC<{ 
@@ -308,7 +310,7 @@ export default function EnhancedAnalyticsDashboard() {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false)
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig>({
     mode: 'local',
-    endpoint: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+    endpoint: config.getApiUrl(),
     status: 'idle'
   })
 
@@ -345,20 +347,17 @@ export default function EnhancedAnalyticsDashboard() {
   }
 
   const handleDeploy = (mode: 'local' | 'modal') => {
-    setDeploymentConfig(prev => ({ ...prev, status: 'deploying' }))
+    setDeploymentConfig(prev => ({ ...prev, status: 'deploying', mode }))
     
     // Simulate deployment process
     setTimeout(() => {
-      const endpoints = {
-        local: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
-        modal: 'https://your-modal-app.modal.run'
-      }
+      const endpoints = config.getEndpoints()
       
-      setDeploymentConfig({
-        mode,
+      setDeploymentConfig(prev => ({
+        ...prev,
         endpoint: endpoints[mode],
         status: 'deployed'
-      })
+      }))
     }, 2000)
   }
 
