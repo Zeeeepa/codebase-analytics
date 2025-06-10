@@ -79,10 +79,18 @@ npm run build || {
 
 cd ..
 
-# Create environment file if it doesn't exist
+# Create frontend environment file if it doesn't exist
 if [ ! -f "frontend/.env.local" ]; then
-    echo -e "${YELLOW}Creating frontend environment file...${NC}"
-    echo "NEXT_PUBLIC_API_URL=http://localhost:8000" > frontend/.env.local
+    echo "📝 Creating frontend/.env.local..."
+    cat > frontend/.env.local << EOF
+# Local development environment configuration
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NODE_ENV=development
+
+# Optional: Add any other environment-specific variables here
+# NEXT_PUBLIC_MODAL_ENDPOINT=https://your-modal-app.modal.run
+EOF
+    echo "✅ Created frontend/.env.local"
 fi
 
 # Function to start backend
@@ -140,4 +148,3 @@ else
     # Wait for both processes
     wait $BACKEND_PID $FRONTEND_PID
 fi
-
