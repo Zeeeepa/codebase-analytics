@@ -1,0 +1,13 @@
+fastapi>=0.115.2
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+requests>=2.31.0
+aiofiles>=23.2.1
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+git+https://github.com/codegen-sh/graph-sitter.git
+gitpython>=3.1.40
+pathlib2>=2.3.7
+typing-extensions>=4.8.0
+

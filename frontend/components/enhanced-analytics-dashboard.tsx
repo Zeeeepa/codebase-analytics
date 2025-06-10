@@ -79,7 +79,7 @@ interface AnalysisResult {
 }
 
 interface DeploymentConfig {
-  mode: 'local' | 'modal' | 'docker'
+  mode: 'local' | 'modal'
   endpoint: string
   status: 'idle' | 'deploying' | 'deployed' | 'error'
 }
@@ -201,7 +201,7 @@ const FileDetailModal: React.FC<{
         </DialogHeader>
         
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <Card>
               <CardContent className="p-4">
                 <div className="text-2xl font-bold text-red-600">{file.critical_issues}</div>
@@ -251,7 +251,7 @@ const FileDetailModal: React.FC<{
 // Deployment Status Component
 const DeploymentStatus: React.FC<{
   config: DeploymentConfig;
-  onDeploy: (mode: 'local' | 'modal' | 'docker') => void;
+  onDeploy: (mode: 'local' | 'modal') => void;
 }> = ({ config, onDeploy }) => {
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -284,34 +284,7 @@ const DeploymentStatus: React.FC<{
           </Badge>
         </div>
         
-        <div className="grid grid-cols-3 gap-2">
-          <Button 
-            variant={config.mode === 'local' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onDeploy('local')}
-            disabled={config.status === 'deploying'}
-          >
-            <Settings size={16} className="mr-1" />
-            Local
-          </Button>
-          <Button 
-            variant={config.mode === 'modal' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onDeploy('modal')}
-            disabled={config.status === 'deploying'}
-          >
-            <Zap size={16} className="mr-1" />
-            Modal
-          </Button>
-          <Button 
-            variant={config.mode === 'docker' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => onDeploy('docker')}
-            disabled={config.status === 'deploying'}
-          >
-            <Database size={16} className="mr-1" />
-            Docker
-          </Button>
+        <div className="grid grid-cols-2 gap-2">
         </div>
         
         {config.status === 'deploying' && (
@@ -335,7 +308,7 @@ export default function EnhancedAnalyticsDashboard() {
   const [isFileModalOpen, setIsFileModalOpen] = useState(false)
   const [deploymentConfig, setDeploymentConfig] = useState<DeploymentConfig>({
     mode: 'local',
-    endpoint: 'http://localhost:8000',
+    endpoint: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
     status: 'idle'
   })
 
@@ -371,15 +344,14 @@ export default function EnhancedAnalyticsDashboard() {
     }
   }
 
-  const handleDeploy = async (mode: 'local' | 'modal' | 'docker') => {
-    setDeploymentConfig(prev => ({ ...prev, status: 'deploying', mode }))
+  const handleDeploy = (mode: 'local' | 'modal') => {
+    setDeploymentConfig(prev => ({ ...prev, status: 'deploying' }))
     
     // Simulate deployment process
     setTimeout(() => {
       const endpoints = {
-        local: 'http://localhost:8000',
-        modal: 'https://your-modal-app.modal.run',
-        docker: 'http://localhost:80/api'
+        local: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+        modal: 'https://your-modal-app.modal.run'
       }
       
       setDeploymentConfig({
@@ -387,7 +359,7 @@ export default function EnhancedAnalyticsDashboard() {
         endpoint: endpoints[mode],
         status: 'deployed'
       })
-    }, 3000)
+    }, 2000)
   }
 
   const handleFileSelect = (file: RepositoryNode) => {
@@ -766,4 +738,3 @@ export default function EnhancedAnalyticsDashboard() {
     </div>
   )
 }
-

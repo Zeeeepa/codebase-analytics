@@ -28,9 +28,6 @@ import uvicorn
 
 # Add the graph_sitter path to sys.path for imports
 current_dir = Path(__file__).parent
-graph_sitter_path = current_dir.parent / "src" / "graph_sitter"
-if graph_sitter_path.exists():
-    sys.path.insert(0, str(graph_sitter_path.parent))
 
 # Configure logging
 logging.basicConfig(
@@ -38,6 +35,119 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# Import graph_sitter from the installed package
+try:
+    from graph_sitter import Codebase
+    from graph_sitter.codebase.codebase_ai import generate_context
+    GRAPH_SITTER_AVAILABLE = True
+    logger.info("Graph-sitter successfully imported")
+    
+    # Create analysis functions based on available Codebase methods
+    def get_codebase_summary(codebase: Codebase) -> str:
+        """Provides a high-level statistical overview of the entire codebase"""
+        try:
+            files_count = len(codebase.files)
+            imports_count = len(codebase.imports)
+            external_modules_count = len(codebase.external_modules)
+            symbols_count = len(codebase.symbols)
+            classes_count = len(codebase.classes)
+            functions_count = len(codebase.functions)
+            global_vars_count = len(codebase.global_vars)
+            interfaces_count = len(codebase.interfaces)
+            
+            return f"""Codebase Summary:
+- Files: {files_count}
+- Imports: {imports_count}
+- External modules: {external_modules_count}
+- Total symbols: {symbols_count}
+  - Classes: {classes_count}
+  - Functions: {functions_count}
+  - Global variables: {global_vars_count}
+  - Interfaces: {interfaces_count}
+- Repository: {codebase.name}
+- Language: {codebase.language}"""
+        except Exception as e:
+            return f"Error generating codebase summary: {str(e)}"
+    
+    def get_file_summary(file) -> str:
+        """Analyzes a single source file's dependencies and structure"""
+        try:
+            if hasattr(file, 'imports'):
+                imports_count = len(file.imports) if file.imports else 0
+            else:
+                imports_count = 0
+                
+            if hasattr(file, 'symbols'):
+                symbols_count = len(file.symbols) if file.symbols else 0
+            else:
+                symbols_count = 0
+                
+            return f"""File Summary for {getattr(file, 'name', 'unknown')}:
+- Imports: {imports_count}
+- Symbols: {symbols_count}
+- Path: {getattr(file, 'path', 'unknown')}"""
+        except Exception as e:
+            return f"Error generating file summary: {str(e)}"
+    
+    def get_class_summary(cls) -> str:
+        """Deep analysis of a class definition and its relationships"""
+        try:
+            return f"""Class Summary for {getattr(cls, 'name', 'unknown')}:
+- Type: Class
+- Location: {getattr(cls, 'path', 'unknown')}
+- Methods: {len(getattr(cls, 'methods', []))}
+- Attributes: {len(getattr(cls, 'attributes', []))}"""
+        except Exception as e:
+            return f"Error generating class summary: {str(e)}"
+    
+    def get_function_summary(func) -> str:
+        """Comprehensive function analysis including call patterns"""
+        try:
+            return f"""Function Summary for {getattr(func, 'name', 'unknown')}:
+- Type: Function
+- Location: {getattr(func, 'path', 'unknown')}
+- Parameters: {len(getattr(func, 'parameters', []))}
+- Return statements: {len(getattr(func, 'return_statements', []))}"""
+        except Exception as e:
+            return f"Error generating function summary: {str(e)}"
+    
+    def get_symbol_summary(symbol) -> str:
+        """Universal symbol usage analysis (works for any symbol type)"""
+        try:
+            return f"""Symbol Summary for {getattr(symbol, 'name', 'unknown')}:
+- Type: {getattr(symbol, 'type', 'unknown')}
+- Location: {getattr(symbol, 'path', 'unknown')}
+- Dependencies: {len(getattr(symbol, 'dependencies', []))}
+- Usage count: {len(getattr(symbol, 'usages', []))}"""
+        except Exception as e:
+            return f"Error generating symbol summary: {str(e)}"
+            
+except ImportError as e:
+    logger.warning(f"Graph-sitter not available: {e}")
+    GRAPH_SITTER_AVAILABLE = False
+    # Create mock classes for development
+    class Codebase:
+        def __init__(self, repo_path):
+            self.repo_path = repo_path
+    
+    def get_codebase_summary(codebase):
+        return "Graph-sitter not available - mock summary"
+    
+    def get_file_summary(file):
+        return "Graph-sitter not available - mock file summary"
+    
+    def get_class_summary(cls):
+        return "Graph-sitter not available - mock class summary"
+    
+    def get_function_summary(func):
+        return "Graph-sitter not available - mock function summary"
+    
+    def get_symbol_summary(symbol):
+        return "Graph-sitter not available - mock symbol summary"
+    
+    def generate_context(obj):
+        return "Graph-sitter not available - mock context"
 
 # Pydantic models for request/response
 class RepositoryRequest(BaseModel):
@@ -569,4 +679,3 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
-

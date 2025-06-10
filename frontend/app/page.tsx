@@ -1,6 +1,6 @@
-import RepoAnalyticsDashboard from '@/components/repo-analytics-dashboard'
+import EnhancedAnalyticsDashboard from '@/components/enhanced-analytics-dashboard'
 
 export default function Home() {
-  return <RepoAnalyticsDashboard />
+  return <EnhancedAnalyticsDashboard />
 }
 
