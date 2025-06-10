@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any, Optional
-from graph_sitter.core import Codebase
+from graph_sitter.core.codebase import Codebase
 from graph_sitter.codebase.codebase_analysis import (
     get_codebase_summary,
     get_file_summary,
