@@ -148,9 +148,12 @@ export default function RepoAnalyticsDashboard() {
     
     try {
       console.log("Fetching repo data...");
+      // Use environment variable for API URL, fallback to hardcoded URL for development
+      const apiUrl = process.env.REACT_APP_API_URL || 'https://codegen-sh--analytics-app-fastapi-modal-app.modal.run';
+      
       // https://codegen-sh-staging--analytics-app-fastapi-modal-app.modal.run/analyze_repo
       // https://codegen-sh-staging--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo
-      const response = await fetch('https://codegen-sh--analytics-app-fastapi-modal-app.modal.run/analyze_repo', {
+      const response = await fetch(`${apiUrl}/analyze_repo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
