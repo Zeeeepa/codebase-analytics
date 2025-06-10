@@ -204,6 +204,8 @@ get_modal_url_auto() {
 
 # Function to get Modal URL from user (fallback)
 get_modal_url_manual() {
+# Function to get Modal URL from user
+
     echo ""
     print_color $YELLOW "📝 Please provide the Modal backend URL:"
     print_color $CYAN "   (e.g., https://your-app--endpoint.modal.run)"
@@ -241,6 +243,7 @@ run_in_background() {
             print_color $CYAN "🤖 Automatically detecting Modal URL..."
             
             modal_url=$(get_modal_url_auto)
+
             start_frontend "$modal_url"
             ;;
     esac
@@ -258,6 +261,7 @@ cleanup() {
         kill $MODAL_PID 2>/dev/null || true
     fi
     
+
     exit 0
 }
 
@@ -275,6 +279,7 @@ show_menu() {
     print_color $CYAN "3) 🎨 Frontend - Build and Start"
     print_color $YELLOW "4) 🔄 Backend Local + Frontend"
     print_color $GREEN "5) ���� Backend Modal + Frontend"
+
     echo ""
     print_color $RED "0) ❌ Exit"
     echo ""
@@ -335,3 +340,4 @@ main() {
 
 # Run main function
 main "$@"
+

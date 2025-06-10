@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any, Optional
-from graph_sitter.core import Codebase
+from graph_sitter.core.codebase import Codebase
 from graph_sitter.codebase.codebase_analysis import (
     get_codebase_summary,
     get_file_summary,
@@ -19,6 +19,7 @@ import os
 import tempfile
 from fastapi.middleware.cors import CORSMiddleware
 import modal
+from modal import web_endpoint
 
 image = (
     modal.Image.debian_slim()
@@ -341,8 +342,9 @@ def get_github_repo_description(repo_url):
             if response.status_code == 200:
                 repo_data = response.json()
                 return repo_data.get("description", "No description available")
-        return repo_data.get("description", "No description available")
-    else:
+        return "No description available"
+    except Exception as e:
+        print(f"Error fetching GitHub repo description: {e}")
         return ""
 
 
@@ -575,6 +577,71 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
 @modal.asgi_app()
 def fastapi_modal_app():
     return fastapi_app
+
+
+@app.function()
+@web_endpoint(method="POST")
+async def get_codebase_analysis(request: RepoRequest) -> Dict[str, Any]:
+    """Get comprehensive codebase analysis using graph-sitter analysis functions."""
+    try:
+        repo_url = request.repo_url.strip()
+        if not repo_url:
+            return {"error": "Repository URL is required"}, 400
+        
+        # Clone and analyze repository
+        repo_path = await clone_repo(repo_url)
+        codebase = Codebase(repo_path)
+        
+        # Get comprehensive analysis
+        analysis = {
+            "codebase_summary": get_codebase_summary(codebase),
+            "file_summaries": [],
+            "class_summaries": [],
+            "function_summaries": [],
+            "symbol_summaries": [],
+            "ai_context": generate_context(codebase)
+        }
+        
+        # Analyze each source file
+        for file in codebase.source_files:
+            analysis["file_summaries"].append({
+                "file_path": file.path,
+                "summary": get_file_summary(file)
+            })
+            
+            # Analyze classes in the file
+            if hasattr(file, 'classes'):
+                for cls in file.classes:
+                    analysis["class_summaries"].append({
+                        "class_name": cls.name,
+                        "file_path": file.path,
+                        "summary": get_class_summary(cls)
+                    })
+            
+            # Analyze functions in the file
+            if hasattr(file, 'functions'):
+                for func in file.functions:
+                    analysis["function_summaries"].append({
+                        "function_name": func.name,
+                        "file_path": file.path,
+                        "summary": get_function_summary(func)
+                    })
+            
+            # Analyze symbols in the file
+            if hasattr(file, 'symbols'):
+                for symbol in file.symbols:
+                    analysis["symbol_summaries"].append({
+                        "symbol_name": symbol.name,
+                        "symbol_type": type(symbol).__name__,
+                        "file_path": file.path,
+                        "summary": get_symbol_summary(symbol)
+                    })
+        
+        return analysis
+        
+    except Exception as e:
+        print(f"Error in codebase analysis: {e}")
+        return {"error": str(e)}, 500
 
 
 if __name__ == "__main__":
