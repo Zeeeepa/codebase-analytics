@@ -19,7 +19,7 @@ import os
 import tempfile
 from fastapi.middleware.cors import CORSMiddleware
 import modal
-from modal import web_endpoint
+from modal import fastapi_endpoint
 
 image = (
     modal.Image.debian_slim()
@@ -580,7 +580,7 @@ def fastapi_modal_app():
 
 
 @app.function()
-@web_endpoint(method="POST")
+@fastapi_endpoint(method="POST")
 async def get_codebase_analysis(request: RepoRequest) -> Dict[str, Any]:
     """Get comprehensive codebase analysis using graph-sitter analysis functions."""
     try:
