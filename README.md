@@ -1,12 +1,25 @@
 # Codebase Analytics
 
-A web application that provides comprehensive analytics for GitHub repositories.  The project combines a Modal-based FastAPI backend with a Next.js frontend to provide efficient and beautiful codebase metrics.
+Analytics for codebase maintainability and complexity
 
-Users submit a GitHub repository through the frontend. The Modal API processes the request using custom implementations of the metric calculations using the `codegen` library. Results are returned to the frontend for display.
+## 🚀 Quick Start
 
-## How it Works
+Use the interactive launcher script to get started quickly:
 
-### Backend (Modal API)
+```bash
+./start.sh
+```
+
+This will present you with deployment options:
+- **1) Backend - Local Development** - Run backend locally for development
+- **2) Backend - Modal Cloud** - Deploy backend to Modal cloud
+- **3) Frontend - Build and Start** - Build and serve the frontend
+- **4) Backend Local + Frontend** - Run both backend locally and frontend together
+- **5) Backend Modal + Frontend** - Use Modal backend with local frontend
+
+## Manual Setup
+
+### Backend
 
 The backend is built using [Modal](https://modal.com/) and [FastAPI](https://fastapi.tiangolo.com/), providing a serverless API endpoint for code research.
 
