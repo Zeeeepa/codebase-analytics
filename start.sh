@@ -156,18 +156,32 @@ get_modal_url_auto() {
     local temp_file=$(mktemp)
     
     print_color $YELLOW "🚀 Starting Modal deployment..."
-    # Use unbuffered output and capture both stdout and stderr
-    modal serve api.py 2>&1 | tee "$temp_file" &
+    # Use timeout to prevent hanging and capture both stdout and stderr
+    timeout 60 modal serve api.py > "$temp_file" 2>&1 &
     local modal_pid=$!
     
+    # Store the PID globally for cleanup
+    MODAL_PID=$modal_pid
+    
     # Wait for Modal to start and extract URL
-    local max_wait=90  # Wait up to 90 seconds
+    local max_wait=45  # Reduced wait time
     local wait_time=0
     local modal_url=""
+    local check_interval=3
+    
+    print_color $CYAN "⏳ Waiting for Modal deployment (max ${max_wait}s)..."
     
     while [ $wait_time -lt $max_wait ]; do
+        # Check if Modal process is still running
+        if ! kill -0 $modal_pid 2>/dev/null; then
+            print_color $RED "❌ Modal process stopped unexpectedly"
+            break
+        fi
+        
         # Look for any Modal URL pattern with multiple strategies
         if [ -s "$temp_file" ]; then
+            print_color $BLUE "📝 Checking Modal output for URLs..."
+            
             # Strategy 1: Look for FastAPI app URLs (most specific) - handle multiline output
             modal_url=$(cat "$temp_file" | tr '\n' ' ' | grep -o "https://[^[:space:]]*fastapi-modal-app[^[:space:]]*\.modal\.run" | head -1)
             
@@ -186,49 +200,47 @@ get_modal_url_auto() {
                 modal_url=$(grep -o "https://[^[:space:]]*\.modal\.run" "$temp_file" | head -1)
             fi
             
-            # Strategy 5: Look for URLs in specific Modal messages
+            # Strategy 5: Look for context-aware messages
             if [ -z "$modal_url" ]; then
-                modal_url=$(grep -A 2 -B 2 "View app at\|Serving\|Running\|Available at\|App running at" "$temp_file" | grep -o "https://[^[:space:]]*\.modal\.run" | head -1)
+                modal_url=$(grep -o "https://[^[:space:]]*modal\.run[^[:space:]]*" "$temp_file" | head -1)
             fi
             
+            # If we found a URL, break out of the loop
             if [ -n "$modal_url" ]; then
                 print_color $GREEN "✅ Modal URL detected: $modal_url"
                 break
             fi
         fi
         
-        sleep 3
-        wait_time=$((wait_time + 3))
-        print_color $CYAN "⏳ Waiting for Modal deployment... (${wait_time}s)"
-        
-        # Show recent output for debugging every 15 seconds
-        if [ $((wait_time % 15)) -eq 0 ]; then
-            print_color $YELLOW "📝 Recent Modal output:"
-            tail -5 "$temp_file" | sed 's/^/   /'
+        # Progress indicator
+        if [ $((wait_time % 15)) -eq 0 ] && [ $wait_time -gt 0 ]; then
+            print_color $YELLOW "⏳ Still waiting for Modal deployment... (${wait_time}s elapsed)"
         fi
+        
+        sleep $check_interval
+        wait_time=$((wait_time + check_interval))
     done
     
-    # Clean up temp file but keep it for final debugging if needed
+    # Clean up temp file
+    rm -f "$temp_file"
+    
+    # If no URL found, provide fallback
     if [ -z "$modal_url" ]; then
         print_color $RED "❌ Could not detect Modal URL automatically"
-        print_color $YELLOW "📝 Full Modal output for debugging:"
-        cat "$temp_file" | sed 's/^/   /'
-        print_color $YELLOW "📝 Please provide the Modal backend URL manually:"
-        print_color $CYAN "   (e.g., https://your-app--endpoint.modal.run)"
-        read -p "Modal URL: " modal_url
+        print_color $YELLOW "🔄 Using fallback URL for development"
+        modal_url="http://localhost:8000"
         
-        if [ -z "$modal_url" ]; then
-            print_color $RED "❌ No URL provided. Using default local backend."
-            modal_url="http://localhost:8000"
+        # Kill the Modal process if it's still running
+        if kill -0 $modal_pid 2>/dev/null; then
+            print_color $YELLOW "🛑 Stopping Modal process..."
+            kill $modal_pid 2>/dev/null
+            wait $modal_pid 2>/dev/null
         fi
+    else
+        print_color $GREEN "🎯 Successfully detected Modal URL: $modal_url"
     fi
     
-    rm -f "$temp_file"
     cd ..
-    
-    # Store the Modal PID for cleanup
-    MODAL_PID=$modal_pid
-    
     echo "$modal_url"
 }
 
@@ -250,27 +262,43 @@ get_modal_url_manual() {
 # Function to run option in background and wait
 run_in_background() {
     local option=$1
-    local backend_url=$2
     
     case $option in
         4)
             # Backend local + Frontend
-            print_color $BLUE "🔄 Starting backend locally in background..."
-            start_backend_local &
+            print_color $BLUE "🔄 Starting local backend and frontend..."
+            start_backend &
             BACKEND_PID=$!
-            
-            # Wait a moment for backend to start
-            sleep 5
-            
-            print_color $BLUE "🔄 Starting frontend..."
+            sleep 5  # Give backend time to start
             start_frontend "http://localhost:8000"
             ;;
         5)
-            # Backend modal + Frontend
+            # Backend modal + Frontend with enhanced detection
             print_color $BLUE "🔄 Starting Modal backend and frontend..."
             print_color $CYAN "🤖 Automatically detecting Modal URL..."
             
-            modal_url=$(get_modal_url_auto)
+            # Set a timeout for the entire Modal detection process
+            if timeout 120 bash -c '
+                modal_url=$(get_modal_url_auto)
+                echo "DETECTED_URL:$modal_url"
+            '; then
+                # Extract the detected URL from the output
+                modal_url=$(timeout 120 bash -c 'get_modal_url_auto')
+                
+                if [ -n "$modal_url" ] && [ "$modal_url" != "http://localhost:8000" ]; then
+                    print_color $GREEN "🎯 Using detected Modal URL: $modal_url"
+                else
+                    print_color $YELLOW "⚠️ Modal detection failed, using fallback"
+                    modal_url="http://localhost:8000"
+                fi
+            else
+                print_color $RED "❌ Modal detection timed out after 2 minutes"
+                print_color $YELLOW "🔄 Using fallback URL for development"
+                modal_url="http://localhost:8000"
+                
+                # Clean up any hanging processes
+                pkill -f "modal serve" 2>/dev/null || true
+            fi
 
             start_frontend "$modal_url"
             ;;
@@ -279,16 +307,28 @@ run_in_background() {
 
 # Function to cleanup background processes
 cleanup() {
+    print_color $YELLOW "🧹 Cleaning up background processes..."
+    
     if [ ! -z "$BACKEND_PID" ]; then
         print_color $YELLOW "🛑 Stopping background backend process..."
         kill $BACKEND_PID 2>/dev/null || true
+        wait $BACKEND_PID 2>/dev/null || true
     fi
     
     if [ ! -z "$MODAL_PID" ]; then
         print_color $YELLOW "🛑 Stopping Modal deployment..."
         kill $MODAL_PID 2>/dev/null || true
+        wait $MODAL_PID 2>/dev/null || true
+        
+        # Also kill any remaining modal processes
+        pkill -f "modal serve" 2>/dev/null || true
+        pkill -f "modal-daemon" 2>/dev/null || true
     fi
     
+    # Clean up any temporary files
+    rm -f /tmp/modal_output_* 2>/dev/null || true
+    
+    print_color $GREEN "✅ Cleanup completed"
     exit 0
 }
 
