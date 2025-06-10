@@ -13,7 +13,7 @@ import subprocess
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, Tuple
 from dataclasses import dataclass, asdict
 from collections import defaultdict
 import re
@@ -35,7 +35,16 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-
+from fastapi import FastAPI
+from pydantic import BaseModel
+from graph_sitter import Codebase
+from graph_sitter.core.statements.for_loop_statement import ForLoopStatement
+from graph_sitter.core.statements.if_block_statement import IfBlockStatement
+from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
+from graph_sitter.core.statements.while_statement import WhileStatement
+from graph_sitter.core.expressions.binary_expression import BinaryExpression
+from graph_sitter.core.expressions.unary_expression import UnaryExpression
+from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
 # Import graph_sitter from the installed package
 try:
     from graph_sitter import Codebase
