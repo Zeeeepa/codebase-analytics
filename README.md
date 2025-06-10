@@ -1,67 +1,195 @@
 # Codebase Analytics
 
-A web application that provides comprehensive analytics for GitHub repositories.  The project combines a Modal-based FastAPI backend with a Next.js frontend to provide efficient and beautiful codebase metrics.
+A powerful codebase analysis tool with graph-sitter integration for deep code intelligence.
 
-Users submit a GitHub repository through the frontend. The Modal API processes the request using custom implementations of the metric calculations using the `codegen` library. Results are returned to the frontend for display.
+## 🚀 Quick Start (Local Development)
 
-## How it Works
+### Prerequisites
+- Python 3.11+
+- Node.js 18+
+- Git
 
-### Backend (Modal API)
-
-The backend is built using [Modal](https://modal.com/) and [FastAPI](https://fastapi.tiangolo.com/), providing a serverless API endpoint for code research.
-
-There is a main API endpoint that handles codebase analysis requests. It uses the `codegen` library for these operations.
-
-The following metrics are calculated:
-- `Maintainability Index`: Measures the maintainability of the codebase, on a scale of 0-100.
-- `Cyclomatic Complexity`: Measures the complexity of the codebase. Higher values indicate more complex code.
-- `Halstead Volume`: Quantifies the information content in the code based on operators and operands. Higher values indicate more complex code.
-- `Depth of Inheritance`: Measures the depth of inheritance of the codebase.
-- `Lines of Code (LOC, SLOC, LLOC)`: Measures the number of lines of code in the codebase. LOC, SLOC, and LLOC represent the total, source, and logical lines of code, respectively. 
-- `Comment Density`: Measures the density of comments in the codebase, given as a percentage of the total lines of code. More comments can indicate better documentation.
-
-```python
-complexity = calculate_cyclomatic_complexity(func)
-operators, operands = get_operators_and_operands(func)
-volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
-loc = len(func.code_block.source.splitlines())
-mi_score = calculate_maintainability_index(volume, complexity, loc)
+### 1. Clone and Setup
+```bash
+git clone https://github.com/Zeeeepa/codebase-analytics.git
+cd codebase-analytics
 ```
 
-Monthly commit history is also pulled from the GitHub API and displayed in a chart.
+### 2. Backend Setup
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-The codebase is also graded on a scale of A-F for overall quality and maintainability. The complexity of the codebase is also given a qualitative rank.
+### 3. Frontend Setup
+```bash
+cd ../frontend
+npm install
+```
 
-### Frontend (Next.js)
+### 4. Start Development Servers
 
-The frontend provides an interface for users to submit a GitHub repository and research query. The components come from the [shadcn/ui](https://ui.shadcn.com/) library. This triggers the Modal API to perform the code research and returns the results to the frontend.
+**Option A: Use the convenience script**
+```bash
+# From project root
+./start-dev.sh
+```
 
-## Getting Started
+**Option B: Manual start**
+```bash
+# Terminal 1 - Backend
+cd backend
+source venv/bin/activate
+python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
 
-1. Set up environment variables in an `.env` file:
-   ```
-   OPENAI_API_KEY=your_key_here
-   ```
+# Terminal 2 - Frontend
+cd frontend
+npm run dev
+```
 
-2. Deploy or serve the Modal API:
-   ```bash
-   modal serve backend/api.py
-   ```
-   `modal serve` runs the API locally for development, creating a temporary endpoint that's active only while the command is running.
-   ```bash
-   modal deploy backend/api.py
-   ```
-   `modal deploy` creates a persistent Modal app and deploys the FastAPI app to it, generating a permanent API endpoint.
-   
-   After deployment, you'll need to update the API endpoint in the frontend configuration to point to your deployed Modal app URL.
+### 5. Access the Application
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
 
-3. Run the Next.js frontend:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
+## 🔧 Features
 
-## Learn More
+### Core Analysis Functions
+- **`get_codebase_summary()`** - High-level statistical overview
+- **`get_file_summary()`** - Single file dependency analysis
+- **`get_class_summary()`** - Deep class analysis with relationships
+- **`get_function_summary()`** - Comprehensive function analysis
+- **`get_symbol_summary()`** - Universal symbol usage analysis
+- **`generate_context()`** - AI context generation from graph-sitter
 
-More information about the `codegen` library can be found [here](https://codegen.com/).
+### Graph-Sitter Integration
+- Real-time code parsing and analysis
+- Symbol dependency tracking
+- Import resolution
+- Cross-reference analysis
+
+## 📁 Project Structure
+```
+codebase-analytics/
+├── backend/
+│   ├── api.py              # FastAPI application with analysis endpoints
+│   ├── requirements.txt    # Python dependencies
+│   └── venv/              # Virtual environment
+├── frontend/
+│   ├── app/               # Next.js app directory
+│   ├── components/        # React components
+│   ├── package.json       # Node.js dependencies
+│   └── node_modules/      # Node dependencies
+├── start-dev.sh           # Development startup script
+└── README.md              # This file
+```
+
+## 🛠 Development
+
+### Backend Development
+```bash
+cd backend
+source venv/bin/activate
+
+# Install new dependencies
+pip install package-name
+pip freeze > requirements.txt
+
+# Run with auto-reload
+python -m uvicorn api:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Frontend Development
+```bash
+cd frontend
+
+# Install new dependencies
+npm install package-name
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+### Environment Variables
+Create `.env.local` in the frontend directory:
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8000
+```
+
+## 🧪 Testing
+
+### Backend Testing
+```bash
+cd backend
+source venv/bin/activate
+
+# Test API endpoints
+curl http://localhost:8000/health
+curl http://localhost:8000/docs
+```
+
+### Frontend Testing
+```bash
+cd frontend
+npm run build  # Test build process
+npm run lint   # Run linting
+```
+
+## 📊 API Endpoints
+
+### Core Endpoints
+- `GET /` - Root endpoint
+- `GET /health` - Health check
+- `POST /analyze` - Analyze repository
+- `GET /docs` - Interactive API documentation
+
+### Analysis Functions
+All analysis functions are integrated into the `/analyze` endpoint and provide:
+- Codebase statistics and metrics
+- File-level dependency analysis
+- Class and function breakdowns
+- Symbol usage patterns
+- AI-ready context generation
+
+## 🔍 Usage Examples
+
+### Analyze a Repository
+```bash
+curl -X POST "http://localhost:8000/analyze" \
+  -H "Content-Type: application/json" \
+  -d '{"repo_url": "https://github.com/user/repo"}'
+```
+
+### Get Analysis Results
+The analysis includes:
+- File counts and structure
+- Import dependencies
+- Symbol relationships
+- Code complexity metrics
+- AI context for each component
+
+## 🚀 Production Deployment
+
+For production deployment, you can:
+1. Use a process manager like PM2 for the backend
+2. Build and serve the frontend with a web server
+3. Set up a reverse proxy (nginx/apache)
+4. Configure environment variables appropriately
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test locally
+5. Submit a pull request
+
+## 📝 License
+
+This project is open source and available under the MIT License.
+

@@ -1,0 +1,39 @@
+{
+  "name": "codebase-analytics",
+  "version": "2.0.0",
+  "description": "A powerful codebase analysis tool with graph-sitter integration",
+  "scripts": {
+    "dev": "./start-dev.sh",
+    "dev:backend": "./start-dev.sh backend",
+    "dev:frontend": "./start-dev.sh frontend",
+    "setup": "npm run setup:backend && npm run setup:frontend",
+    "setup:backend": "cd backend && python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt",
+    "setup:frontend": "cd frontend && npm install",
+    "build": "cd frontend && npm run build",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && source venv/bin/activate && python3 -c 'import api; print(\"✅ Backend imports successfully\")'",
+    "test:frontend": "cd frontend && npm run build",
+    "clean": "rm -rf backend/venv frontend/node_modules frontend/.next",
+    "install:all": "npm run setup"
+  },
+  "keywords": [
+    "codebase",
+    "analytics",
+    "graph-sitter",
+    "code-analysis",
+    "fastapi",
+    "nextjs",
+    "typescript"
+  ],
+  "author": "Codebase Analytics Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zeeeepa/codebase-analytics.git"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "python": ">=3.11.0"
+  }
+}
+

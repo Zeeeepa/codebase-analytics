@@ -7,6 +7,9 @@ export const metadata: Metadata = {
 }
 
 export default function Page() {
+import EnhancedAnalyticsDashboard from '@/components/enhanced-analytics-dashboard'
+
+export default function Home() {
   return <EnhancedAnalyticsDashboard />
 }
 
