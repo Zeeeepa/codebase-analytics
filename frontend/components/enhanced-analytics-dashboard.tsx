@@ -340,7 +340,14 @@ export default function EnhancedAnalyticsDashboard() {
       const result = await response.json()
       setAnalysis(result)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred'
+      
+      // Check for common network errors
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        setError('❌ Cannot connect to backend server. Please ensure:\n1. Backend is running on http://localhost:8000\n2. Run: cd backend && python api.py\n3. Check browser console for details')
+      } else {
+        setError(`Failed to analyze repository: ${errorMessage}`)
+      }
     } finally {
       setLoading(false)
     }
