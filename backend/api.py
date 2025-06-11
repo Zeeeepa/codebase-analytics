@@ -68,6 +68,8 @@ except ImportError as e:
 
 # 🎯 Advanced Data Models for Intelligent Analysis
 
+API_VERSION = "3.1.0"  # Updated version with improved validation and method organization
+
 @dataclass
 class CodeContext:
     """Rich context information for code elements"""
