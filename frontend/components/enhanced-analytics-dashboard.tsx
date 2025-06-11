@@ -125,6 +125,17 @@ export default function EnhancedAnalyticsDashboard() {
   const [isLandingPage, setIsLandingPage] = useState(true)
   const [selectedIssue, setSelectedIssue] = useState<CodeIssue | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isMounted, setIsMounted] = useState(false)
+
+  // Fix hydration mismatch by ensuring component is only rendered client-side
+  useEffect(() => {
+    setIsMounted(true)
+  }, [])
+
+  // Return null during server-side rendering or before hydration
+  if (!isMounted) {
+    return null;
+  }
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -773,5 +784,4 @@ export default function EnhancedAnalyticsDashboard() {
       </Tabs>
     </div>
   );
-
 }

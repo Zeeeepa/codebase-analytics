@@ -9,7 +9,7 @@ NC='\033[0m' # No Color
 
 # Fixed port for backend
 BACKEND_PORT=8666
-FRONTEND_PORT=3000
+FRONTEND_PORT=8667
 
 # Function to check if a port is available
 check_port() {
