@@ -27,11 +27,11 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
 
 # FastAPI and related imports
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, HttpUrl, validator, Field
+from pydantic import BaseModel, HttpUrl, validator, Field, root_validator
 import uvicorn
 import requests
 import networkx as nx
@@ -205,6 +205,43 @@ class AdvancedAnalysisRequest(BaseModel):
         if not ('github.com' in v or 'gitlab.com' in v):
             raise ValueError('Only GitHub and GitLab repositories are supported')
         return v.strip()
+    
+    @validator('analysis_depth')
+    def validate_analysis_depth(cls, v):
+        valid_depths = ["quick", "standard", "comprehensive", "deep"]
+        if v.lower() not in valid_depths:
+            raise ValueError(f"Analysis depth must be one of: {', '.join(valid_depths)}")
+        return v.lower()
+    
+    @validator('focus_areas')
+    def validate_focus_areas(cls, v):
+        valid_areas = ["all", "security", "performance", "maintainability", "architecture"]
+        for area in v:
+            if area.lower() not in valid_areas:
+                raise ValueError(f"Focus area must be one of: {', '.join(valid_areas)}")
+        return [area.lower() for area in v]
+    
+    @validator('max_issues')
+    def validate_max_issues(cls, v):
+        if v < 1:
+            raise ValueError("Maximum issues must be at least 1")
+        if v > 1000:
+            raise ValueError("Maximum issues cannot exceed 1000 for performance reasons")
+        return v
+    
+    @root_validator
+    def validate_request(cls, values):
+        # Check for incompatible combinations
+        if values.get('analysis_depth') == 'quick' and values.get('enable_ai_insights'):
+            logger.warning("AI insights may be limited in quick analysis mode")
+        
+        # Ensure 'all' is not mixed with other focus areas
+        focus_areas = values.get('focus_areas', [])
+        if 'all' in focus_areas and len(focus_areas) > 1:
+            values['focus_areas'] = ['all']  # If 'all' is specified, ignore other areas
+            logger.info("Focus area 'all' specified along with others - using 'all' only")
+            
+        return values
 
 class IntelligentAnalysisResponse(BaseModel):
     """Comprehensive analysis response with intelligent insights"""
@@ -264,31 +301,44 @@ app.add_middleware(
 
 # Rate limiting storage (simple in-memory for demo)
 request_counts = defaultdict(list)
+rate_limit_lock = threading.Lock()  # Thread-safe rate limiting
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    """Simple rate limiting middleware"""
+    """Advanced rate limiting middleware with IP tracking"""
     client_ip = request.client.host
     now = datetime.now()
     
-    # Clean old requests (older than 1 minute)
-    request_counts[client_ip] = [
-        req_time for req_time in request_counts[client_ip]
-        if now - req_time < timedelta(minutes=1)
-    ]
+    with rate_limit_lock:
+        # Clean old requests (older than 1 minute)
+        request_counts[client_ip] = [
+            req_time for req_time in request_counts[client_ip]
+            if now - req_time < timedelta(minutes=1)
+        ]
+        
+        # Check rate limit (60 requests per minute)
+        if len(request_counts[client_ip]) >= 60:
+            logger.warning(f"Rate limit exceeded for IP: {client_ip}")
+            return JSONResponse(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                content={
+                    "detail": "Rate limit exceeded. Try again later.",
+                    "retry_after": "60 seconds"
+                }
+            )
+        
+        # Add current request
+        request_counts[client_ip].append(now)
     
-    # Check rate limit (60 requests per minute)
-    if len(request_counts[client_ip]) >= 60:
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        logger.error(f"Unhandled exception in request: {str(e)}")
         return JSONResponse(
-            status_code=429,
-            content={"detail": "Rate limit exceeded. Try again later."}
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={"detail": "An internal server error occurred"}
         )
-    
-    # Add current request
-    request_counts[client_ip].append(now)
-    
-    response = await call_next(request)
-    return response
 
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
@@ -298,23 +348,26 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Content-Security-Policy"] = "default-src 'self'"
     return response
 
 # Intelligent Analysis Engine
 
 class IntelligentCodeAnalyzer:
-    """Advanced code analyzer with AI-powered insights and real-time issue detection"""
+    """Advanced code analysis engine with intelligent issue detection"""
     
     def __init__(self):
-        self.analysis_cache = {}
+        """Initialize the intelligent code analyzer"""
+        # Language-specific patterns for issue detection
         self.language_patterns = {
             'python': {
                 'security_patterns': [
-                    (r'eval\s*\(', 'Code injection vulnerability', 'critical'),
-                    (r'exec\s*\(', 'Code execution vulnerability', 'critical'),
-                    (r'subprocess.*shell\s*=\s*True', 'Shell injection risk', 'critical'),
-                    (r'pickle\.loads?\s*\(', 'Unsafe deserialization', 'major'),
-                    (r'input\s*\([^)]*\)', 'Unvalidated user input', 'major'),
+                    (r'eval\s*\(', 'Dangerous eval() usage', 'critical'),
+                    (r'exec\s*\(', 'Dangerous exec() usage', 'critical'),
+                    (r'os\.system\s*\(', 'Unsafe system command execution', 'critical'),
+                    (r'subprocess\.call\s*\(', 'Potential command injection', 'major'),
+                    (r'pickle\.load', 'Unsafe deserialization', 'critical'),
+                    (r'request\.get\s*\([^)]*verify\s*=\s*False', 'SSL verification disabled', 'major'),
                 ],
                 'performance_patterns': [
                     (r'for\s+\w+\s+in\s+range\s*\(\s*len\s*\(', 'Inefficient iteration pattern', 'minor'),
@@ -322,13 +375,48 @@ class IntelligentCodeAnalyzer:
                     (r'time\.sleep\s*\(', 'Blocking sleep operation', 'major'),
                 ],
                 'maintainability_patterns': [
-                    (r'def\s+\w+\s*\([^)]{50,}', 'Function with too many parameters', 'major'),
-                    (r'if\s+.*:\s*if\s+.*:\s*if\s+.*:', 'Deep nesting detected', 'major'),
-                    (r'#\s*TODO', 'Unresolved TODO item', 'minor'),
-                    (r'#\s*FIXME', 'Unresolved FIXME item', 'major'),
+                    (r'except\s*:', 'Bare except clause', 'major'),
+                    (r'except\s+Exception\s*:', 'Too broad exception clause', 'minor'),
+                    (r'global\s+', 'Global variable usage', 'minor'),
+                ],
+                'style_patterns': [
+                    (r'print\s*\(', 'Print statement in production code', 'minor'),
+                    (r'#\s*TODO', 'TODO comment', 'minor'),
+                    (r'^\s*[^#\n]{120,}$', 'Line too long', 'minor'),
+                ]
+            },
+            'javascript': {
+                'security_patterns': [
+                    (r'eval\s*\(', 'Dangerous eval() usage', 'critical'),
+                    (r'document\.write\s*\(', 'Unsafe document.write', 'major'),
+                    (r'innerHTML\s*=', 'Potential XSS vulnerability', 'critical'),
+                    (r'localStorage\s*\.\s*setItem', 'Sensitive data in localStorage', 'major'),
+                ],
+                'performance_patterns': [
+                    (r'for\s*\(\s*var\s+\w+\s*=\s*0', 'Consider using for...of or forEach', 'minor'),
+                    (r'\.forEach\s*\(', 'Consider using map/reduce for better performance', 'minor'),
+                    (r'setTimeout\s*\(', 'Potential performance issue with setTimeout', 'minor'),
+                ],
+                'maintainability_patterns': [
+                    (r'var\s+', 'Use let/const instead of var', 'minor'),
+                    (r'==(?!=)', 'Use strict equality (===)', 'minor'),
+                    (r'console\.log', 'Console statement in production code', 'minor'),
+                ],
+                'style_patterns': [
+                    (r'\/\/\s*TODO', 'TODO comment', 'minor'),
+                    (r'^\s*[^\/\n]{120,}$', 'Line too long', 'minor'),
+                    (r'function\s*\(', 'Consider using arrow functions', 'minor'),
                 ]
             }
         }
+        
+        # Initialize analysis cache
+        self.analysis_cache = {}
+        
+        # Set up thread pool for parallel processing
+        self.executor = ThreadPoolExecutor(max_workers=os.cpu_count() or 4)
+        
+        logger.info("🧠 Intelligent Code Analyzer initialized")
         
     async def analyze_repository(self, repo_url: str, request: AdvancedAnalysisRequest) -> IntelligentAnalysisResponse:
         """Perform comprehensive intelligent analysis of a repository"""
@@ -584,17 +672,76 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    # Check if we can access the file system
+    fs_accessible = os.access(".", os.R_OK and os.W_OK)
+    
+    # Check if we can make external requests
+    network_accessible = True
+    try:
+        # Timeout after 2 seconds to avoid hanging
+        requests.head("https://github.com", timeout=2)
+    except (requests.RequestException, Exception):
+        network_accessible = False
+    
+    # Overall status
+    status_value = "healthy" if (fs_accessible and network_accessible) else "degraded"
+    
     return {
-        "status": "healthy",
+        "status": status_value,
         "timestamp": datetime.now().isoformat(),
         "graph_sitter_available": GRAPH_SITTER_AVAILABLE,
-        "analysis_engine": "intelligent"
+        "analysis_engine": "intelligent",
+        "components": {
+            "file_system": "accessible" if fs_accessible else "inaccessible",
+            "network": "accessible" if network_accessible else "inaccessible"
+        },
+        "uptime": "unknown"  # Would be implemented with a start time tracker
     }
 
-@app.post("/analyze", response_model=IntelligentAnalysisResponse)
-async def analyze_repository(request: AdvancedAnalysisRequest) -> IntelligentAnalysisResponse:
+@app.post("/analyze", response_model=IntelligentAnalysisResponse, status_code=status.HTTP_202_ACCEPTED)
+async def analyze_repository(
+    request: AdvancedAnalysisRequest, 
+    background_tasks: BackgroundTasks
+) -> IntelligentAnalysisResponse:
     """🎯 Perform intelligent repository analysis with real-time issue detection"""
-    return await intelligent_analyzer.analyze_repository(request.repo_url, request)
+    try:
+        # Validate repository URL is accessible
+        try:
+            response = requests.head(request.repo_url, timeout=5)
+            if response.status_code >= 400:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Repository URL returned status code {response.status_code}"
+                )
+        except requests.RequestException as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Could not access repository URL: {str(e)}"
+            )
+        
+        # Start analysis in background task if this is a long-running operation
+        if request.analysis_depth in ["comprehensive", "deep"]:
+            # For comprehensive analysis, we'd implement a background task and return a job ID
+            # This is a placeholder for that implementation
+            analysis_id = hashlib.md5(f"{request.repo_url}_{datetime.now().isoformat()}".encode()).hexdigest()
+            
+            # In a real implementation, we would:
+            # 1. Create a job record in a database
+            # 2. Start a background task
+            # 3. Return a job ID that can be polled
+            # 4. Implement a /status/{job_id} endpoint
+            
+            # For now, we'll just run the analysis synchronously
+            return await intelligent_analyzer.analyze_repository(request.repo_url, request)
+        else:
+            # For quick analysis, run synchronously
+            return await intelligent_analyzer.analyze_repository(request.repo_url, request)
+    except Exception as e:
+        logger.error(f"Error analyzing repository: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Analysis failed: {str(e)}"
+        )
 
 if __name__ == "__main__":
     # Parse command line arguments
@@ -604,6 +751,8 @@ if __name__ == "__main__":
     parser.add_argument("--disable-graph-sitter", action="store_true", help="Disable graph-sitter even if available")
     parser.add_argument("--log-level", type=str, default="info", choices=["debug", "info", "warning", "error", "critical"],
                         help="Logging level")
+    parser.add_argument("--workers", type=int, default=1, help="Number of worker processes")
+    parser.add_argument("--timeout", type=int, default=300, help="Worker timeout in seconds")
     
     args = parser.parse_args()
     
@@ -613,14 +762,24 @@ if __name__ == "__main__":
         GRAPH_SITTER_AVAILABLE = False
         logger.info("🔄 Graph-sitter disabled by command line argument")
     
+    # Configure logging level
+    log_level = getattr(logging, args.log_level.upper())
+    logging.getLogger().setLevel(log_level)
+    
     # Try to run the server, handling port conflicts
     try:
+        logger.info(f"🚀 Starting Codebase Analytics API on {args.host}:{args.port}")
+        logger.info(f"🔧 Configuration: workers={args.workers}, timeout={args.timeout}s, log_level={args.log_level}")
+        logger.info(f"🧠 Graph-sitter enabled: {GRAPH_SITTER_AVAILABLE}")
+        
         uvicorn.run(
             "api:app",
             host=args.host,
             port=args.port,
             reload=True,
-            log_level=args.log_level
+            log_level=args.log_level,
+            workers=args.workers,
+            timeout_keep_alive=args.timeout
         )
     except OSError as e:
         if "Address already in use" in str(e):
@@ -634,7 +793,9 @@ if __name__ == "__main__":
                         host=args.host,
                         port=port,
                         reload=True,
-                        log_level=args.log_level
+                        log_level=args.log_level,
+                        workers=args.workers,
+                        timeout_keep_alive=args.timeout
                     )
                     break
                 except OSError:
@@ -645,389 +806,452 @@ if __name__ == "__main__":
         else:
             logger.error(f"Error starting server: {e}")
             sys.exit(1)
+    except KeyboardInterrupt:
+        logger.info("Server shutdown requested by user (KeyboardInterrupt)")
+        sys.exit(0)
+    except Exception as e:
+        logger.critical(f"Unhandled exception: {str(e)}", exc_info=True)
+        sys.exit(1)
 
-    def _detect_issues_pattern_matching(self, content: str, file_path: str) -> List[IntelligentIssue]:
-        """Detect issues using pattern matching when graph-sitter is not available"""
-        issues = []
-        lines = content.splitlines()
-        
-        # Detect language
-        language = 'python' if file_path.endswith('.py') else 'javascript'
-        patterns = self.language_patterns.get(language, {})
-        
-        for category, pattern_list in patterns.items():
-            for pattern, description, severity in pattern_list:
-                for line_num, line in enumerate(lines, 1):
-                    if re.search(pattern, line, re.IGNORECASE):
-                        issue_id = hashlib.md5(f"{file_path}_{line_num}_{pattern}".encode()).hexdigest()[:8]
-                        
-                        context = CodeContext(
-                            element_type="line",
-                            name=f"line_{line_num}",
-                            file_path=file_path,
-                            line_start=line_num,
-                            line_end=line_num,
-                            complexity=1.0,
-                            dependencies=[],
-                            dependents=[],
-                            usage_count=1,
-                            risk_score=0.8 if severity == 'critical' else 0.5 if severity == 'major' else 0.2
-                        )
-                        
-                        issues.append(IntelligentIssue(
-                            id=f"{category}_{issue_id}",
-                            type=description,
-                            severity=severity,
-                            category=category.replace('_patterns', ''),
-                            title=description,
-                            description=f"{description} detected in {file_path}",
-                            file_path=file_path,
-                            line_number=line_num,
-                            column_number=None,
-                            function_name=None,
-                            class_name=None,
-                            code_snippet=line.strip(),
-                            context=context,
-                            impact_analysis=f"This {severity} issue may impact code {category.replace('_patterns', '')}",
-                            fix_suggestion=f"Review and address this {description.lower()}",
-                            confidence=0.8,
-                            tags=[category.replace('_patterns', ''), severity]
-                        ))
-        
-        return issues
+def _detect_issues_pattern_matching(self, content: str, file_path: str) -> List[IntelligentIssue]:
+    """Detect issues using pattern matching when graph-sitter is not available"""
+    issues = []
+    lines = content.splitlines()
     
-    def _calculate_cyclomatic_complexity(self, content: str) -> float:
-        """Calculate cyclomatic complexity for source code"""
-        if not content.strip():
-            return 1.0
-        
-        complexity = 1  # Base complexity
-        
-        # Count decision points
-        decision_keywords = [
-            'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally',
-            'and', 'or', 'case', 'switch', 'catch', '?', '&&', '||'
-        ]
-        
-        for keyword in decision_keywords:
-            if keyword in ['and', 'or', '&&', '||']:
-                complexity += content.count(f' {keyword} ')
-            elif keyword == '?':
-                complexity += content.count('?')
-            else:
-                pattern = rf'\b{keyword}\b'
-                complexity += len(re.findall(pattern, content, re.IGNORECASE))
-        
-        return float(max(1, complexity))
+    # Detect language
+    language = 'python' if file_path.endswith('.py') else 'javascript' if file_path.endswith(('.js', '.jsx', '.ts', '.tsx')) else None
     
-    def _calculate_quality_score(self, metrics: AdvancedMetrics, issues: List[IntelligentIssue], 
-                                security: SecurityAnalysis, performance: PerformanceAnalysis) -> float:
-        """Calculate overall quality score based on metrics and issues"""
-        maintainability = metrics.maintainability_index.get('average', 50.0)
-        
-        # Penalty for issues
-        critical_penalty = len([i for i in issues if i.severity == 'critical']) * 15
-        major_penalty = len([i for i in issues if i.severity == 'major']) * 8
-        minor_penalty = len([i for i in issues if i.severity == 'minor']) * 3
-        
-        quality_score = maintainability - critical_penalty - major_penalty - minor_penalty
-        return max(0.0, min(100.0, quality_score))
-    
-    def _get_quality_grade(self, quality_score: float) -> str:
-        """Convert quality score to letter grade"""
-        if quality_score >= 90:
-            return "A"
-        elif quality_score >= 75:
-            return "B"
-        elif quality_score >= 60:
-            return "C"
-        elif quality_score >= 50:
-            return "D"
-        else:
-            return "F"
-    
-    def _assess_risk(self, issues: List[IntelligentIssue], security: SecurityAnalysis) -> str:
-        """Assess overall risk based on issues"""
-        critical_issues = len([i for i in issues if i.severity == 'critical'])
-        major_issues = len([i for i in issues if i.severity == 'major'])
-        
-        if critical_issues > 0:
-            return f"🔴 High Risk - {critical_issues} critical issues detected"
-        elif major_issues > 5:
-            return f"🟡 Medium Risk - {major_issues} major issues detected"
-        elif major_issues > 0:
-            return f"🟡 Medium Risk - {major_issues} major issues detected"
-        else:
-            return "🟢 Low Risk - No critical issues detected"
-    
-    def _generate_key_findings(self, issues: List[IntelligentIssue], metrics: AdvancedMetrics, file_count: int) -> List[str]:
-        """Generate key findings from analysis results"""
-        findings = []
-        
-        # Repository size findings
-        if file_count > 1000:
-            findings.append(f"📁 Large codebase with {file_count} files - consider modularization")
-        elif file_count < 10:
-            findings.append(f"📁 Small codebase with {file_count} files")
-        
-        # Complexity findings
-        avg_complexity = metrics.cyclomatic_complexity.get('average', 0)
-        if avg_complexity > 15:
-            findings.append(f"🔄 High average complexity ({avg_complexity:.1f}) - refactoring recommended")
-        elif avg_complexity < 5:
-            findings.append(f"✅ Low complexity ({avg_complexity:.1f}) - well-structured code")
-        
-        # Issue findings
-        critical_count = len([i for i in issues if i.severity == 'critical'])
-        if critical_count > 0:
-            findings.append(f"⚠️ {critical_count} critical issues require immediate attention")
-        
-        security_count = len([i for i in issues if i.category == 'security'])
-        if security_count > 0:
-            findings.append(f"🔒 {security_count} security vulnerabilities detected")
-        
-        # Maintainability findings
-        maintainability = metrics.maintainability_index.get('average', 0)
-        if maintainability > 80:
-            findings.append(f"✨ Excellent maintainability score ({maintainability:.1f})")
-        elif maintainability < 40:
-            findings.append(f"📉 Low maintainability score ({maintainability:.1f}) - needs improvement")
-        
-        return findings[:10]  # Limit to top 10 findings
-    
-    def _generate_recommendations(self, issues: List[IntelligentIssue], quality_score: float) -> List[str]:
-        """Generate critical recommendations based on analysis results"""
-        recommendations = []
-        
-        # Quality-based recommendations
-        if quality_score < 50:
-            recommendations.append("🔧 Implement comprehensive code refactoring strategy")
-        elif quality_score < 70:
-            recommendations.append("📈 Focus on improving code quality metrics")
-        
-        # Issue-based recommendations
-        critical_issues = [i for i in issues if i.severity == 'critical']
-        if critical_issues:
-            recommendations.append(f"🚨 Address {len(critical_issues)} critical issues immediately")
-        
-        security_issues = [i for i in issues if i.category == 'security']
-        if security_issues:
-            recommendations.append(f"🔐 Review and fix {len(security_issues)} security vulnerabilities")
-        
-        performance_issues = [i for i in issues if i.category == 'performance']
-        if performance_issues:
-            recommendations.append(f"⚡ Optimize {len(performance_issues)} performance bottlenecks")
-        
-        # General recommendations
-        if len(issues) > 50:
-            recommendations.append("📋 Implement automated code quality checks in CI/CD")
-        
-        if quality_score > 80:
-            recommendations.append("✅ Maintain current code quality standards")
-        
-        return recommendations[:8]  # Limit to top 8 recommendations
-    
-    async def _build_intelligent_repo_structure(self, repo_path: Path, issues: List[IntelligentIssue]) -> Dict[str, Any]:
-        """Build repository structure with intelligent issue mapping"""
-        
-        def create_node(path: Path, relative_path: str = "") -> Dict[str, Any]:
-            name = path.name if path.name else "repo"
-            node_path = relative_path
+    if not language:
+        return []  # Skip files with unsupported languages
             
-            if path.is_file():
-                # Get issues for this file
-                file_issues = [issue for issue in issues if issue.file_path == str(path.relative_to(repo_path))]
-                
-                # Add emoji indicators based on issue severity
-                emoji = ""
-                if any(i.severity == 'critical' for i in file_issues):
-                    emoji = "🔴"
-                elif any(i.severity == 'major' for i in file_issues):
-                    emoji = "🟡"
-                elif file_issues:
-                    emoji = "🔵"
-                else:
-                    emoji = "✅"
-                
-                return {
-                    "name": f"{emoji} {name}",
-                    "path": node_path,
-                    "type": "file",
-                    "issue_count": len(file_issues),
-                    "critical_issues": len([i for i in file_issues if i.severity == 'critical']),
-                    "major_issues": len([i for i in file_issues if i.severity == 'major']),
-                    "minor_issues": len([i for i in file_issues if i.severity == 'minor']),
-                    "issues": [
-                        {
-                            "id": issue.id,
-                            "type": issue.type,
-                            "severity": issue.severity,
-                            "title": issue.title,
-                            "line_number": issue.line_number
-                        }
-                        for issue in file_issues[:5]  # Limit to first 5 issues per file
-                    ]
-                }
-            else:
-                children = []
-                total_issues = 0
-                total_critical = 0
-                total_major = 0
-                total_minor = 0
-                
-                try:
-                    for child in sorted(path.iterdir()):
-                        if child.name.startswith('.') and child.name not in ['.github', '.vscode']:
-                            continue
-                        
-                        child_relative = f"{relative_path}/{child.name}" if relative_path else child.name
-                        child_node = create_node(child, child_relative)
-                        children.append(child_node)
-                        
-                        total_issues += child_node["issue_count"]
-                        total_critical += child_node["critical_issues"]
-                        total_major += child_node["major_issues"]
-                        total_minor += child_node["minor_issues"]
-                        
-                except PermissionError:
-                    pass
-                
-                # Add emoji indicators for directories
-                emoji = ""
-                if total_critical > 0:
-                    emoji = "📁🔴"
-                elif total_major > 0:
-                    emoji = "📁🟡"
-                elif total_issues > 0:
-                    emoji = "📁🔵"
-                else:
-                    emoji = "📁✅"
-                
-                return {
-                    "name": f"{emoji} {name}",
-                    "path": node_path,
-                    "type": "directory",
-                    "issue_count": total_issues,
-                    "critical_issues": total_critical,
-                    "major_issues": total_major,
-                    "minor_issues": total_minor,
-                    "children": children
-                }
-        
-        return create_node(repo_path)
+    patterns = self.language_patterns.get(language, {})
     
-    def _create_visualizations(self, dependency_graph: DependencyGraph, usage_heatmap: List[UsageHeatMap], 
-                             issues: List[IntelligentIssue], metrics: AdvancedMetrics) -> Dict[str, Any]:
-        """Create comprehensive visualization data"""
-        return {
-            "dependency_graph": {
-                "nodes": dependency_graph.nodes,
-                "edges": dependency_graph.edges,
-                "circular_dependencies": dependency_graph.circular_dependencies,
-                "metrics": dependency_graph.coupling_metrics
-            },
-            "usage_heatmap": {
-                "hotspots": [
+    for category, pattern_list in patterns.items():
+        for pattern, description, severity in pattern_list:
+            for line_num, line in enumerate(lines, 1):
+                if re.search(pattern, line, re.IGNORECASE):
+                    issue_id = hashlib.md5(f"{file_path}_{line_num}_{pattern}".encode()).hexdigest()[:8]
+                    
+                    # Get surrounding context (up to 3 lines before and after)
+                    start_idx = max(0, line_num - 4)
+                    end_idx = min(len(lines), line_num + 3)
+                    code_snippet = "\n".join(lines[start_idx:end_idx])
+                    
+                    # Try to determine function/class context
+                    function_name = None
+                    class_name = None
+                    
+                    if language == 'python':
+                        # Simple heuristic to find containing function/class
+                        for i in range(line_num - 1, -1, -1):
+                            if i >= len(lines):
+                                continue
+                            prev_line = lines[i]
+                            if re.match(r'^\s*def\s+(\w+)', prev_line):
+                                function_name = re.match(r'^\s*def\s+(\w+)', prev_line).group(1)
+                                break
+                            if re.match(r'^\s*class\s+(\w+)', prev_line):
+                                class_name = re.match(r'^\s*class\s+(\w+)', prev_line).group(1)
+                                break
+                    
+                    context = CodeContext(
+                        element_type="line",
+                        name=f"{function_name or class_name or 'line'}_{line_num}",
+                        file_path=file_path,
+                        line_start=line_num,
+                        line_end=line_num,
+                        complexity=1.0,
+                        dependencies=[],
+                        dependents=[],
+                        usage_count=1,
+                        risk_score=0.8 if severity == 'critical' else 0.5 if severity == 'major' else 0.2,
+                        semantic_info={"language": language}
+                    )
+                    
+                    issues.append(IntelligentIssue(
+                        id=f"{category}_{issue_id}",
+                        type=description,
+                        severity=severity,
+                        category=category.replace('_patterns', ''),
+                        title=description,
+                        description=f"{description} detected in {file_path}",
+                        file_path=file_path,
+                        line_number=line_num,
+                        column_number=line.find(re.search(pattern, line, re.IGNORECASE).group(0)),
+                        function_name=function_name,
+                        class_name=class_name,
+                        code_snippet=code_snippet,
+                        context=context,
+                        impact_analysis=f"This {severity} issue may impact code {category.replace('_patterns', '')}",
+                        fix_suggestion=self._generate_fix_suggestion(description, language, line),
+                        confidence=0.8,
+                        tags=[category.replace('_patterns', ''), severity, language]
+                    ))
+    
+    return issues
+    
+def _generate_fix_suggestion(self, issue_type: str, language: str, line: str) -> str:
+    """Generate a fix suggestion based on the issue type"""
+    if "eval" in issue_type:
+        return "Avoid using eval(). Consider safer alternatives like JSON.parse() for JSON or dedicated parsers."
+    elif "exec" in issue_type:
+        return "Avoid using exec(). Consider safer alternatives like importing modules or using subprocess with proper input sanitization."
+    elif "command injection" in issue_type:
+        return "Use subprocess.run() with shell=False and pass arguments as a list to prevent command injection."
+    elif "deserialization" in issue_type:
+        return "Use safer alternatives like json for data serialization/deserialization."
+    elif "SSL verification" in issue_type:
+        return "Never disable SSL verification in production code. Fix the certificate issues instead."
+    elif "iteration pattern" in issue_type:
+        if language == 'python':
+            return "Use 'for item in items:' instead of 'for i in range(len(items)):' for better readability and performance."
+    elif "List concatenation" in issue_type:
+        return "Consider using list comprehensions or building the list in one go instead of repeated .append() calls."
+    elif "Bare except" in issue_type:
+        return "Specify the exceptions you want to catch instead of using a bare 'except:' clause."
+    elif "Global variable" in issue_type:
+        return "Avoid using global variables. Consider using function parameters or class attributes instead."
+    elif "Print statement" in issue_type:
+        return "Replace print statements with proper logging in production code."
+    elif "Line too long" in issue_type:
+        return "Break long lines to improve readability, following PEP 8 guidelines (max 79-88 chars)."
+    elif "TODO" in issue_type:
+        return "Address TODO comments before committing to production."
+    else:
+        return f"Review and address this {issue_type.lower()}."
+            
+def _calculate_cyclomatic_complexity(self, content: str) -> float:
+    """Calculate cyclomatic complexity for source code"""
+    if not content.strip():
+        return 1.0
+    
+    complexity = 1  # Base complexity
+    
+    # Count decision points
+    decision_keywords = [
+        'if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally',
+        'and', 'or', 'case', 'switch', 'catch', '?', '&&', '||'
+    ]
+    
+    for keyword in decision_keywords:
+        if keyword in ['and', 'or', '&&', '||']:
+            complexity += content.count(f' {keyword} ')
+        elif keyword == '?':
+            complexity += content.count('?')
+        else:
+            pattern = rf'\b{keyword}\b'
+            complexity += len(re.findall(pattern, content, re.IGNORECASE))
+    
+    return float(max(1, complexity))
+
+def _calculate_quality_score(self, metrics: AdvancedMetrics, issues: List[IntelligentIssue], 
+                            security: SecurityAnalysis, performance: PerformanceAnalysis) -> float:
+    """Calculate overall quality score based on metrics and issues"""
+    maintainability = metrics.maintainability_index.get('average', 50.0)
+    
+    # Penalty for issues
+    critical_penalty = len([i for i in issues if i.severity == 'critical']) * 15
+    major_penalty = len([i for i in issues if i.severity == 'major']) * 8
+    minor_penalty = len([i for i in issues if i.severity == 'minor']) * 3
+    
+    quality_score = maintainability - critical_penalty - major_penalty - minor_penalty
+    return max(0.0, min(100.0, quality_score))
+
+def _get_quality_grade(self, quality_score: float) -> str:
+    """Convert quality score to letter grade"""
+    if quality_score >= 90:
+        return "A"
+    elif quality_score >= 75:
+        return "B"
+    elif quality_score >= 60:
+        return "C"
+    elif quality_score >= 50:
+        return "D"
+    else:
+        return "F"
+
+def _assess_risk(self, issues: List[IntelligentIssue], security: SecurityAnalysis) -> str:
+    """Assess overall risk based on issues"""
+    critical_issues = len([i for i in issues if i.severity == 'critical'])
+    major_issues = len([i for i in issues if i.severity == 'major'])
+    
+    if critical_issues > 0:
+        return f"🔴 High Risk - {critical_issues} critical issues detected"
+    elif major_issues > 5:
+        return f"🟡 Medium Risk - {major_issues} major issues detected"
+    elif major_issues > 0:
+        return f"🟡 Medium Risk - {major_issues} major issues detected"
+    else:
+        return "🟢 Low Risk - No critical issues detected"
+
+def _generate_key_findings(self, issues: List[IntelligentIssue], metrics: AdvancedMetrics, file_count: int) -> List[str]:
+    """Generate key findings from analysis results"""
+    findings = []
+    
+    # Repository size findings
+    if file_count > 1000:
+        findings.append(f"📁 Large codebase with {file_count} files - consider modularization")
+    elif file_count < 10:
+        findings.append(f"📁 Small codebase with {file_count} files")
+    
+    # Complexity findings
+    avg_complexity = metrics.cyclomatic_complexity.get('average', 0)
+    if avg_complexity > 15:
+        findings.append(f"🔄 High average complexity ({avg_complexity:.1f}) - refactoring recommended")
+    elif avg_complexity < 5:
+        findings.append(f"✅ Low complexity ({avg_complexity:.1f}) - well-structured code")
+    
+    # Issue findings
+    critical_count = len([i for i in issues if i.severity == 'critical'])
+    if critical_count > 0:
+        findings.append(f"⚠️ {critical_count} critical issues require immediate attention")
+    
+    security_count = len([i for i in issues if i.category == 'security'])
+    if security_count > 0:
+        findings.append(f"🔒 {security_count} security vulnerabilities detected")
+    
+    # Maintainability findings
+    maintainability = metrics.maintainability_index.get('average', 0)
+    if maintainability > 80:
+        findings.append(f"✨ Excellent maintainability score ({maintainability:.1f})")
+    elif maintainability < 40:
+        findings.append(f"📉 Low maintainability score ({maintainability:.1f}) - needs improvement")
+    
+    return findings[:10]  # Limit to top 10 findings
+
+def _generate_recommendations(self, issues: List[IntelligentIssue], quality_score: float) -> List[str]:
+    """Generate critical recommendations based on analysis results"""
+    recommendations = []
+    
+    # Quality-based recommendations
+    if quality_score < 50:
+        recommendations.append("🔧 Implement comprehensive code refactoring strategy")
+    elif quality_score < 70:
+        recommendations.append("📈 Focus on improving code quality metrics")
+    
+    # Issue-based recommendations
+    critical_issues = [i for i in issues if i.severity == 'critical']
+    if critical_issues:
+        recommendations.append(f"🚨 Address {len(critical_issues)} critical issues immediately")
+    
+    security_issues = [i for i in issues if i.category == 'security']
+    if security_issues:
+        recommendations.append(f"🔐 Review and fix {len(security_issues)} security vulnerabilities")
+    
+    performance_issues = [i for i in issues if i.category == 'performance']
+    if performance_issues:
+        recommendations.append(f"⚡ Optimize {len(performance_issues)} performance bottlenecks")
+    
+    # General recommendations
+    if len(issues) > 50:
+        recommendations.append("📋 Implement automated code quality checks in CI/CD")
+    
+    if quality_score > 80:
+        recommendations.append("✅ Maintain current code quality standards")
+    
+    return recommendations[:8]  # Limit to top 8 recommendations
+
+async def _build_intelligent_repo_structure(self, repo_path: Path, issues: List[IntelligentIssue]) -> Dict[str, Any]:
+    """Build repository structure with intelligent issue mapping"""
+    
+    def create_node(path: Path, relative_path: str = "") -> Dict[str, Any]:
+        name = path.name if path.name else "repo"
+        node_path = relative_path
+        
+        if path.is_file():
+            # Get issues for this file
+            file_issues = [issue for issue in issues if issue.file_path == str(path.relative_to(repo_path))]
+            
+            # Add emoji indicators based on issue severity
+            emoji = ""
+            if any(i.severity == 'critical' for i in file_issues):
+                emoji = "🔴"
+            elif any(i.severity == 'major' for i in file_issues):
+                emoji = "🟡"
+            elif file_issues:
+                emoji = "🔵"
+            else:
+                emoji = "✅"
+            
+            return {
+                "name": f"{emoji} {name}",
+                "path": node_path,
+                "type": "file",
+                "issue_count": len(file_issues),
+                "critical_issues": len([i for i in file_issues if i.severity == 'critical']),
+                "major_issues": len([i for i in file_issues if i.severity == 'major']),
+                "minor_issues": len([i for i in file_issues if i.severity == 'minor']),
+                "issues": [
                     {
-                        "file": item.file_path,
-                        "function": item.function_name,
-                        "intensity": item.heat_intensity,
-                        "risk": item.risk_level,
-                        "complexity": item.complexity_score
+                        "id": issue.id,
+                        "type": issue.type,
+                        "severity": issue.severity,
+                        "title": issue.title,
+                        "line_number": issue.line_number
                     }
-                    for item in usage_heatmap[:20]
-                ],
-                "risk_distribution": {
-                    "high": len([h for h in usage_heatmap if h.risk_level == "high"]),
-                    "medium": len([h for h in usage_heatmap if h.risk_level == "medium"]),
-                    "low": len([h for h in usage_heatmap if h.risk_level == "low"])
-                }
-            },
-            "issue_distribution": {
-                "by_severity": {
-                    "critical": len([i for i in issues if i.severity == "critical"]),
-                    "major": len([i for i in issues if i.severity == "major"]),
-                    "minor": len([i for i in issues if i.severity == "minor"])
-                },
-                "by_category": {
-                    "security": len([i for i in issues if i.category == "security"]),
-                    "performance": len([i for i in issues if i.category == "performance"]),
-                    "maintainability": len([i for i in issues if i.category == "maintainability"]),
-                    "style": len([i for i in issues if i.category == "style"])
-                }
-            },
-            "complexity_metrics": {
-                "cyclomatic_complexity": metrics.cyclomatic_complexity,
-                "maintainability_index": metrics.maintainability_index,
-                "technical_debt": metrics.technical_debt_ratio
-            },
-            "quality_trends": {
-                "overall_score": self._calculate_quality_score(metrics, issues, 
-                    SecurityAnalysis([], 0, {}, [], [], [], [], []),
-                    PerformanceAnalysis([], 0, [], [], [], {}, [])
-                ),
-                "improvement_areas": [
-                    "Code complexity reduction",
-                    "Security vulnerability fixes",
-                    "Performance optimization",
-                    "Code style improvements"
+                    for issue in file_issues[:5]  # Limit to first 5 issues per file
                 ]
             }
-        }
+        else:
+            children = []
+            total_issues = 0
+            total_critical = 0
+            total_major = 0
+            total_minor = 0
+            
+            try:
+                for child in sorted(path.iterdir()):
+                    if child.name.startswith('.') and child.name not in ['.github', '.vscode']:
+                        continue
+                    
+                    child_relative = f"{relative_path}/{child.name}" if relative_path else child.name
+                    child_node = create_node(child, child_relative)
+                    children.append(child_node)
+                    
+                    total_issues += child_node["issue_count"]
+                    total_critical += child_node["critical_issues"]
+                    total_major += child_node["major_issues"]
+                    total_minor += child_node["minor_issues"]
+                    
+            except PermissionError:
+                pass
+            
+            # Add emoji indicators for directories
+            emoji = ""
+            if total_critical > 0:
+                emoji = "📁🔴"
+            elif total_major > 0:
+                emoji = "📁🟡"
+            elif total_issues > 0:
+                emoji = "📁🔵"
+            else:
+                emoji = "📁✅"
+            
+            return {
+                "name": f"{emoji} {name}",
+                "path": node_path,
+                "type": "directory",
+                "issue_count": total_issues,
+                "critical_issues": total_critical,
+                "major_issues": total_major,
+                "minor_issues": total_minor,
+                "children": children
+            }
+    
+    return create_node(repo_path)
 
-    # Placeholder methods for graph-sitter analysis (when available)
-    async def _detect_intelligent_issues_gs(self, codebase) -> List[IntelligentIssue]:
-        """Detect issues using graph-sitter (placeholder)"""
-        # This would use actual graph-sitter analysis
-        return []
+def _create_visualizations(self, dependency_graph: DependencyGraph, usage_heatmap: List[UsageHeatMap], 
+                         issues: List[IntelligentIssue], metrics: AdvancedMetrics) -> Dict[str, Any]:
+    """Create comprehensive visualization data"""
+    return {
+        "dependency_graph": {
+            "nodes": dependency_graph.nodes,
+            "edges": dependency_graph.edges,
+            "circular_dependencies": dependency_graph.circular_dependencies,
+            "metrics": dependency_graph.coupling_metrics
+        },
+        "usage_heatmap": {
+            "hotspots": [
+                {
+                    "file": item.file_path,
+                    "function": item.function_name,
+                    "intensity": item.heat_intensity,
+                    "risk": item.risk_level,
+                    "complexity": item.complexity_score
+                }
+                for item in usage_heatmap[:20]
+            ],
+            "risk_distribution": {
+                "high": len([h for h in usage_heatmap if h.risk_level == "high"]),
+                "medium": len([h for h in usage_heatmap if h.risk_level == "medium"]),
+                "low": len([h for h in usage_heatmap if h.risk_level == "low"])
+            }
+        },
+        "issue_distribution": {
+            "by_severity": {
+                "critical": len([i for i in issues if i.severity == "critical"]),
+                "major": len([i for i in issues if i.severity == "major"]),
+                "minor": len([i for i in issues if i.severity == "minor"])
+            },
+            "by_category": {
+                "security": len([i for i in issues if i.category == "security"]),
+                "performance": len([i for i in issues if i.category == "performance"]),
+                "maintainability": len([i for i in issues if i.category == "maintainability"]),
+                "style": len([i for i in issues if i.category == "style"])
+            }
+        },
+        "complexity_metrics": {
+            "cyclomatic_complexity": metrics.cyclomatic_complexity,
+            "maintainability_index": metrics.maintainability_index,
+            "technical_debt": metrics.technical_debt_ratio
+        },
+        "quality_trends": {
+            "overall_score": self._calculate_quality_score(metrics, issues, 
+                SecurityAnalysis([], 0, {}, [], [], [], [], []),
+                PerformanceAnalysis([], 0, [], [], [], {}, [])
+            ),
+            "improvement_areas": [
+                "Code complexity reduction",
+                "Security vulnerability fixes",
+                "Performance optimization",
+                "Code style improvements"
+            ]
+        }
+    }
+
+# Placeholder methods for graph-sitter analysis (when available)
+async def _detect_intelligent_issues_gs(self, codebase) -> List[IntelligentIssue]:
+    """Detect issues using graph-sitter (placeholder)"""
+    # This would use actual graph-sitter analysis
+    return []
+
+async def _calculate_advanced_metrics_gs(self, codebase) -> AdvancedMetrics:
+    """Calculate metrics using graph-sitter (placeholder)"""
+    return AdvancedMetrics(
+        halstead_metrics={}, cyclomatic_complexity={}, maintainability_index={},
+        technical_debt_ratio=0.0, code_coverage_estimate=0.0, duplication_percentage=0.0,
+        cognitive_complexity={}, npath_complexity={}
+    )
     
-    async def _calculate_advanced_metrics_gs(self, codebase) -> AdvancedMetrics:
-        """Calculate metrics using graph-sitter (placeholder)"""
-        return AdvancedMetrics(
-            halstead_metrics={}, cyclomatic_complexity={}, maintainability_index={},
-            technical_debt_ratio=0.0, code_coverage_estimate=0.0, duplication_percentage=0.0,
-            cognitive_complexity={}, npath_complexity={}
-        )
+async def _generate_usage_heatmap_gs(self, codebase) -> List[UsageHeatMap]:
+    """Generate heatmap using graph-sitter (placeholder)"""
+    return []
+
+async def _analyze_inheritance_gs(self, codebase) -> List[InheritanceAnalysis]:
+    """Analyze inheritance using graph-sitter (placeholder)"""
+    return []
+
+async def _analyze_architecture_gs(self, codebase) -> EntryPointAnalysis:
+    """Analyze architecture using graph-sitter (placeholder)"""
+    return EntryPointAnalysis(
+        entry_points=[], main_functions=[], api_endpoints=[], cli_commands=[],
+        event_handlers=[], initialization_patterns=[], architecture_pattern="Unknown",
+        framework_detection=[]
+    )
     
-    async def _generate_usage_heatmap_gs(self, codebase) -> List[UsageHeatMap]:
-        """Generate heatmap using graph-sitter (placeholder)"""
-        return []
+def _analyze_security_gs(self, codebase, issues: List[IntelligentIssue]) -> SecurityAnalysis:
+    """Analyze security using graph-sitter (placeholder)"""
+    security_issues = [i for i in issues if i.category == 'security']
+    return SecurityAnalysis(
+        vulnerabilities=security_issues,
+        security_score=max(0, 100 - len(security_issues) * 10),
+        threat_model={}, attack_surface=[], sensitive_data_flows=[],
+        authentication_patterns=[], authorization_issues=[], input_validation_gaps=[]
+    )
     
-    async def _analyze_inheritance_gs(self, codebase) -> List[InheritanceAnalysis]:
-        """Analyze inheritance using graph-sitter (placeholder)"""
-        return []
+def _analyze_performance_gs(self, codebase, issues: List[IntelligentIssue]) -> PerformanceAnalysis:
+    """Analyze performance using graph-sitter (placeholder)"""
+    performance_issues = [i for i in issues if i.category == 'performance']
+    return PerformanceAnalysis(
+        bottlenecks=performance_issues,
+        performance_score=max(0, 100 - len(performance_issues) * 5),
+        memory_usage_patterns=[], cpu_intensive_functions=[], io_operations=[],
+        algorithmic_complexity={}, optimization_opportunities=[]
+    )
     
-    async def _analyze_architecture_gs(self, codebase) -> EntryPointAnalysis:
-        """Analyze architecture using graph-sitter (placeholder)"""
-        return EntryPointAnalysis(
-            entry_points=[], main_functions=[], api_endpoints=[], cli_commands=[],
-            event_handlers=[], initialization_patterns=[], architecture_pattern="Unknown",
-            framework_detection=[]
-        )
-    
-    def _analyze_security_gs(self, codebase, issues: List[IntelligentIssue]) -> SecurityAnalysis:
-        """Analyze security using graph-sitter (placeholder)"""
-        security_issues = [i for i in issues if i.category == 'security']
-        return SecurityAnalysis(
-            vulnerabilities=security_issues,
-            security_score=max(0, 100 - len(security_issues) * 10),
-            threat_model={}, attack_surface=[], sensitive_data_flows=[],
-            authentication_patterns=[], authorization_issues=[], input_validation_gaps=[]
-        )
-    
-    def _analyze_performance_gs(self, codebase, issues: List[IntelligentIssue]) -> PerformanceAnalysis:
-        """Analyze performance using graph-sitter (placeholder)"""
-        performance_issues = [i for i in issues if i.category == 'performance']
-        return PerformanceAnalysis(
-            bottlenecks=performance_issues,
-            performance_score=max(0, 100 - len(performance_issues) * 5),
-            memory_usage_patterns=[], cpu_intensive_functions=[], io_operations=[],
-            algorithmic_complexity={}, optimization_opportunities=[]
-        )
-    
-    async def _analyze_dependencies_gs(self, codebase) -> DependencyGraph:
-        """Analyze dependencies using graph-sitter (placeholder)"""
-        return DependencyGraph(
-            nodes=[], edges=[], circular_dependencies=[], critical_paths=[],
-            orphaned_modules=[], coupling_metrics={}
-        )
+async def _analyze_dependencies_gs(self, codebase) -> DependencyGraph:
+    """Analyze dependencies using graph-sitter (placeholder)"""
+    return DependencyGraph(
+        nodes=[], edges=[], circular_dependencies=[], critical_paths=[],
+        orphaned_modules=[], coupling_metrics={}
+    )
