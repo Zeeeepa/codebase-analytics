@@ -31,7 +31,7 @@ from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, s
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, HttpUrl, validator, Field, root_validator
+from pydantic import BaseModel, HttpUrl, Field, model_validator, field_validator
 import uvicorn
 import requests
 import networkx as nx
@@ -198,7 +198,8 @@ class AdvancedAnalysisRequest(BaseModel):
     max_issues: int = Field(200, description="Maximum number of issues to report")
     enable_ai_insights: bool = Field(True, description="Enable AI-powered insights")
     
-    @validator('repo_url')
+    @field_validator('repo_url')
+    @classmethod
     def validate_repo_url(cls, v):
         if not v or not isinstance(v, str):
             raise ValueError('Repository URL must be a non-empty string')
@@ -206,14 +207,16 @@ class AdvancedAnalysisRequest(BaseModel):
             raise ValueError('Only GitHub and GitLab repositories are supported')
         return v.strip()
     
-    @validator('analysis_depth')
+    @field_validator('analysis_depth')
+    @classmethod
     def validate_analysis_depth(cls, v):
         valid_depths = ["quick", "standard", "comprehensive", "deep"]
         if v.lower() not in valid_depths:
             raise ValueError(f"Analysis depth must be one of: {', '.join(valid_depths)}")
         return v.lower()
     
-    @validator('focus_areas')
+    @field_validator('focus_areas')
+    @classmethod
     def validate_focus_areas(cls, v):
         valid_areas = ["all", "security", "performance", "maintainability", "architecture"]
         for area in v:
@@ -221,7 +224,8 @@ class AdvancedAnalysisRequest(BaseModel):
                 raise ValueError(f"Focus area must be one of: {', '.join(valid_areas)}")
         return [area.lower() for area in v]
     
-    @validator('max_issues')
+    @field_validator('max_issues')
+    @classmethod
     def validate_max_issues(cls, v):
         if v < 1:
             raise ValueError("Maximum issues must be at least 1")
@@ -229,19 +233,18 @@ class AdvancedAnalysisRequest(BaseModel):
             raise ValueError("Maximum issues cannot exceed 1000 for performance reasons")
         return v
     
-    @root_validator
-    def validate_request(cls, values):
+    @model_validator(mode='after')
+    def validate_request(self):
         # Check for incompatible combinations
-        if values.get('analysis_depth') == 'quick' and values.get('enable_ai_insights'):
+        if self.analysis_depth == 'quick' and self.enable_ai_insights:
             logger.warning("AI insights may be limited in quick analysis mode")
         
         # Ensure 'all' is not mixed with other focus areas
-        focus_areas = values.get('focus_areas', [])
-        if 'all' in focus_areas and len(focus_areas) > 1:
-            values['focus_areas'] = ['all']  # If 'all' is specified, ignore other areas
+        if 'all' in self.focus_areas and len(self.focus_areas) > 1:
+            self.focus_areas = ['all']  # If 'all' is specified, ignore other areas
             logger.info("Focus area 'all' specified along with others - using 'all' only")
             
-        return values
+        return self
 
 class IntelligentAnalysisResponse(BaseModel):
     """Comprehensive analysis response with intelligent insights"""
@@ -370,7 +373,7 @@ class IntelligentCodeAnalyzer:
                     (r'request\.get\s*\([^)]*verify\s*=\s*False', 'SSL verification disabled', 'major'),
                 ],
                 'performance_patterns': [
-                    (r'for\s+\w+\s+in\s+range\s*\(\s*len\s*\(', 'Inefficient iteration pattern', 'minor'),
+                    (r'for\s+\w+\s+in\s+range\s*\(', 'Inefficient iteration pattern', 'minor'),
                     (r'\.append\s*\([^)]*\)\s*$', 'List concatenation in loop', 'major'),
                     (r'time\.sleep\s*\(', 'Blocking sleep operation', 'major'),
                 ],
