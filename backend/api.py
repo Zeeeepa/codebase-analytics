@@ -23,6 +23,7 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Set, Tuple, Union
+from collections import defaultdict, Counter
 
 # Import graph-sitter components
 from graph_sitter.core.class_definition import Class
