@@ -7,27 +7,47 @@ Provides dynamic analysis based on actual code state and semantic understanding.
 
 import os
 import sys
-import json
-import tempfile
-import shutil
-import subprocess
-import logging
-import math
-import ast
 import re
-import asyncio
+import json
+import time
+import uuid
 import hashlib
-import argparse  # Added for command-line argument parsing
-from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Union, Tuple, Set
-from dataclasses import dataclass, asdict, field
-from collections import defaultdict, Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+import argparse
+import tempfile
+import subprocess
 import threading
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Set, Tuple, Union
+from collections import defaultdict, Counter
 
-# FastAPI and related imports
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, status
+# Import graph-sitter components
+from graph_sitter.core.class_definition import Class
+from graph_sitter.core.codebase import Codebase
+from graph_sitter.core.external_module import ExternalModule
+from graph_sitter.core.file import SourceFile
+from graph_sitter.core.function import Function
+from graph_sitter.core.import_resolution import Import
+from graph_sitter.core.symbol import Symbol
+from graph_sitter.enums import EdgeType, SymbolType
+
+# Import context summary functions
+from backend.context_summary import (
+    get_codebase_summary,
+    get_file_summary,
+    get_class_summary,
+    get_function_summary,
+    get_symbol_summary,
+    get_context_summary,
+    get_context_summary_dict
+)
+
+import fastapi
+from fastapi import FastAPI, HTTPException, Depends, Query, status, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -35,6 +55,9 @@ from pydantic import BaseModel, HttpUrl, Field, model_validator, field_validator
 import uvicorn
 import requests
 import networkx as nx
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
 
 # Configure advanced logging
 logging.basicConfig(
@@ -193,7 +216,7 @@ class PerformanceAnalysis:
 # 🎯 Request/Response Models
 
 class AdvancedAnalysisRequest(BaseModel):
-    repo_url: str = Field(..., description="GitHub repository URL")
+    repo_url: HttpUrl = Field(..., description="GitHub repository URL")
     analysis_depth: str = Field("comprehensive", description="Analysis depth: quick, standard, comprehensive, deep")
     focus_areas: List[str] = Field(default=["all"], description="Focus areas: security, performance, maintainability, architecture")
     include_context: bool = Field(True, description="Include rich context for issues")
@@ -718,7 +741,7 @@ class IntelligentCodeAnalyzer:
         
         security_count = len([i for i in issues if i.category == 'security'])
         if security_count > 0:
-            findings.append(f"🔒 {security_count} security vulnerabilities detected")
+            findings.append(f"🔐 {security_count} security vulnerabilities detected")
         
         # Maintainability findings
         maintainability = metrics.maintainability_index.get('average', 0)
@@ -1056,7 +1079,7 @@ async def root():
             "🎯 Context-aware recommendations",
             "🔒 Security vulnerability scanning",
             "⚡ Performance bottleneck detection",
-            "📈 Usage heat maps",
+            "📊 Usage heat maps",
             "🏗️ Architecture analysis"
         ],
         "graph_sitter_available": GRAPH_SITTER_AVAILABLE,
