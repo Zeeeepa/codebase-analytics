@@ -200,7 +200,7 @@ def get_context_summary(context: Union['Codebase', 'SourceFile', 'Class', 'Funct
         return get_function_summary(context)
     
     # Check if it's a Symbol
-    elif hasattr(context, 'symbol_usages'):
+    elif hasattr(context, 'symbol_usages') and hasattr(context, 'name'):
         return get_symbol_summary(context)
     
     # Unsupported type
@@ -287,7 +287,7 @@ def get_context_summary_dict(context: Union['Codebase', 'SourceFile', 'Class', '
         }
     
     # Check if it's a Symbol
-    elif hasattr(context, 'symbol_usages'):
+    elif hasattr(context, 'symbol_usages') and hasattr(context, 'name'):
         return _get_symbol_summary_dict(context)
     
     # Unsupported type
@@ -1011,7 +1011,7 @@ class IntelligentCodeAnalyzer:
         
         security_count = len([i for i in issues if i.category == 'security'])
         if security_count > 0:
-            findings.append(f"🔒 {security_count} security vulnerabilities detected")
+            findings.append(f"🔐 {security_count} security vulnerabilities detected")
         
         # Maintainability findings
         maintainability = metrics.maintainability_index.get('average', 0)
