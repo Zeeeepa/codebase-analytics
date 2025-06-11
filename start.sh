@@ -112,8 +112,11 @@ echo -e "${BLUE}Starting frontend on port $FRONTEND_PORT...${NC}"
 cd frontend
 # Explicitly set the PORT environment variable for Next.js
 export PORT=$FRONTEND_PORT
+echo -e "${YELLOW}Setting Next.js port to $FRONTEND_PORT${NC}"
+# Use the PORT environment variable to set the Next.js port
 PORT=$FRONTEND_PORT npm run dev &
 FRONTEND_PID=$!
+echo -e "${YELLOW}Frontend process started with PID: $FRONTEND_PID${NC}"
 cd ..
 
 # Wait for the frontend to start
@@ -124,6 +127,15 @@ FRONTEND_STARTED=false
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
   echo -n "."
+  # Check if the Next.js process is still running
+  if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+    echo ""
+    echo -e "${RED}❌ Frontend process died. Check logs for errors.${NC}"
+    kill $BACKEND_PID 2>/dev/null
+    exit 1
+  fi
+  
+  # Try to connect to the frontend port
   if curl -s http://localhost:$FRONTEND_PORT > /dev/null; then
     echo ""
     echo -e "${GREEN}✅ Frontend is running successfully on port $FRONTEND_PORT!${NC}"
