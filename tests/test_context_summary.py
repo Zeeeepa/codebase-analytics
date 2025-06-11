@@ -21,141 +21,25 @@ from backend.api import (
     get_context_summary_dict
 )
 
+# Import test helpers
+from tests.helpers import (
+    create_mock_codebase,
+    create_mock_file,
+    create_mock_class,
+    create_mock_function,
+    create_mock_symbol
+)
+
 class TestContextSummaryFunctions(unittest.TestCase):
     """Test suite for context summary functions"""
 
     def setUp(self):
         """Set up mock objects for testing"""
-        # Mock Codebase
-        self.mock_codebase = MagicMock()
-        self.mock_codebase.ctx.get_nodes.return_value = list(range(100))
-        self.mock_codebase.ctx.edges = [(1, 2, MagicMock(type="edge_type")) for _ in range(30)]
-        self.mock_codebase.files = list(range(10))
-        self.mock_codebase.imports = list(range(20))
-        self.mock_codebase.external_modules = list(range(5))
-        self.mock_codebase.symbols = list(range(50))
-        self.mock_codebase.classes = list(range(15))
-        self.mock_codebase.functions = list(range(25))
-        self.mock_codebase.global_vars = list(range(10))
-        self.mock_codebase.interfaces = list(range(5))
-        
-        # Set up edge types
-        from graph_sitter.enums import EdgeType
-        for i, edge in enumerate(self.mock_codebase.ctx.edges):
-            if i < 10:
-                edge[2].type = EdgeType.SYMBOL_USAGE
-            elif i < 20:
-                edge[2].type = EdgeType.IMPORT_SYMBOL_RESOLUTION
-            else:
-                edge[2].type = EdgeType.EXPORT
-        
-        # Mock SourceFile
-        self.mock_file = MagicMock()
-        self.mock_file.name = "test_file.py"
-        self.mock_file.imports = list(range(5))
-        self.mock_file.symbols = list(range(20))
-        self.mock_file.classes = list(range(3))
-        self.mock_file.functions = list(range(10))
-        self.mock_file.global_vars = list(range(7))
-        self.mock_file.interfaces = list(range(0))
-        
-        # Mock Class
-        self.mock_class = MagicMock()
-        self.mock_class.name = "TestClass"
-        self.mock_class.parent_class_names = ["BaseClass", "MixinClass"]
-        self.mock_class.methods = list(range(5))
-        self.mock_class.attributes = list(range(3))
-        self.mock_class.decorators = list(range(2))
-        self.mock_class.dependencies = list(range(4))
-        self.mock_class.symbol_usages = []
-        
-        # Mock Function
-        self.mock_function = MagicMock()
-        self.mock_function.name = "test_function"
-        self.mock_function.return_statements = list(range(2))
-        self.mock_function.parameters = list(range(3))
-        self.mock_function.function_calls = list(range(4))
-        self.mock_function.call_sites = list(range(2))
-        self.mock_function.decorators = list(range(1))
-        self.mock_function.dependencies = list(range(5))
-        self.mock_function.symbol_usages = []
-        
-        # Mock Symbol
-        self.mock_symbol = MagicMock()
-        self.mock_symbol.name = "test_symbol"
-        
-        # Create mock usages
-        from graph_sitter.enums import SymbolType
-        from graph_sitter.core.symbol import Symbol
-        from graph_sitter.core.import_resolution import Import
-        from graph_sitter.core.external_module import ExternalModule
-        from graph_sitter.core.file import SourceFile
-        
-        # Create mock usages for symbols
-        mock_usages = []
-        
-        # Add function symbols
-        for i in range(3):
-            mock_func = MagicMock(spec=Symbol)
-            mock_func.symbol_type = SymbolType.Function
-            mock_usages.append(mock_func)
-        
-        # Add class symbols
-        for i in range(2):
-            mock_class = MagicMock(spec=Symbol)
-            mock_class.symbol_type = SymbolType.Class
-            mock_usages.append(mock_class)
-        
-        # Add global var symbols
-        for i in range(4):
-            mock_var = MagicMock(spec=Symbol)
-            mock_var.symbol_type = SymbolType.GlobalVar
-            mock_usages.append(mock_var)
-        
-        # Add interface symbols
-        for i in range(1):
-            mock_interface = MagicMock(spec=Symbol)
-            mock_interface.symbol_type = SymbolType.Interface
-            mock_usages.append(mock_interface)
-        
-        # Add imports with imported symbols
-        mock_imports = []
-        for i in range(5):
-            mock_import = MagicMock(spec=Import)
-            
-            if i == 0:
-                # Function import
-                mock_imported = MagicMock(spec=Symbol)
-                mock_imported.symbol_type = SymbolType.Function
-                mock_import.imported_symbol = mock_imported
-            elif i == 1:
-                # Class import
-                mock_imported = MagicMock(spec=Symbol)
-                mock_imported.symbol_type = SymbolType.Class
-                mock_import.imported_symbol = mock_imported
-            elif i == 2:
-                # Global var import
-                mock_imported = MagicMock(spec=Symbol)
-                mock_imported.symbol_type = SymbolType.GlobalVar
-                mock_import.imported_symbol = mock_imported
-            elif i == 3:
-                # External module import
-                mock_imported = MagicMock(spec=ExternalModule)
-                mock_import.imported_symbol = mock_imported
-            else:
-                # File import
-                mock_imported = MagicMock(spec=SourceFile)
-                mock_imported.imports = []
-                mock_imported.name = "imported_file.py"
-                mock_import.imported_symbol = mock_imported
-            
-            mock_imports.append(mock_import)
-        
-        # Combine all usages
-        mock_usages.extend(mock_imports)
-        self.mock_symbol.symbol_usages = mock_usages
-        self.mock_class.symbol_usages = mock_usages[:5]  # Just use a subset for class
-        self.mock_function.symbol_usages = mock_usages[5:]  # Use another subset for function
+        self.mock_codebase = create_mock_codebase()
+        self.mock_file = create_mock_file()
+        self.mock_class = create_mock_class()
+        self.mock_function = create_mock_function()
+        self.mock_symbol = create_mock_symbol()
 
     def test_get_codebase_summary(self):
         """Test get_codebase_summary function"""
