@@ -13,14 +13,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Connect to the backend API
-    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8666';
     console.log(`Connecting to backend API at ${backendUrl}/analyze`);
+    
+    // Prepare headers with API key if available
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    
+    // Add API key if available
+    const apiKey = process.env.API_KEY || 'test_key';
+    if (apiKey) {
+      headers['X-API-Key'] = apiKey;
+    }
     
     const backendResponse = await fetch(`${backendUrl}/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         repo_url,
         analysis_depth: 'comprehensive',
@@ -58,4 +67,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
