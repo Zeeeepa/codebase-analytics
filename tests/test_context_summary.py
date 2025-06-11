@@ -10,8 +10,8 @@ from typing import List
 # Add the parent directory to the path so we can import the modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import the functions to test
-from backend.context_summary import (
+# Import the functions to test directly from api.py
+from backend.api import (
     get_codebase_summary,
     get_file_summary,
     get_class_summary,
