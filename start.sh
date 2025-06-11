@@ -14,10 +14,13 @@ FRONTEND_PORT=3000
 # Function to check if a port is available
 check_port() {
   local port=$1
-  if lsof -Pi :$port -sTCP:LISTEN -t >/dev/null ; then
-    return 1  # Port is in use
+  # Try to bind to the port to see if it's available
+  if (echo >/dev/tcp/localhost/$port) 2>/dev/null; then
+    # If we can connect, the port is in use
+    return 1
   else
-    return 0  # Port is available
+    # If we can't connect, the port is available
+    return 0
   fi
 }
 
@@ -67,43 +70,41 @@ NEXT_PUBLIC_API_URL=http://localhost:$BACKEND_PORT
 NODE_ENV=development
 EOF
 
+# Kill any existing processes using our ports
+echo -e "${BLUE}Ensuring ports are free...${NC}"
+fuser -k $BACKEND_PORT/tcp 2>/dev/null
+fuser -k $FRONTEND_PORT/tcp 2>/dev/null
+
 # Start the backend API
 echo -e "${BLUE}Starting backend API on port $BACKEND_PORT...${NC}"
 cd backend
-python api.py --port $BACKEND_PORT &
+python api.py --port $BACKEND_PORT --disable-graph-sitter &
 BACKEND_PID=$!
 cd ..
 
 # Wait for the backend to start
 echo -e "${YELLOW}Waiting for backend to start...${NC}"
-sleep 5
+MAX_ATTEMPTS=10
+ATTEMPT=1
+BACKEND_STARTED=false
 
-# Check if backend is running
-if curl -s http://localhost:$BACKEND_PORT/health > /dev/null; then
-  echo -e "${GREEN}✅ Backend API is running successfully on port $BACKEND_PORT!${NC}"
-else
-  echo -e "${RED}❌ Backend API failed to start. Check logs for errors.${NC}"
-  echo -e "${YELLOW}Attempting to start backend in fallback mode...${NC}"
-  
-  # Kill the previous attempt if it's still running
-  kill $BACKEND_PID 2>/dev/null
-  
-  # Try starting with explicit parameters
-  cd backend
-  python api.py --port $BACKEND_PORT --disable-graph-sitter &
-  BACKEND_PID=$!
-  cd ..
-  
-  sleep 5
-  
-  # Check again
+while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+  echo -n "."
   if curl -s http://localhost:$BACKEND_PORT/health > /dev/null; then
-    echo -e "${GREEN}✅ Backend API is running in fallback mode on port $BACKEND_PORT!${NC}"
-  else
-    echo -e "${RED}❌ Backend API failed to start even in fallback mode. Exiting.${NC}"
-    kill $BACKEND_PID 2>/dev/null
-    exit 1
+    echo ""
+    echo -e "${GREEN}✅ Backend API is running successfully on port $BACKEND_PORT!${NC}"
+    BACKEND_STARTED=true
+    break
   fi
+  ATTEMPT=$((ATTEMPT + 1))
+  sleep 2
+done
+
+if [ "$BACKEND_STARTED" = false ]; then
+  echo ""
+  echo -e "${RED}❌ Backend API failed to start. Check logs for errors.${NC}"
+  kill $BACKEND_PID 2>/dev/null
+  exit 1
 fi
 
 # Start the frontend

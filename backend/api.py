@@ -300,7 +300,7 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
-# ��� Intelligent Analysis Engine
+# Intelligent Analysis Engine
 
 class IntelligentCodeAnalyzer:
     """Advanced code analyzer with AI-powered insights and real-time issue detection"""
@@ -613,14 +613,38 @@ if __name__ == "__main__":
         GRAPH_SITTER_AVAILABLE = False
         logger.info("🔄 Graph-sitter disabled by command line argument")
     
-    # Run the server
-    uvicorn.run(
-        "api:app",
-        host=args.host,
-        port=args.port,
-        reload=True,
-        log_level=args.log_level
-    )
+    # Try to run the server, handling port conflicts
+    try:
+        uvicorn.run(
+            "api:app",
+            host=args.host,
+            port=args.port,
+            reload=True,
+            log_level=args.log_level
+        )
+    except OSError as e:
+        if "Address already in use" in str(e):
+            logger.error(f"Port {args.port} is already in use. Please specify a different port with --port.")
+            # Try to find an available port
+            for port in range(args.port + 1, args.port + 10):
+                try:
+                    logger.info(f"Trying port {port}...")
+                    uvicorn.run(
+                        "api:app",
+                        host=args.host,
+                        port=port,
+                        reload=True,
+                        log_level=args.log_level
+                    )
+                    break
+                except OSError:
+                    continue
+            else:
+                logger.error(f"Could not find an available port in range {args.port}-{args.port + 9}. Exiting.")
+                sys.exit(1)
+        else:
+            logger.error(f"Error starting server: {e}")
+            sys.exit(1)
 
     def _detect_issues_pattern_matching(self, content: str, file_path: str) -> List[IntelligentIssue]:
         """Detect issues using pattern matching when graph-sitter is not available"""
