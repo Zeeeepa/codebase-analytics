@@ -590,7 +590,7 @@ async def analyze_repository(request: AdvancedAnalysisRequest) -> IntelligentAna
 
 if __name__ == "__main__":
     uvicorn.run(
-        "api_enhanced:app",
+        "api:app",
         host="0.0.0.0",
         port=8000,
         reload=True,
@@ -982,4 +982,3 @@ if __name__ == "__main__":
             nodes=[], edges=[], circular_dependencies=[], critical_paths=[],
             orphaned_modules=[], coupling_metrics={}
         )
-
