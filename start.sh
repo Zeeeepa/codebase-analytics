@@ -7,8 +7,8 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Default ports
-BACKEND_PORT=8000
+# Fixed port for backend
+BACKEND_PORT=8666
 FRONTEND_PORT=3000
 
 # Function to check if a port is available
@@ -24,7 +24,7 @@ check_port() {
   fi
 }
 
-# Function to find an available port starting from a base port
+# Only find available port for frontend
 find_available_port() {
   local base_port=$1
   local port=$base_port
@@ -41,13 +41,13 @@ find_available_port() {
   echo $port
 }
 
-# Find available ports
-BACKEND_PORT=$(find_available_port $BACKEND_PORT)
-if [ $? -ne 0 ]; then
-  echo -e "${RED}Failed to find available port for backend. Exiting.${NC}"
+# Check if backend port is available, if not, exit
+if ! check_port $BACKEND_PORT; then
+  echo -e "${RED}Port $BACKEND_PORT is already in use. Please free this port and try again.${NC}"
   exit 1
 fi
 
+# Find available port for frontend
 FRONTEND_PORT=$(find_available_port $FRONTEND_PORT)
 if [ $? -ne 0 ]; then
   echo -e "${RED}Failed to find available port for frontend. Exiting.${NC}"
@@ -78,7 +78,7 @@ fuser -k $FRONTEND_PORT/tcp 2>/dev/null
 # Start the backend API
 echo -e "${BLUE}Starting backend API on port $BACKEND_PORT...${NC}"
 cd backend
-python api.py --port $BACKEND_PORT --disable-graph-sitter &
+python api.py --port $BACKEND_PORT &
 BACKEND_PID=$!
 cd ..
 
@@ -90,7 +90,7 @@ BACKEND_STARTED=false
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
   echo -n "."
-  if curl -s http://localhost:$BACKEND_PORT/health > /dev/null; then
+  if curl -s http://localhost:$BACKEND_PORT/api/health > /dev/null; then
     echo ""
     echo -e "${GREEN}✅ Backend API is running successfully on port $BACKEND_PORT!${NC}"
     BACKEND_STARTED=true
@@ -134,4 +134,3 @@ echo -e "${YELLOW}Press Ctrl+C to stop both services${NC}"
 
 # Keep the script running
 wait
-
