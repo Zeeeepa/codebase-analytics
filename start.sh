@@ -110,11 +110,9 @@ fi
 # Start the frontend
 echo -e "${BLUE}Starting frontend on port $FRONTEND_PORT...${NC}"
 cd frontend
-# Explicitly set the PORT environment variable for Next.js
-export PORT=$FRONTEND_PORT
-echo -e "${YELLOW}Setting Next.js port to $FRONTEND_PORT${NC}"
-# Use the PORT environment variable to set the Next.js port
-PORT=$FRONTEND_PORT npm run dev &
+# The port is now hardcoded in package.json as 8667
+echo -e "${YELLOW}Using Next.js port 8667 from package.json${NC}"
+npm run dev &
 FRONTEND_PID=$!
 echo -e "${YELLOW}Frontend process started with PID: $FRONTEND_PID${NC}"
 cd ..
