@@ -435,8 +435,14 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 # API key validation
 async def get_api_key(api_key_header: str = Depends(api_key_header)):
+    # In development mode, allow requests without API key
+    if os.environ.get("ENVIRONMENT", "development") == "development":
+        return "development_mode"
+    
+    # In production, validate the API key
     if api_key_header == os.environ.get("API_KEY", "test_key"):
         return api_key_header
+    
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid API Key",
