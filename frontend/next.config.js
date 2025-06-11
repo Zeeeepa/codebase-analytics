@@ -2,7 +2,7 @@
 const nextConfig = {
   env: {
     // Make sure environment variables are available
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
     NEXT_PUBLIC_MODAL_ENDPOINT: process.env.NEXT_PUBLIC_MODAL_ENDPOINT,
   },
   // Ensure proper handling of environment variables
@@ -23,7 +23,15 @@ const nextConfig = {
     }
     return config;
   },
+  // Add async rewrites for API proxy
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'http://localhost:8000/:path*',
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;
-
