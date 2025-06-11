@@ -14,17 +14,14 @@ FRONTEND_PORT=3000
 # Function to check if a port is available
 check_port() {
   local port=$1
-  # Try to bind to the port to see if it's available
-  if (echo >/dev/tcp/localhost/$port) 2>/dev/null; then
-    # If we can connect, the port is in use
-    return 1
+  if nc -z localhost $port 2>/dev/null; then
+    return 1  # Port is in use
   else
-    # If we can't connect, the port is available
-    return 0
+    return 0  # Port is available
   fi
 }
 
-# Function to find an available port starting from a base port
+# Function to find an available port
 find_available_port() {
   local base_port=$1
   local port=$base_port
@@ -38,7 +35,17 @@ find_available_port() {
     fi
   done
   
-  echo $port
+  echo "$port"
+}
+
+# Kill any process using a specific port
+kill_port_process() {
+  local port=$1
+  local pid=$(lsof -ti:$port 2>/dev/null)
+  if [ ! -z "$pid" ]; then
+    echo -e "${YELLOW}Killing process using port $port (PID: $pid)${NC}"
+    kill -9 $pid 2>/dev/null
+  fi
 }
 
 # Find available ports
@@ -72,8 +79,8 @@ EOF
 
 # Kill any existing processes using our ports
 echo -e "${BLUE}Ensuring ports are free...${NC}"
-fuser -k $BACKEND_PORT/tcp 2>/dev/null
-fuser -k $FRONTEND_PORT/tcp 2>/dev/null
+kill_port_process $BACKEND_PORT
+kill_port_process $FRONTEND_PORT
 
 # Start the backend API
 echo -e "${BLUE}Starting backend API on port $BACKEND_PORT...${NC}"
@@ -89,19 +96,17 @@ ATTEMPT=1
 BACKEND_STARTED=false
 
 while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-  echo -n "."
+  sleep 2
   if curl -s http://localhost:$BACKEND_PORT/health > /dev/null; then
-    echo ""
     echo -e "${GREEN}✅ Backend API is running successfully on port $BACKEND_PORT!${NC}"
     BACKEND_STARTED=true
     break
   fi
+  echo -e "${YELLOW}Waiting for backend to start (attempt $ATTEMPT/$MAX_ATTEMPTS)...${NC}"
   ATTEMPT=$((ATTEMPT + 1))
-  sleep 2
 done
 
 if [ "$BACKEND_STARTED" = false ]; then
-  echo ""
   echo -e "${RED}❌ Backend API failed to start. Check logs for errors.${NC}"
   kill $BACKEND_PID 2>/dev/null
   exit 1
