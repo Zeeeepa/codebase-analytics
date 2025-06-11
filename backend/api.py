@@ -64,59 +64,6 @@ except ImportError as e:
 # Request models
 class RepoRequest(BaseModel):
     repo_url: str
-)
-logger = logging.getLogger(__name__)
-from fastapi import FastAPI
-from pydantic import BaseModel
-from graph_sitter import Codebase
-from graph_sitter.core.statements.for_loop_statement import ForLoopStatement
-from graph_sitter.core.statements.if_block_statement import IfBlockStatement
-from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
-from graph_sitter.core.statements.while_statement import WhileStatement
-from graph_sitter.core.expressions.binary_expression import BinaryExpression
-from graph_sitter.core.expressions.unary_expression import UnaryExpression
-from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
-# Import graph_sitter from the installed package
-try:
-    from graph_sitter import Codebase
-    from graph_sitter.codebase.codebase_ai import generate_context
-    GRAPH_SITTER_AVAILABLE = True
-    logger.info("Graph-sitter successfully imported")
-    
-@dataclass
-class CodeIssue:
-    """Represents a code quality issue or error"""
-    type: str
-    severity: str  # 'low', 'medium', 'high', 'critical'
-    message: str
-    file_path: str
-    line_number: Optional[int]
-    function_name: Optional[str]
-    suggestion: str
-    impact: str
-    category: str  # 'complexity', 'maintainability', 'security', 'performance', 'style'
-
-@dataclass
-class FileMetrics:
-    """Detailed metrics for a single file"""
-    path: str
-    loc: int
-    complexity: float
-    maintainability: float
-    issues: List[CodeIssue]
-    functions: List[str]
-    classes: List[str]
-    imports: List[str]
-    dependencies: List[str]
-
-@dataclass
-class DependencyNode:
-    """Node in dependency graph"""
-    name: str
-    type: str  # 'file', 'function', 'class'
-    size: int  # lines of code or complexity
-    dependencies: List[str]
-    dependents: List[str]
 
 # FastAPI app setup
 app = FastAPI(
@@ -140,20 +87,20 @@ app.add_middleware(
     allowed_hosts=["*"]
 )
 
-    # Create analysis functions based on available Codebase methods
-    def get_codebase_summary(codebase: Codebase) -> str:
-        """Provides a high-level statistical overview of the entire codebase"""
-        try:
-            files_count = len(codebase.files)
-            imports_count = len(codebase.imports)
-            external_modules_count = len(codebase.external_modules)
-            symbols_count = len(codebase.symbols)
-            classes_count = len(codebase.classes)
-            functions_count = len(codebase.functions)
-            global_vars_count = len(codebase.global_vars)
-            interfaces_count = len(codebase.interfaces)
-            
-            return f"""Codebase Summary:
+# Create analysis functions based on available Codebase methods
+def get_codebase_summary(codebase: Codebase) -> str:
+    """Provides a high-level statistical overview of the entire codebase"""
+    try:
+        files_count = len(codebase.files)
+        imports_count = len(codebase.imports)
+        external_modules_count = len(codebase.external_modules)
+        symbols_count = len(codebase.symbols)
+        classes_count = len(codebase.classes)
+        functions_count = len(codebase.functions)
+        global_vars_count = len(codebase.global_vars)
+        interfaces_count = len(codebase.interfaces)
+        
+        return f"""Codebase Summary:
 - Files: {files_count}
 - Imports: {imports_count}
 - External modules: {external_modules_count}
@@ -164,61 +111,61 @@ app.add_middleware(
   - Interfaces: {interfaces_count}
 - Repository: {codebase.name}
 - Language: {codebase.language}"""
-        except Exception as e:
-            return f"Error generating codebase summary: {str(e)}"
-    
-    def get_file_summary(file) -> str:
-        """Analyzes a single source file's dependencies and structure"""
-        try:
-            if hasattr(file, 'imports'):
-                imports_count = len(file.imports) if file.imports else 0
-            else:
-                imports_count = 0
-                
-            if hasattr(file, 'symbols'):
-                symbols_count = len(file.symbols) if file.symbols else 0
-            else:
-                symbols_count = 0
-                
-            return f"""File Summary for {getattr(file, 'name', 'unknown')}:
+    except Exception as e:
+        return f"Error generating codebase summary: {str(e)}"
+
+def get_file_summary(file) -> str:
+    """Analyzes a single source file's dependencies and structure"""
+    try:
+        if hasattr(file, 'imports'):
+            imports_count = len(file.imports) if file.imports else 0
+        else:
+            imports_count = 0
+            
+        if hasattr(file, 'symbols'):
+            symbols_count = len(file.symbols) if file.symbols else 0
+        else:
+            symbols_count = 0
+            
+        return f"""File Summary for {getattr(file, 'name', 'unknown')}:
 - Imports: {imports_count}
 - Symbols: {symbols_count}
 - Path: {getattr(file, 'path', 'unknown')}"""
-        except Exception as e:
-            return f"Error generating file summary: {str(e)}"
-    
-    def get_class_summary(cls) -> str:
-        """Deep analysis of a class definition and its relationships"""
-        try:
-            return f"""Class Summary for {getattr(cls, 'name', 'unknown')}:
+    except Exception as e:
+        return f"Error generating file summary: {str(e)}"
+
+def get_class_summary(cls) -> str:
+    """Deep analysis of a class definition and its relationships"""
+    try:
+        return f"""Class Summary for {getattr(cls, 'name', 'unknown')}:
 - Type: Class
 - Location: {getattr(cls, 'path', 'unknown')}
 - Methods: {len(getattr(cls, 'methods', []))}
 - Attributes: {len(getattr(cls, 'attributes', []))}"""
-        except Exception as e:
-            return f"Error generating class summary: {str(e)}"
-    
-    def get_function_summary(func) -> str:
-        """Comprehensive function analysis including call patterns"""
-        try:
-            return f"""Function Summary for {getattr(func, 'name', 'unknown')}:
+    except Exception as e:
+        return f"Error generating class summary: {str(e)}"
+
+def get_function_summary(func) -> str:
+    """Comprehensive function analysis including call patterns"""
+    try:
+        return f"""Function Summary for {getattr(func, 'name', 'unknown')}:
 - Type: Function
 - Location: {getattr(func, 'path', 'unknown')}
 - Parameters: {len(getattr(func, 'parameters', []))}
 - Return statements: {len(getattr(func, 'return_statements', []))}"""
-        except Exception as e:
-            return f"Error generating function summary: {str(e)}"
-    
-    def get_symbol_summary(symbol) -> str:
-        """Universal symbol usage analysis (works for any symbol type)"""
-        try:
-            return f"""Symbol Summary for {getattr(symbol, 'name', 'unknown')}:
+    except Exception as e:
+        return f"Error generating function summary: {str(e)}"
+
+def get_symbol_summary(symbol) -> str:
+    """Universal symbol usage analysis (works for any symbol type)"""
+    try:
+        return f"""Symbol Summary for {getattr(symbol, 'name', 'unknown')}:
 - Type: {getattr(symbol, 'type', 'unknown')}
 - Location: {getattr(symbol, 'path', 'unknown')}
 - Dependencies: {len(getattr(symbol, 'dependencies', []))}
 - Usage count: {len(getattr(symbol, 'usages', []))}"""
-        except Exception as e:
-            return f"Error generating symbol summary: {str(e)}"
+    except Exception as e:
+        return f"Error generating symbol summary: {str(e)}"
 
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
     """
@@ -284,7 +231,6 @@ def get_monthly_commits(repo_path: str) -> Dict[str, int]:
             os.chdir(original_dir)
         except:
             pass
-
 
 def calculate_cyclomatic_complexity(function):
     def analyze_statement(statement):
@@ -1591,4 +1537,3 @@ if __name__ == "__main__":
         reload=True,
         log_level="info"
     )
-
