@@ -17,6 +17,7 @@ import ast
 import re
 import asyncio
 import hashlib
+import argparse  # Added for command-line argument parsing
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union, Tuple, Set
@@ -47,11 +48,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Import graph-sitter for advanced AST analysis
+# Check if graph-sitter should be disabled via command line
+DISABLE_GRAPH_SITTER = False  # Will be updated in __main__
+
 try:
-    from graph_sitter import Codebase
-    from graph_sitter.codebase.codebase_ai import generate_context
-    GRAPH_SITTER_AVAILABLE = True
-    logger.info("🎯 Graph-sitter successfully imported - Advanced analysis enabled")
+    if not DISABLE_GRAPH_SITTER:
+        from graph_sitter import Codebase
+        from graph_sitter.codebase.codebase_ai import generate_context
+        GRAPH_SITTER_AVAILABLE = True
+        logger.info("🎯 Graph-sitter successfully imported - Advanced analysis enabled")
+    else:
+        logger.info("🔄 Graph-sitter disabled by command line argument")
+        GRAPH_SITTER_AVAILABLE = False
 except ImportError as e:
     logger.error(f"❌ Graph-sitter import failed: {e}")
     GRAPH_SITTER_AVAILABLE = False
@@ -292,7 +300,7 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
-# 🎯 Intelligent Analysis Engine
+# ��� Intelligent Analysis Engine
 
 class IntelligentCodeAnalyzer:
     """Advanced code analyzer with AI-powered insights and real-time issue detection"""
@@ -589,12 +597,29 @@ async def analyze_repository(request: AdvancedAnalysisRequest) -> IntelligentAna
     return await intelligent_analyzer.analyze_repository(request.repo_url, request)
 
 if __name__ == "__main__":
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Codebase Analytics API Server")
+    parser.add_argument("--port", type=int, default=8000, help="Port to run the server on")
+    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to bind the server to")
+    parser.add_argument("--disable-graph-sitter", action="store_true", help="Disable graph-sitter even if available")
+    parser.add_argument("--log-level", type=str, default="info", choices=["debug", "info", "warning", "error", "critical"],
+                        help="Logging level")
+    
+    args = parser.parse_args()
+    
+    # Update global settings based on arguments
+    if args.disable_graph_sitter:
+        DISABLE_GRAPH_SITTER = True
+        GRAPH_SITTER_AVAILABLE = False
+        logger.info("🔄 Graph-sitter disabled by command line argument")
+    
+    # Run the server
     uvicorn.run(
         "api:app",
-        host="0.0.0.0",
-        port=8000,
+        host=args.host,
+        port=args.port,
         reload=True,
-        log_level="info"
+        log_level=args.log_level
     )
 
     def _detect_issues_pattern_matching(self, content: str, file_path: str) -> List[IntelligentIssue]:
