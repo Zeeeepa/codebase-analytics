@@ -24,6 +24,16 @@ from enum import Enum
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Set, Tuple, Union
 
+# Import graph-sitter components
+from graph_sitter.core.class_definition import Class
+from graph_sitter.core.codebase import Codebase
+from graph_sitter.core.external_module import ExternalModule
+from graph_sitter.core.file import SourceFile
+from graph_sitter.core.function import Function
+from graph_sitter.core.import_resolution import Import
+from graph_sitter.core.symbol import Symbol
+from graph_sitter.enums import EdgeType, SymbolType
+
 import fastapi
 from fastapi import FastAPI, HTTPException, Depends, Query, status, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -1316,7 +1326,7 @@ async def root():
             "🎯 Context-aware recommendations",
             "🔒 Security vulnerability scanning",
             "⚡ Performance bottleneck detection",
-            "📈 Usage heat maps",
+            "�� Usage heat maps",
             "🏗️ Architecture analysis"
         ],
         "graph_sitter_available": GRAPH_SITTER_AVAILABLE,
