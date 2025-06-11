@@ -602,9 +602,22 @@ async def analyze(
     # Clone the repository to a temporary directory
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
+            # Format the repository URL if needed
+            repo_url = request.repo_url
+            if not repo_url.startswith(("http://", "https://", "git://")):
+                # If it's just a repo name like "username/repo", convert to GitHub URL
+                if "/" in repo_url and not repo_url.startswith("/"):
+                    repo_url = f"https://github.com/{repo_url}"
+                else:
+                    # Invalid format
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid repository URL format: {repo_url}. Please provide a valid GitHub repository URL or username/repo format."
+                    )
+            
             # Clone the repository
-            logger.info(f"Cloning repository to {temp_dir}")
-            repo = git.Repo.clone_from(request.repo_url, temp_dir)
+            logger.info(f"Cloning repository from {repo_url} to {temp_dir}")
+            repo = git.Repo.clone_from(repo_url, temp_dir)
             
             # Create a Codebase object using graph-sitter
             from graph_sitter.core.context import Context
