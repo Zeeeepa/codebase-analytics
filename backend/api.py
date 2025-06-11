@@ -183,16 +183,27 @@ def get_context_summary(context: Union['Codebase', 'SourceFile', 'Class', 'Funct
     Returns:
         A formatted string with context-specific summary information
     """
-    if hasattr(context, 'ctx') and hasattr(context, 'files'):  # Codebase
+    # Check if it's a Codebase
+    if hasattr(context, 'ctx') and hasattr(context, 'files'):
         return get_codebase_summary(context)
-    elif hasattr(context, 'imports') and hasattr(context, 'name') and not hasattr(context, 'methods'):  # SourceFile
+    
+    # Check if it's a SourceFile
+    elif hasattr(context, 'imports') and hasattr(context, 'name') and not hasattr(context, 'methods'):
         return get_file_summary(context)
-    elif hasattr(context, 'methods') and hasattr(context, 'attributes'):  # Class
+    
+    # Check if it's a Class
+    elif hasattr(context, 'methods') and hasattr(context, 'attributes'):
         return get_class_summary(context)
-    elif hasattr(context, 'parameters') and hasattr(context, 'function_calls'):  # Function
+    
+    # Check if it's a Function
+    elif hasattr(context, 'parameters') and hasattr(context, 'function_calls'):
         return get_function_summary(context)
-    elif hasattr(context, 'symbol_usages'):  # Symbol
+    
+    # Check if it's a Symbol
+    elif hasattr(context, 'symbol_usages'):
         return get_symbol_summary(context)
+    
+    # Unsupported type
     else:
         return f"Unsupported context type: {type(context).__name__}"
 
@@ -207,7 +218,8 @@ def get_context_summary_dict(context: Union['Codebase', 'SourceFile', 'Class', '
     Returns:
         A dictionary with context-specific summary information
     """
-    if hasattr(context, 'ctx') and hasattr(context, 'files'):  # Codebase
+    # Check if it's a Codebase
+    if hasattr(context, 'ctx') and hasattr(context, 'files'):
         return {
             "type": "Codebase",
             "nodes": len(context.ctx.get_nodes()),
@@ -228,7 +240,9 @@ def get_context_summary_dict(context: Union['Codebase', 'SourceFile', 'Class', '
                 "export": len([x for x in context.ctx.edges if x[2].type == EdgeType.EXPORT])
             }
         }
-    elif hasattr(context, 'imports') and hasattr(context, 'name') and not hasattr(context, 'methods'):  # SourceFile
+    
+    # Check if it's a SourceFile
+    elif hasattr(context, 'imports') and hasattr(context, 'name') and not hasattr(context, 'methods'):
         return {
             "type": "SourceFile",
             "name": context.name,
@@ -242,7 +256,9 @@ def get_context_summary_dict(context: Union['Codebase', 'SourceFile', 'Class', '
             },
             "importers": len(context.imports)
         }
-    elif hasattr(context, 'methods') and hasattr(context, 'attributes'):  # Class
+    
+    # Check if it's a Class
+    elif hasattr(context, 'methods') and hasattr(context, 'attributes'):
         symbol_summary = _get_symbol_summary_dict(context)
         return {
             "type": "Class",
@@ -254,7 +270,9 @@ def get_context_summary_dict(context: Union['Codebase', 'SourceFile', 'Class', '
             "dependencies": len(context.dependencies),
             "usages": symbol_summary
         }
-    elif hasattr(context, 'parameters') and hasattr(context, 'function_calls'):  # Function
+    
+    # Check if it's a Function
+    elif hasattr(context, 'parameters') and hasattr(context, 'function_calls'):
         symbol_summary = _get_symbol_summary_dict(context)
         return {
             "type": "Function",
@@ -267,8 +285,12 @@ def get_context_summary_dict(context: Union['Codebase', 'SourceFile', 'Class', '
             "dependencies": len(context.dependencies),
             "usages": symbol_summary
         }
-    elif hasattr(context, 'symbol_usages'):  # Symbol
+    
+    # Check if it's a Symbol
+    elif hasattr(context, 'symbol_usages'):
         return _get_symbol_summary_dict(context)
+    
+    # Unsupported type
     else:
         return {"error": f"Unsupported context type: {type(context).__name__}"}
 
@@ -1327,7 +1349,7 @@ async def root():
             "🎯 Context-aware recommendations",
             "🔒 Security vulnerability scanning",
             "⚡ Performance bottleneck detection",
-            "�� Usage heat maps",
+            "📊 Usage heat maps",
             "🏗️ Architecture analysis"
         ],
         "graph_sitter_available": GRAPH_SITTER_AVAILABLE,
