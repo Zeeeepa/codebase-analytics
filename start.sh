@@ -110,9 +110,53 @@ fi
 # Start the frontend
 echo -e "${BLUE}Starting frontend on port $FRONTEND_PORT...${NC}"
 cd frontend
-PORT=$FRONTEND_PORT npm run dev &
+# The port is now hardcoded in package.json as 8667
+echo -e "${YELLOW}Using Next.js port 8667 from package.json${NC}"
+npm run dev &
 FRONTEND_PID=$!
+echo -e "${YELLOW}Frontend process started with PID: $FRONTEND_PID${NC}"
 cd ..
+
+# Wait for the frontend to start
+echo -e "${YELLOW}Waiting for frontend to start...${NC}"
+MAX_ATTEMPTS=10
+ATTEMPT=1
+FRONTEND_STARTED=false
+
+while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+  echo -n "."
+  # Check if the Next.js process is still running
+  if ! kill -0 $FRONTEND_PID 2>/dev/null; then
+    echo ""
+    echo -e "${RED}❌ Frontend process died. Check logs for errors.${NC}"
+    kill $BACKEND_PID 2>/dev/null
+    exit 1
+  fi
+  
+  # Try to connect to the frontend port
+  if curl -s http://localhost:$FRONTEND_PORT > /dev/null; then
+    echo ""
+    echo -e "${GREEN}✅ Frontend is running successfully on port $FRONTEND_PORT!${NC}"
+    FRONTEND_STARTED=true
+    break
+  fi
+  ATTEMPT=$((ATTEMPT + 1))
+  sleep 2
+done
+
+if [ "$FRONTEND_STARTED" = false ]; then
+  echo ""
+  echo -e "${RED}❌ Frontend failed to start on port $FRONTEND_PORT. Check logs for errors.${NC}"
+  kill $BACKEND_PID 2>/dev/null
+  kill $FRONTEND_PID 2>/dev/null
+  exit 1
+fi
+
+echo -e "${GREEN}Both services are running!${NC}"
+echo -e "${BLUE}Backend API: ${NC}http://localhost:$BACKEND_PORT"
+echo -e "${BLUE}API Documentation: ${NC}http://localhost:$BACKEND_PORT/docs"
+echo -e "${BLUE}Frontend: ${NC}http://localhost:$FRONTEND_PORT"
+echo -e "${YELLOW}Press Ctrl+C to stop both services${NC}"
 
 # Function to handle script termination
 function cleanup {
@@ -125,12 +169,6 @@ function cleanup {
 
 # Set up trap to catch termination signals
 trap cleanup SIGINT SIGTERM
-
-echo -e "${GREEN}Both services are running!${NC}"
-echo -e "${BLUE}Backend API: ${NC}http://localhost:$BACKEND_PORT"
-echo -e "${BLUE}API Documentation: ${NC}http://localhost:$BACKEND_PORT/docs"
-echo -e "${BLUE}Frontend: ${NC}http://localhost:$FRONTEND_PORT"
-echo -e "${YELLOW}Press Ctrl+C to stop both services${NC}"
 
 # Keep the script running
 wait
