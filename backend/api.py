@@ -146,31 +146,80 @@ def get_function_summary(func: 'Function') -> str:
 
 def get_symbol_summary(symbol: 'Symbol') -> str:
     """
-    Generate a summary of a symbol's usage.
+    Generate a summary of a symbol.
     
     Args:
         symbol: The Symbol object to summarize
         
     Returns:
-        A formatted string with symbol usage information
+        A formatted string with symbol usage statistics
     """
-    usages = symbol.symbol_usages
-    imported_symbols = [x.imported_symbol for x in usages if isinstance(x, Import)]
-
-    return f"""==== [ `{symbol.name}` ({type(symbol).__name__}) Usage Summary ] ====
-- {len(usages)} usages
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function])} functions
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class])} classes
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar])} global variables
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])} interfaces
-\t- {len(imported_symbols)} imports
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function])} functions
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class])} classes
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar])} global variables
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])} interfaces
-\t\t- {len([x for x in imported_symbols if isinstance(x, ExternalModule)])} external modules
-\t\t- {len([x for x in imported_symbols if isinstance(x, SourceFile)])} files
+    # Count usages by type
+    function_count = 0
+    class_count = 0
+    global_var_count = 0
+    interface_count = 0
+    import_count = 0
+    
+    # Count imported symbols by type
+    imported_functions = 0
+    imported_classes = 0
+    imported_global_vars = 0
+    imported_interfaces = 0
+    imported_external_modules = 0
+    imported_files = 0
+    
+    # Process all symbol usages
+    for usage in symbol.symbol_usages:
+        # Check if it's an import
+        if hasattr(usage, 'imported_symbol'):
+            import_count += 1
+            imported_symbol = usage.imported_symbol
+            
+            # Check the type of the imported symbol
+            if hasattr(imported_symbol, 'symbol_type'):
+                if imported_symbol.symbol_type == "Function":
+                    imported_functions += 1
+                elif imported_symbol.symbol_type == "Class":
+                    imported_classes += 1
+                elif imported_symbol.symbol_type == "GlobalVar":
+                    imported_global_vars += 1
+                elif imported_symbol.symbol_type == "Interface":
+                    imported_interfaces += 1
+            # Check if it's an external module
+            elif hasattr(imported_symbol, 'external_name'):
+                imported_external_modules += 1
+            # Check if it's a file
+            elif hasattr(imported_symbol, 'name') and hasattr(imported_symbol, 'imports'):
+                imported_files += 1
+        # Check if it's a symbol
+        elif hasattr(usage, 'symbol_type'):
+            if usage.symbol_type == "Function":
+                function_count += 1
+            elif usage.symbol_type == "Class":
+                class_count += 1
+            elif usage.symbol_type == "GlobalVar":
+                global_var_count += 1
+            elif usage.symbol_type == "Interface":
+                interface_count += 1
+    
+    # Format the summary
+    summary = f"""==== [ `{symbol.name}` ({type(symbol).__name__}) Usage Summary ] ====
+- {len(symbol.symbol_usages)} usages
+\t- {function_count} functions
+\t- {class_count} classes
+\t- {global_var_count} global variables
+\t- {interface_count} interfaces
+\t- {import_count} imports
+\t\t- {imported_functions} functions
+\t\t- {imported_classes} classes
+\t\t- {imported_global_vars} global variables
+\t\t- {imported_interfaces} interfaces
+\t\t- {imported_external_modules} external modules
+\t\t- {imported_files} files
     """
+    
+    return summary
 
 
 def get_context_summary(context: Union['Codebase', 'SourceFile', 'Class', 'Function', 'Symbol']) -> str:
@@ -305,27 +354,73 @@ def _get_symbol_summary_dict(symbol: 'Symbol') -> Dict[str, Any]:
     Returns:
         A dictionary with symbol usage information
     """
-    usages = symbol.symbol_usages
-    imported_symbols = [x.imported_symbol for x in usages if hasattr(x, 'imported_symbol')]
+    # Count usages by type
+    function_count = 0
+    class_count = 0
+    global_var_count = 0
+    interface_count = 0
+    import_count = 0
+    
+    # Count imported symbols by type
+    imported_functions = 0
+    imported_classes = 0
+    imported_global_vars = 0
+    imported_interfaces = 0
+    imported_external_modules = 0
+    imported_files = 0
+    
+    # Process all symbol usages
+    for usage in symbol.symbol_usages:
+        # Check if it's an import
+        if hasattr(usage, 'imported_symbol'):
+            import_count += 1
+            imported_symbol = usage.imported_symbol
+            
+            # Check the type of the imported symbol
+            if hasattr(imported_symbol, 'symbol_type'):
+                if imported_symbol.symbol_type == "Function":
+                    imported_functions += 1
+                elif imported_symbol.symbol_type == "Class":
+                    imported_classes += 1
+                elif imported_symbol.symbol_type == "GlobalVar":
+                    imported_global_vars += 1
+                elif imported_symbol.symbol_type == "Interface":
+                    imported_interfaces += 1
+            # Check if it's an external module
+            elif hasattr(imported_symbol, 'external_name'):
+                imported_external_modules += 1
+            # Check if it's a file
+            elif hasattr(imported_symbol, 'name') and hasattr(imported_symbol, 'imports'):
+                imported_files += 1
+        # Check if it's a symbol
+        elif hasattr(usage, 'symbol_type'):
+            if usage.symbol_type == "Function":
+                function_count += 1
+            elif usage.symbol_type == "Class":
+                class_count += 1
+            elif usage.symbol_type == "GlobalVar":
+                global_var_count += 1
+            elif usage.symbol_type == "Interface":
+                interface_count += 1
     
     return {
         "type": type(symbol).__name__,
         "name": symbol.name,
-        "total_usages": len(usages),
+        "total_usages": len(symbol.symbol_usages),
         "usage_types": {
-            "functions": len([x for x in usages if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Function]),
-            "classes": len([x for x in usages if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Class]),
-            "global_vars": len([x for x in usages if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.GlobalVar]),
-            "interfaces": len([x for x in usages if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Interface])
+            "functions": function_count,
+            "classes": class_count,
+            "global_vars": global_var_count,
+            "interfaces": interface_count
         },
         "imports": {
-            "total": len(imported_symbols),
-            "functions": len([x for x in imported_symbols if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Function]),
-            "classes": len([x for x in imported_symbols if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Class]),
-            "global_vars": len([x for x in imported_symbols if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.GlobalVar]),
-            "interfaces": len([x for x in imported_symbols if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Interface]),
-            "external_modules": len([x for x in imported_symbols if isinstance(x, ExternalModule)]),
-            "files": len([x for x in imported_symbols if hasattr(x, 'imports') and hasattr(x, 'name') and not hasattr(x, 'methods')])
+            "total": import_count,
+            "functions": imported_functions,
+            "classes": imported_classes,
+            "global_vars": imported_global_vars,
+            "interfaces": imported_interfaces,
+            "external_modules": imported_external_modules,
+            "files": imported_files
         }
     }
 
