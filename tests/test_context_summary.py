@@ -332,7 +332,3 @@ class TestContextSummaryFunctions(unittest.TestCase):
         self.assertIn("error", summary_dict)
         self.assertIsInstance(summary_dict, dict)
 
-
-if __name__ == "__main__":
-    unittest.main()
-
