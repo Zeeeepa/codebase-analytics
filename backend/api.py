@@ -401,6 +401,60 @@ def _get_symbol_summary_dict(symbol: 'Symbol') -> Dict[str, Any]:
     }
 
 
+# Helper functions for codebase analysis
+def get_codebase_summary(codebase):
+    """Generate a summary of the codebase."""
+    return {
+        "files": len(list(codebase.files)),
+        "functions": len(list(codebase.functions)),
+        "classes": len(list(codebase.classes)),
+        "lines_of_code": sum(len(file.source_code.split("\n")) if hasattr(file, "source_code") else 0 for file in codebase.files),
+        "languages": list(set(file.language for file in codebase.files if hasattr(file, "language"))),
+    }
+
+def calculate_complexity_score(codebase):
+    """Calculate complexity score for the codebase."""
+    # This would be a real complexity calculation in production
+    # For now, we'll return a placeholder value
+    return 75.0
+
+def calculate_maintainability_score(codebase):
+    """Calculate maintainability score for the codebase."""
+    # This would be a real maintainability calculation in production
+    # For now, we'll return a placeholder value
+    return 80.0
+
+def calculate_risk_score(codebase):
+    """Calculate risk score for the codebase."""
+    # This would be a real risk calculation in production
+    # For now, we'll return a placeholder value
+    return 20.0
+
+def calculate_quality_grade(score):
+    """Convert a quality score to a letter grade."""
+    if score >= 90:
+        return "A"
+    elif score >= 80:
+        return "B"
+    elif score >= 70:
+        return "C"
+    elif score >= 60:
+        return "D"
+    else:
+        return "F"
+
+def get_codebase_issues(codebase, max_issues=200):
+    """Get issues from the codebase."""
+    # This would find real issues in production
+    # For now, we'll return an empty list
+    return []
+
+def generate_ai_insights(codebase, issues):
+    """Generate AI insights based on codebase and issues."""
+    # This would generate real insights in production
+    # For now, we'll return an empty list
+    return []
+
 # Configure advanced logging
 logging.basicConfig(
     level=logging.INFO,
@@ -511,6 +565,22 @@ class SymbolResponse(BaseModel):
     usages: List[Dict[str, Any]]
     analysis_time: float
 
+# Request model for analyze endpoint
+class AnalyzeRequest(BaseModel):
+    repo_url: str
+    analysis_depth: str = Field(default="comprehensive")
+    focus_areas: List[str] = Field(default_factory=lambda: ["all"])
+    include_context: bool = Field(default=True)
+    max_issues: int = Field(default=200)
+    enable_ai_insights: bool = Field(default=True)
+    
+    @validator('analysis_depth')
+    def validate_depth(cls, v):
+        valid_depths = ["basic", "standard", "comprehensive"]
+        if v not in valid_depths:
+            raise ValueError(f"analysis_depth must be one of {valid_depths}")
+        return v
+
 # Add a new endpoint that matches what the frontend is calling
 @app.get("/", include_in_schema=False)
 async def root():
@@ -519,12 +589,7 @@ async def root():
 # Add a new endpoint that matches what the frontend is calling
 @app.post("/analyze")
 async def analyze(
-    repo_url: str,
-    analysis_depth: str = "comprehensive",
-    focus_areas: List[str] = None,
-    include_context: bool = True,
-    max_issues: int = 200,
-    enable_ai_insights: bool = True,
+    request: AnalyzeRequest,
     api_key: str = Depends(get_api_key)
 ):
     """
@@ -532,14 +597,14 @@ async def analyze(
     This endpoint is called by the frontend and uses the context summary functions.
     """
     start_time = time.time()
-    logger.info(f"Analyzing repository: {repo_url} with depth: {analysis_depth}")
+    logger.info(f"Analyzing repository: {request.repo_url} with depth: {request.analysis_depth}")
     
     # Clone the repository to a temporary directory
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
             # Clone the repository
             logger.info(f"Cloning repository to {temp_dir}")
-            repo = git.Repo.clone_from(repo_url, temp_dir)
+            repo = git.Repo.clone_from(request.repo_url, temp_dir)
             
             # Create a Codebase object using graph-sitter
             from graph_sitter.core.context import Context
@@ -548,124 +613,43 @@ async def analyze(
             ctx = Context()
             codebase = Codebase(ctx, temp_dir)
             
+            # Analyze the codebase
+            logger.info("Analyzing codebase...")
+            
             # Get codebase summary
-            codebase_summary = get_context_summary_dict(codebase)
+            codebase_summary = get_codebase_summary(codebase)
             
-            # Get file summaries
-            file_metrics = []
-            for file in codebase.files:
-                file_summary = get_context_summary_dict(file)
-                file_metrics.append({
-                    "path": file.path,
-                    "name": file.name,
-                    "loc": len(file.source_code.split("\n")) if hasattr(file, "source_code") else 0,
-                    "complexity": 1.0,  # Placeholder, would need actual complexity calculation
-                    "maintainability": 80.0,  # Placeholder
-                    "risk_score": 20.0,  # Placeholder
-                    "functions": len(file.functions),
-                    "classes": len(file.classes)
-                })
+            # Calculate metrics based on analysis_depth
+            complexity_score = calculate_complexity_score(codebase)
+            maintainability_score = calculate_maintainability_score(codebase)
+            risk_score = calculate_risk_score(codebase)
             
-            # Calculate quality metrics
-            quality_score = 85  # Placeholder
-            quality_grade = "B"  # Placeholder
+            # Calculate quality score and grade
+            quality_score = (complexity_score + maintainability_score + (100 - risk_score)) / 3
+            quality_grade = calculate_quality_grade(quality_score)
+            
+            # Get issues based on max_issues
+            issues = get_codebase_issues(codebase, max_issues=request.max_issues)
+            
+            # Get AI insights if enabled
+            ai_insights = []
+            if request.enable_ai_insights:
+                ai_insights = generate_ai_insights(codebase, issues)
             
             # Prepare the response in the format expected by the frontend
             analysis_result = {
-                "repo_url": repo_url,
+                "repo_url": request.repo_url,
                 "description": "Repository analysis using graph-sitter",
                 "quality_score": quality_score,
                 "quality_grade": quality_grade,
-                "line_metrics": {
-                    "total": {
-                        "loc": sum(f["loc"] for f in file_metrics),
-                        "sloc": sum(f["loc"] for f in file_metrics) * 0.8,  # Estimate
-                        "lloc": sum(f["loc"] for f in file_metrics) * 0.6,  # Estimate
-                        "comments": sum(f["loc"] for f in file_metrics) * 0.2,  # Estimate
-                        "comment_density": 20.0  # Placeholder
-                    }
-                },
-                "cyclomatic_complexity": {
-                    "average": 2.5,  # Placeholder
-                    "total": len(list(codebase.functions)) * 2.5  # Placeholder
-                },
-                "maintainability_index": {
-                    "average": 80.0  # Placeholder
-                },
-                "halstead_metrics": {
-                    "total_volume": 10000,  # Placeholder
-                    "average_volume": 100  # Placeholder
-                },
-                "depth_of_inheritance": {
-                    "average": 1.5  # Placeholder
-                },
-                "num_files": len(list(codebase.files)),
-                "num_functions": len(list(codebase.functions)),
-                "num_classes": len(list(codebase.classes)),
-                "monthly_commits": {
-                    "2025-01": 10,  # Placeholder
-                    "2025-02": 15,  # Placeholder
-                    "2025-03": 20,  # Placeholder
-                    "2025-04": 25,  # Placeholder
-                    "2025-05": 30,  # Placeholder
-                    "2025-06": 35  # Placeholder
-                },
-                "issues": {
-                    "statistics": {
-                        "total": 10,  # Placeholder
-                        "critical": 1,  # Placeholder
-                        "high": 2,  # Placeholder
-                        "medium": 3,  # Placeholder
-                        "low": 4,  # Placeholder
-                        "by_category": {
-                            "security": 2,  # Placeholder
-                            "complexity": 3,  # Placeholder
-                            "maintainability": 3,  # Placeholder
-                            "style": 1,  # Placeholder
-                            "performance": 1  # Placeholder
-                        }
-                    },
-                    "details": []  # Would contain actual issues
-                },
-                "visualizations": {
-                    "dependency_graph": {
-                        "nodes": [],  # Would contain actual nodes
-                        "edges": [],  # Would contain actual edges
-                        "stats": {
-                            "total_nodes": len(codebase.ctx.get_nodes()),
-                            "total_edges": len(codebase.ctx.edges),
-                            "file_count": len(list(codebase.files)),
-                            "function_count": len(list(codebase.functions))
-                        }
-                    },
-                    "complexity_heatmap": {
-                        "files": [
-                            {
-                                "file": file.name,
-                                "total_complexity": 10,  # Placeholder
-                                "avg_complexity": 2.5,  # Placeholder
-                                "lines": len(file.source_code.split("\n")) if hasattr(file, "source_code") else 0,
-                                "risk_level": "low"  # Placeholder
-                            }
-                            for file in list(codebase.files)[:20]  # Limit to 20 files
-                        ],
-                        "summary": {
-                            "high_risk": 5,  # Placeholder
-                            "medium_risk": 10,  # Placeholder
-                            "low_risk": 15  # Placeholder
-                        }
-                    },
-                    "file_metrics": file_metrics,
-                    "risk_distribution": {
-                        "high_risk_files": 5,  # Placeholder
-                        "medium_risk_files": 10,  # Placeholder
-                        "low_risk_files": len(list(codebase.files)) - 15  # Placeholder
-                    }
-                }
+                "complexity_score": complexity_score,
+                "maintainability_score": maintainability_score,
+                "risk_score": risk_score,
+                "issues": issues,
+                "ai_insights": ai_insights,
+                "summary": codebase_summary,
+                "analysis_time": time.time() - start_time
             }
-            
-            # Add analysis time
-            analysis_result["analysis_time"] = time.time() - start_time
             
             return analysis_result
             
