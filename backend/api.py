@@ -7,34 +7,295 @@ Provides dynamic analysis based on actual code state and semantic understanding.
 
 import os
 import sys
-import json
-import tempfile
-import shutil
-import subprocess
-import logging
-import math
-import ast
 import re
-import asyncio
+import json
+import time
+import uuid
 import hashlib
-import argparse  # Added for command-line argument parsing
-from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Union, Tuple, Set
-from dataclasses import dataclass, asdict, field
-from collections import defaultdict, Counter
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import logging
+import argparse
+import tempfile
+import subprocess
 import threading
-
-# FastAPI and related imports
-from fastapi import FastAPI, HTTPException, Request, BackgroundTasks, Depends, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, HttpUrl, Field, model_validator, field_validator
-import uvicorn
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
+from datetime import datetime
+from enum import Enum
+from pathlib import Path
+from typing import Dict, List, Optional, Any, Set, Tuple, Union
 import requests
 import networkx as nx
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
+from context_summary import (
+    get_codebase_summary,
+    get_file_summary,
+    get_class_summary,
+    get_function_summary,
+    get_symbol_summary,
+    get_context_summary,
+    get_context_summary_dict
+)
+
+# Add graph-sitter context summary functions
+def get_codebase_summary(codebase: 'Codebase') -> str:
+    """
+    Generate a comprehensive summary of a codebase.
+    
+    Args:
+        codebase: The Codebase object to summarize
+        
+    Returns:
+        A formatted string with node and edge statistics
+    """
+    node_summary = f"""Contains {len(codebase.ctx.get_nodes())} nodes
+- {len(list(codebase.files))} files
+- {len(list(codebase.imports))} imports
+- {len(list(codebase.external_modules))} external_modules
+- {len(list(codebase.symbols))} symbols
+\t- {len(list(codebase.classes))} classes
+\t- {len(list(codebase.functions))} functions
+\t- {len(list(codebase.global_vars))} global_vars
+\t- {len(list(codebase.interfaces))} interfaces
+"""
+    edge_summary = f"""Contains {len(codebase.ctx.edges)} edges
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.SYMBOL_USAGE])} symbol -> used symbol
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.IMPORT_SYMBOL_RESOLUTION])} import -> used symbol
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.EXPORT])} export -> exported symbol
+    """
+
+    return f"{node_summary}\n{edge_summary}"
+
+
+def get_file_summary(file: 'SourceFile') -> str:
+    """
+    Generate a summary of a source file.
+    
+    Args:
+        file: The SourceFile object to summarize
+        
+    Returns:
+        A formatted string with file dependency and usage information
+    """
+    return f"""==== [ `{file.name}` (SourceFile) Dependency Summary ] ====
+- {len(file.imports)} imports
+- {len(file.symbols)} symbol references
+\t- {len(file.classes)} classes
+\t- {len(file.functions)} functions
+\t- {len(file.global_vars)} global variables
+\t- {len(file.interfaces)} interfaces
+
+==== [ `{file.name}` Usage Summary ] ====
+- {len(file.imports)} importers
+"""
+
+
+def get_class_summary(cls: 'Class') -> str:
+    """
+    Generate a summary of a class.
+    
+    Args:
+        cls: The Class object to summarize
+        
+    Returns:
+        A formatted string with class dependency and usage information
+    """
+    return f"""==== [ `{cls.name}` (Class) Dependency Summary ] ====
+- parent classes: {cls.parent_class_names}
+- {len(cls.methods)} methods
+- {len(cls.attributes)} attributes
+- {len(cls.decorators)} decorators
+- {len(cls.dependencies)} dependencies
+
+{get_symbol_summary(cls)}
+    """
+
+
+def get_function_summary(func: 'Function') -> str:
+    """
+    Generate a summary of a function.
+    
+    Args:
+        func: The Function object to summarize
+        
+    Returns:
+        A formatted string with function dependency and usage information
+    """
+    return f"""==== [ `{func.name}` (Function) Dependency Summary ] ====
+- {len(func.return_statements)} return statements
+- {len(func.parameters)} parameters
+- {len(func.function_calls)} function calls
+- {len(func.call_sites)} call sites
+- {len(func.decorators)} decorators
+- {len(func.dependencies)} dependencies
+
+{get_symbol_summary(func)}
+        """
+
+
+def get_symbol_summary(symbol: 'Symbol') -> str:
+    """
+    Generate a summary of a symbol's usage.
+    
+    Args:
+        symbol: The Symbol object to summarize
+        
+    Returns:
+        A formatted string with symbol usage information
+    """
+    usages = symbol.symbol_usages
+    imported_symbols = [x.imported_symbol for x in usages if isinstance(x, Import)]
+
+    return f"""==== [ `{symbol.name}` ({type(symbol).__name__}) Usage Summary ] ====
+- {len(usages)} usages
+\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function])} functions
+\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class])} classes
+\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar])} global variables
+\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])} interfaces
+\t- {len(imported_symbols)} imports
+\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function])} functions
+\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class])} classes
+\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar])} global variables
+\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])} interfaces
+\t\t- {len([x for x in imported_symbols if isinstance(x, ExternalModule)])} external modules
+\t\t- {len([x for x in imported_symbols if isinstance(x, SourceFile)])} files
+    """
+
+
+def get_context_summary(context: Union['Codebase', 'SourceFile', 'Class', 'Function', 'Symbol']) -> str:
+    """
+    Generate a summary for any context object.
+    
+    Args:
+        context: The context object to summarize (Codebase, SourceFile, Class, Function, or Symbol)
+        
+    Returns:
+        A formatted string with context-specific summary information
+    """
+    if hasattr(context, 'ctx') and hasattr(context, 'files'):  # Codebase
+        return get_codebase_summary(context)
+    elif hasattr(context, 'imports') and hasattr(context, 'name') and not hasattr(context, 'methods'):  # SourceFile
+        return get_file_summary(context)
+    elif hasattr(context, 'methods') and hasattr(context, 'attributes'):  # Class
+        return get_class_summary(context)
+    elif hasattr(context, 'parameters') and hasattr(context, 'function_calls'):  # Function
+        return get_function_summary(context)
+    elif hasattr(context, 'symbol_usages'):  # Symbol
+        return get_symbol_summary(context)
+    else:
+        return f"Unsupported context type: {type(context).__name__}"
+
+
+def get_context_summary_dict(context: Union['Codebase', 'SourceFile', 'Class', 'Function', 'Symbol']) -> Dict[str, Any]:
+    """
+    Generate a dictionary summary for any context object.
+    
+    Args:
+        context: The context object to summarize (Codebase, SourceFile, Class, Function, or Symbol)
+        
+    Returns:
+        A dictionary with context-specific summary information
+    """
+    if hasattr(context, 'ctx') and hasattr(context, 'files'):  # Codebase
+        return {
+            "type": "Codebase",
+            "nodes": len(context.ctx.get_nodes()),
+            "edges": len(context.ctx.edges),
+            "files": len(list(context.files)),
+            "imports": len(list(context.imports)),
+            "external_modules": len(list(context.external_modules)),
+            "symbols": {
+                "total": len(list(context.symbols)),
+                "classes": len(list(context.classes)),
+                "functions": len(list(context.functions)),
+                "global_vars": len(list(context.global_vars)),
+                "interfaces": len(list(context.interfaces))
+            },
+            "edge_types": {
+                "symbol_usage": len([x for x in context.ctx.edges if x[2].type == EdgeType.SYMBOL_USAGE]),
+                "import_resolution": len([x for x in context.ctx.edges if x[2].type == EdgeType.IMPORT_SYMBOL_RESOLUTION]),
+                "export": len([x for x in context.ctx.edges if x[2].type == EdgeType.EXPORT])
+            }
+        }
+    elif hasattr(context, 'imports') and hasattr(context, 'name') and not hasattr(context, 'methods'):  # SourceFile
+        return {
+            "type": "SourceFile",
+            "name": context.name,
+            "imports": len(context.imports),
+            "symbols": {
+                "total": len(context.symbols),
+                "classes": len(context.classes),
+                "functions": len(context.functions),
+                "global_vars": len(context.global_vars),
+                "interfaces": len(context.interfaces)
+            },
+            "importers": len(context.imports)
+        }
+    elif hasattr(context, 'methods') and hasattr(context, 'attributes'):  # Class
+        symbol_summary = _get_symbol_summary_dict(context)
+        return {
+            "type": "Class",
+            "name": context.name,
+            "parent_classes": context.parent_class_names,
+            "methods": len(context.methods),
+            "attributes": len(context.attributes),
+            "decorators": len(context.decorators),
+            "dependencies": len(context.dependencies),
+            "usages": symbol_summary
+        }
+    elif hasattr(context, 'parameters') and hasattr(context, 'function_calls'):  # Function
+        symbol_summary = _get_symbol_summary_dict(context)
+        return {
+            "type": "Function",
+            "name": context.name,
+            "return_statements": len(context.return_statements),
+            "parameters": len(context.parameters),
+            "function_calls": len(context.function_calls),
+            "call_sites": len(context.call_sites),
+            "decorators": len(context.decorators),
+            "dependencies": len(context.dependencies),
+            "usages": symbol_summary
+        }
+    elif hasattr(context, 'symbol_usages'):  # Symbol
+        return _get_symbol_summary_dict(context)
+    else:
+        return {"error": f"Unsupported context type: {type(context).__name__}"}
+
+
+def _get_symbol_summary_dict(symbol: 'Symbol') -> Dict[str, Any]:
+    """
+    Helper function to generate a dictionary summary for a symbol.
+    
+    Args:
+        symbol: The Symbol object to summarize
+        
+    Returns:
+        A dictionary with symbol usage information
+    """
+    usages = symbol.symbol_usages
+    imported_symbols = [x.imported_symbol for x in usages if hasattr(x, 'imported_symbol')]
+    
+    return {
+        "type": type(symbol).__name__,
+        "name": symbol.name,
+        "total_usages": len(usages),
+        "usage_types": {
+            "functions": len([x for x in usages if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Function]),
+            "classes": len([x for x in usages if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Class]),
+            "global_vars": len([x for x in usages if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.GlobalVar]),
+            "interfaces": len([x for x in usages if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Interface])
+        },
+        "imports": {
+            "total": len(imported_symbols),
+            "functions": len([x for x in imported_symbols if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Function]),
+            "classes": len([x for x in imported_symbols if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Class]),
+            "global_vars": len([x for x in imported_symbols if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.GlobalVar]),
+            "interfaces": len([x for x in imported_symbols if hasattr(x, 'symbol_type') and x.symbol_type == SymbolType.Interface]),
+            "external_modules": len([x for x in imported_symbols if isinstance(x, ExternalModule)]),
+            "files": len([x for x in imported_symbols if hasattr(x, 'imports') and hasattr(x, 'name') and not hasattr(x, 'methods')])
+        }
+    }
 
 # Configure advanced logging
 logging.basicConfig(
@@ -193,7 +454,7 @@ class PerformanceAnalysis:
 # 🎯 Request/Response Models
 
 class AdvancedAnalysisRequest(BaseModel):
-    repo_url: str = Field(..., description="GitHub repository URL")
+    repo_url: HttpUrl = Field(..., description="GitHub repository URL")
     analysis_depth: str = Field("comprehensive", description="Analysis depth: quick, standard, comprehensive, deep")
     focus_areas: List[str] = Field(default=["all"], description="Focus areas: security, performance, maintainability, architecture")
     include_context: bool = Field(True, description="Include rich context for issues")
