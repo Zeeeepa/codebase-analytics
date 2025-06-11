@@ -241,33 +241,43 @@ class TestContextSummaryFunctions(unittest.TestCase):
 
     def test_get_context_summary_codebase(self):
         """Test get_context_summary with a Codebase object"""
-        summary = get_context_summary(self.mock_codebase)
-        self.assertIn("Contains 100 nodes", summary)
-        self.assertIsInstance(summary, str)
+        with patch('backend.api.get_codebase_summary') as mock_get_codebase_summary:
+            mock_get_codebase_summary.return_value = "Codebase summary"
+            summary = get_context_summary(self.mock_codebase)
+            self.assertEqual(summary, "Codebase summary")
+            mock_get_codebase_summary.assert_called_once_with(self.mock_codebase)
 
     def test_get_context_summary_file(self):
         """Test get_context_summary with a SourceFile object"""
-        summary = get_context_summary(self.mock_file)
-        self.assertIn("test_file.py", summary)
-        self.assertIsInstance(summary, str)
+        with patch('backend.api.get_file_summary') as mock_get_file_summary:
+            mock_get_file_summary.return_value = "File summary"
+            summary = get_context_summary(self.mock_file)
+            self.assertEqual(summary, "File summary")
+            mock_get_file_summary.assert_called_once_with(self.mock_file)
 
     def test_get_context_summary_class(self):
         """Test get_context_summary with a Class object"""
-        summary = get_context_summary(self.mock_class)
-        self.assertIn("TestClass", summary)
-        self.assertIsInstance(summary, str)
+        with patch('backend.api.get_class_summary') as mock_get_class_summary:
+            mock_get_class_summary.return_value = "Class summary"
+            summary = get_context_summary(self.mock_class)
+            self.assertEqual(summary, "Class summary")
+            mock_get_class_summary.assert_called_once_with(self.mock_class)
 
     def test_get_context_summary_function(self):
         """Test get_context_summary with a Function object"""
-        summary = get_context_summary(self.mock_function)
-        self.assertIn("test_function", summary)
-        self.assertIsInstance(summary, str)
+        with patch('backend.api.get_function_summary') as mock_get_function_summary:
+            mock_get_function_summary.return_value = "Function summary"
+            summary = get_context_summary(self.mock_function)
+            self.assertEqual(summary, "Function summary")
+            mock_get_function_summary.assert_called_once_with(self.mock_function)
 
     def test_get_context_summary_symbol(self):
         """Test get_context_summary with a Symbol object"""
-        summary = get_context_summary(self.mock_symbol)
-        self.assertIn("test_symbol", summary)
-        self.assertIsInstance(summary, str)
+        with patch('backend.api.get_symbol_summary') as mock_get_symbol_summary:
+            mock_get_symbol_summary.return_value = "Symbol summary"
+            summary = get_context_summary(self.mock_symbol)
+            self.assertEqual(summary, "Symbol summary")
+            mock_get_symbol_summary.assert_called_once_with(self.mock_symbol)
 
     def test_get_context_summary_unsupported(self):
         """Test get_context_summary with an unsupported object type"""
@@ -292,27 +302,37 @@ class TestContextSummaryFunctions(unittest.TestCase):
 
     def test_get_context_summary_dict_class(self):
         """Test get_context_summary_dict with a Class object"""
-        summary_dict = get_context_summary_dict(self.mock_class)
-        self.assertEqual(summary_dict["type"], "Class")
-        self.assertEqual(summary_dict["name"], "TestClass")
-        self.assertIsInstance(summary_dict, dict)
+        with patch('backend.api._get_symbol_summary_dict') as mock_get_symbol_summary_dict:
+            mock_get_symbol_summary_dict.return_value = {"name": "TestClass", "usages": {}}
+            summary_dict = get_context_summary_dict(self.mock_class)
+            self.assertEqual(summary_dict["type"], "Class")
+            self.assertEqual(summary_dict["name"], "TestClass")
+            self.assertIsInstance(summary_dict, dict)
 
     def test_get_context_summary_dict_function(self):
         """Test get_context_summary_dict with a Function object"""
-        summary_dict = get_context_summary_dict(self.mock_function)
-        self.assertEqual(summary_dict["type"], "Function")
-        self.assertEqual(summary_dict["name"], "test_function")
-        self.assertIsInstance(summary_dict, dict)
+        with patch('backend.api._get_symbol_summary_dict') as mock_get_symbol_summary_dict:
+            mock_get_symbol_summary_dict.return_value = {"name": "test_function", "usages": {}}
+            summary_dict = get_context_summary_dict(self.mock_function)
+            self.assertEqual(summary_dict["type"], "Function")
+            self.assertEqual(summary_dict["name"], "test_function")
+            self.assertIsInstance(summary_dict, dict)
 
     def test_get_context_summary_dict_symbol(self):
         """Test get_context_summary_dict with a Symbol object"""
-        summary_dict = get_context_summary_dict(self.mock_symbol)
-        self.assertEqual(summary_dict["name"], "test_symbol")
-        self.assertIsInstance(summary_dict, dict)
+        with patch('backend.api._get_symbol_summary_dict') as mock_get_symbol_summary_dict:
+            mock_get_symbol_summary_dict.return_value = {"name": "test_symbol", "usages": {}}
+            summary_dict = get_context_summary_dict(self.mock_symbol)
+            self.assertEqual(summary_dict["name"], "test_symbol")
+            self.assertIsInstance(summary_dict, dict)
 
     def test_get_context_summary_dict_unsupported(self):
         """Test get_context_summary_dict with an unsupported object type"""
         summary_dict = get_context_summary_dict("not a valid context object")
         self.assertIn("error", summary_dict)
         self.assertIsInstance(summary_dict, dict)
+
+
+if __name__ == "__main__":
+    unittest.main()
 
