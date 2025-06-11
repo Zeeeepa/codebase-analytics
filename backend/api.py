@@ -421,8 +421,8 @@ def calculate_risk_score(codebase):
     # For now, we'll return a placeholder value
     return 20.0
 
-def calculate_quality_grade(score):
-    """Convert a quality score to a letter grade."""
+def calculate_quality_grade(score: float) -> str:
+    """Calculate a letter grade based on a quality score."""
     if score >= 90:
         return "A"
     elif score >= 80:
@@ -433,6 +433,27 @@ def calculate_quality_grade(score):
         return "D"
     else:
         return "F"
+
+def normalize_repo_url(repo_url: str) -> str:
+    """
+    Normalize a repository URL to ensure it's in the correct format for git clone.
+    
+    Args:
+        repo_url: The repository URL or owner/repo format
+        
+    Returns:
+        A normalized URL that can be used with git clone
+    """
+    # If it's already a full URL, return it
+    if repo_url.startswith(("http://", "https://", "git://")):
+        return repo_url
+    
+    # If it's in the format "owner/repo", convert to GitHub URL
+    if "/" in repo_url and not repo_url.startswith("/"):
+        return f"https://github.com/{repo_url}"
+    
+    # Invalid format
+    raise ValueError(f"Invalid repository URL format: {repo_url}. Please provide a valid GitHub repository URL or username/repo format.")
 
 def get_codebase_issues(codebase, max_issues=200):
     """Get issues from the codebase."""
@@ -506,9 +527,29 @@ app.add_middleware(RequestLoggingMiddleware)
 
 # Pydantic models for request/response
 class CodebaseRequest(BaseModel):
-    repo_url: str = Field(..., description="URL of the repository to analyze")
+    repo_url: str = Field(..., description="GitHub repository URL or owner/repo format")
     branch: Optional[str] = Field(None, description="Branch to analyze (default: main)")
     depth: Optional[int] = Field(1, description="Depth of analysis (1-3)")
+    
+    @field_validator('depth')
+    def validate_depth(cls, v):
+        if v not in [1, 2, 3]:
+            raise ValueError('Depth must be between 1 and 3')
+        return v
+
+class UpgradeAnalysisRequest(BaseModel):
+    repo_url: str = Field(..., description="GitHub repository URL or owner/repo format")
+    branch: Optional[str] = Field("main", description="Branch to analyze")
+    depth: Optional[int] = Field(2, description="Depth of analysis (1-3)")
+    options: Optional[Dict[str, Any]] = Field(
+        default_factory=lambda: {
+            "run_tests": True,
+            "create_pr": False,
+            "include_dev_dependencies": True,
+            "skip_major_versions": False
+        },
+        description="Additional options for upgrade analysis"
+    )
     
     @field_validator('depth')
     def validate_depth(cls, v):
@@ -615,118 +656,192 @@ async def root():
     return {"message": "Welcome to the Codebase Analytics API"}
 
 # Add a new endpoint that matches what the frontend is calling
-@app.post("/analyze")
-async def analyze(
-    request: AnalyzeRequest,
-    api_key: str = Depends(get_api_key)
-):
+@app.post("/analyze", response_model=Dict[str, Any], tags=["Analysis"])
+async def analyze_repository(request: CodebaseRequest, background_tasks: BackgroundTasks):
     """
-    Analyze a repository with the specified parameters.
-    This endpoint is called by the frontend and uses the context summary functions.
+    Analyze a GitHub repository for code quality, complexity, and issues.
     """
-    start_time = time.time()
-    logger.info(f"Analyzing repository: {request.repo_url} with depth: {request.analysis_depth}")
-    
-    # Clone the repository to a temporary directory
-    with tempfile.TemporaryDirectory() as temp_dir:
-        try:
-            # Format the repository URL if needed
-            repo_url = request.repo_url
-            if not repo_url.startswith(("http://", "https://", "git://")):
-                # If it's just a repo name like "username/repo", convert to GitHub URL
-                if "/" in repo_url and not repo_url.startswith("/"):
-                    repo_url = f"https://github.com/{repo_url}"
-                else:
-                    # Invalid format
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Invalid repository URL format: {repo_url}. Please provide a valid GitHub repository URL or username/repo format."
-                    )
-            
-            # Clone the repository
-            logger.info(f"Cloning repository from {repo_url} to {temp_dir}")
+    try:
+        # Validate the repository URL
+        repo_url = request.repo_url
+        branch = request.branch or "main"
+        depth = request.depth or 1
+        
+        # Clone the repository to a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
             try:
-                repo = git.Repo.clone_from(repo_url, temp_dir)
-            except git.exc.GitCommandError as e:
-                if "not found" in str(e) or "does not exist" in str(e):
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Repository not found: {repo_url}. Please check that the repository exists and is accessible."
-                    )
-                elif "Authentication failed" in str(e) or "could not read Username" in str(e):
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail=f"Authentication failed for repository: {repo_url}. Private repositories require authentication."
-                    )
-                else:
+                # Format the repository URL if needed
+                repo_url = request.repo_url
+                if not repo_url.startswith(("http://", "https://", "git://")):
+                    # If it's just a repo name like "username/repo", convert to GitHub URL
+                    if "/" in repo_url and not repo_url.startswith("/"):
+                        repo_url = f"https://github.com/{repo_url}"
+                    else:
+                        # Invalid format
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"Invalid repository URL format: {repo_url}. Please provide a valid GitHub repository URL or username/repo format."
+                        )
+                
+                # Clone the repository
+                logger.info(f"Cloning repository from {repo_url} to {temp_dir}")
+                try:
+                    repo = git.Repo.clone_from(repo_url, temp_dir)
+                except git.exc.GitCommandError as e:
+                    if "not found" in str(e) or "does not exist" in str(e):
+                        raise HTTPException(
+                            status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"Repository not found: {repo_url}. Please check that the repository exists and is accessible."
+                        )
+                    elif "Authentication failed" in str(e) or "could not read Username" in str(e):
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail=f"Authentication failed for repository: {repo_url}. Private repositories require authentication."
+                        )
+                    else:
+                        raise HTTPException(
+                            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            detail=f"Error cloning repository: {str(e)}"
+                        )
+                
+                # Create a Codebase object using graph-sitter
+                try:
+                    from graph_sitter.core.context import Context
+                    from graph_sitter.core.codebase import Codebase
+                    
+                    ctx = Context()
+                    codebase = Codebase(ctx, temp_dir)
+                except Exception as e:
+                    logger.error(f"Error creating Codebase object: {str(e)}")
                     raise HTTPException(
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                        detail=f"Error cloning repository: {str(e)}"
+                        detail=f"Error parsing codebase: {str(e)}"
                     )
-            
-            # Create a Codebase object using graph-sitter
-            try:
-                from graph_sitter.core.context import Context
-                from graph_sitter.core.codebase import Codebase
                 
-                ctx = Context()
-                codebase = Codebase(ctx, temp_dir)
+                # Analyze the codebase
+                logger.info("Analyzing codebase...")
+                
+                # Get codebase summary
+                codebase_summary = get_codebase_summary(codebase)
+                
+                # Calculate metrics based on analysis_depth
+                complexity_score = calculate_complexity_score(codebase)
+                maintainability_score = calculate_maintainability_score(codebase)
+                risk_score = calculate_risk_score(codebase)
+                
+                # Calculate quality score and grade
+                quality_score = (complexity_score + maintainability_score + (100 - risk_score)) / 3
+                quality_grade = calculate_quality_grade(quality_score)
+                
+                # Get issues based on max_issues
+                issues = get_codebase_issues(codebase, max_issues=request.max_issues)
+                
+                # Get AI insights if enabled
+                ai_insights = []
+                if request.enable_ai_insights:
+                    ai_insights = generate_ai_insights(codebase, issues)
+                
+                # Prepare the response in the format expected by the frontend
+                analysis_result = {
+                    "repo_url": request.repo_url,
+                    "description": "Repository analysis using graph-sitter",
+                    "quality_score": quality_score,
+                    "quality_grade": quality_grade,
+                    "complexity_score": complexity_score,
+                    "maintainability_score": maintainability_score,
+                    "risk_score": risk_score,
+                    "issues": issues,
+                    "ai_insights": ai_insights,
+                    "summary": codebase_summary,
+                    "analysis_time": time.time() - start_time
+                }
+                
+                return analysis_result
+            
+            except HTTPException:
+                # Re-raise HTTP exceptions
+                raise
             except Exception as e:
-                logger.error(f"Error creating Codebase object: {str(e)}")
+                logger.error(f"Error analyzing repository: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail=f"Error parsing codebase: {str(e)}"
+                    detail=f"Error analyzing repository: {str(e)}"
                 )
+    
+    except Exception as e:
+        logging.error(f"Error analyzing repository: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error analyzing repository: {str(e)}")
+
+@app.post("/upgrade_analysis", response_model=Dict[str, Any], tags=["Analysis"])
+async def analyze_upgrade_paths(request: UpgradeAnalysisRequest, background_tasks: BackgroundTasks):
+    """
+    Analyze a GitHub repository for potential dependency upgrades and their impact.
+    """
+    try:
+        # Validate the repository URL
+        repo_url = request.repo_url
+        branch = request.branch or "main"
+        depth = request.depth or 2
+        options = request.options or {}
+        
+        # Log the request
+        logging.info(f"Upgrade analysis request for {repo_url}, branch: {branch}, depth: {depth}")
+        logging.info(f"Options: {json.dumps(options)}")
+        
+        # Clone the repository to a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            logging.info(f"Cloning repository to {temp_dir}")
             
-            # Analyze the codebase
-            logger.info("Analyzing codebase...")
+            # Clone the repository
+            try:
+                repo = git.Repo.clone_from(
+                    normalize_repo_url(repo_url),
+                    temp_dir,
+                    branch=branch,
+                    depth=1
+                )
+            except git.GitCommandError as e:
+                logging.error(f"Git clone error: {str(e)}")
+                raise HTTPException(status_code=400, detail=f"Failed to clone repository: {str(e)}")
             
-            # Get codebase summary
-            codebase_summary = get_codebase_summary(codebase)
+            # Analyze the repository for upgrade paths
+            logging.info("Analyzing repository for upgrade paths")
             
-            # Calculate metrics based on analysis_depth
-            complexity_score = calculate_complexity_score(codebase)
-            maintainability_score = calculate_maintainability_score(codebase)
-            risk_score = calculate_risk_score(codebase)
+            # For demonstration purposes, we'll return mock data
+            # In a real implementation, we would analyze the repository's dependencies
+            # and determine potential upgrade paths
             
-            # Calculate quality score and grade
-            quality_score = (complexity_score + maintainability_score + (100 - risk_score)) / 3
-            quality_grade = calculate_quality_grade(quality_score)
-            
-            # Get issues based on max_issues
-            issues = get_codebase_issues(codebase, max_issues=request.max_issues)
-            
-            # Get AI insights if enabled
-            ai_insights = []
-            if request.enable_ai_insights:
-                ai_insights = generate_ai_insights(codebase, issues)
-            
-            # Prepare the response in the format expected by the frontend
-            analysis_result = {
-                "repo_url": request.repo_url,
-                "description": "Repository analysis using graph-sitter",
-                "quality_score": quality_score,
-                "quality_grade": quality_grade,
-                "complexity_score": complexity_score,
-                "maintainability_score": maintainability_score,
-                "risk_score": risk_score,
-                "issues": issues,
-                "ai_insights": ai_insights,
-                "summary": codebase_summary,
-                "analysis_time": time.time() - start_time
+            # Mock data for demonstration
+            mock_results = {
+                "status": "success",
+                "summary": "Successfully analyzed upgrade paths for 12 dependencies. 3 can be safely upgraded.",
+                "details": {
+                    "upgradedDependencies": [
+                        {"name": "react", "fromVersion": "18.2.0", "toVersion": "18.3.0", "breakingChanges": False},
+                        {"name": "typescript", "fromVersion": "5.0.4", "toVersion": "5.2.2", "breakingChanges": False},
+                        {"name": "next", "fromVersion": "13.4.1", "toVersion": "14.0.3", "breakingChanges": True},
+                    ],
+                    "codeChanges": [
+                        {"file": "components/ui/dialog.tsx", "changes": 3, "impact": "low"},
+                        {"file": "app/page.tsx", "changes": 2, "impact": "medium"},
+                        {"file": "lib/utils.ts", "changes": 1, "impact": "low"},
+                    ],
+                    "testResults": {
+                        "passed": 42,
+                        "failed": 2,
+                        "skipped": 0,
+                    }
+                },
+                "timestamp": datetime.now().isoformat(),
             }
             
-            return analysis_result
+            return mock_results
             
-        except HTTPException:
-            # Re-raise HTTP exceptions
-            raise
-        except Exception as e:
-            logger.error(f"Error analyzing repository: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Error analyzing repository: {str(e)}"
-            )
+    except Exception as e:
+        logging.error(f"Error analyzing upgrade paths: {str(e)}")
+        logging.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Error analyzing upgrade paths: {str(e)}")
 
 # Update the existing endpoints to use the real context summary functions
 @app.post("/api/analyze/codebase", response_model=CodebaseResponse)

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
+import UpgradeRunUI, { UpgradeRunResults } from "@/components/upgrade-run-ui"
 
 // Enhanced interfaces for the new API response
 interface CodeIssue {
@@ -297,64 +298,16 @@ export default function EnhancedAnalyticsDashboard() {
             </Badge>
           </div>
         </div>
-        
-        {/* Quick Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6" role="region" aria-label="Repository statistics">
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <FileCode2 className="h-5 w-5 text-blue-500" aria-hidden="true" />
-                <div>
-                  <div className="text-2xl font-bold" aria-label={`${repoData.num_files} files`}>{repoData.num_files}</div>
-                  <div className="text-sm text-muted-foreground">Files</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <Code className="h-5 w-5 text-green-500" aria-hidden="true" />
-                <div>
-                  <div className="text-2xl font-bold" aria-label={`${repoData.num_functions} functions`}>{repoData.num_functions}</div>
-                  <div className="text-sm text-muted-foreground">Functions</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-orange-500" aria-hidden="true" />
-                <div>
-                  <div className="text-2xl font-bold" aria-label={`${repoData.issues.statistics.total} issues found`}>{repoData.issues.statistics.total}</div>
-                  <div className="text-sm text-muted-foreground">Issues</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-purple-500" aria-hidden="true" />
-                <div>
-                  <div className="text-2xl font-bold" aria-label={`${repoData.line_metrics.total.loc.toLocaleString()} lines of code`}>{repoData.line_metrics.total.loc.toLocaleString()}</div>
-                  <div className="text-sm text-muted-foreground">Lines of Code</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
       </header>
 
-      {/* Main Content Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5" role="tablist" aria-label="Analysis sections">
-          <TabsTrigger value="overview" role="tab" aria-controls="overview-panel">Overview</TabsTrigger>
-          <TabsTrigger value="issues" role="tab" aria-controls="issues-panel">Issues & Errors</TabsTrigger>
-          <TabsTrigger value="complexity" role="tab" aria-controls="complexity-panel">Complexity</TabsTrigger>
-          <TabsTrigger value="dependencies" role="tab" aria-controls="dependencies-panel">Dependencies</TabsTrigger>
-          <TabsTrigger value="trends" role="tab" aria-controls="trends-panel">Trends</TabsTrigger>
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="grid grid-cols-1 md:grid-cols-5 lg:grid-cols-6 h-auto gap-2">
+          <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Overview</TabsTrigger>
+          <TabsTrigger value="issues" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Issues</TabsTrigger>
+          <TabsTrigger value="complexity" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Complexity</TabsTrigger>
+          <TabsTrigger value="dependencies" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Dependencies</TabsTrigger>
+          <TabsTrigger value="trends" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Trends</TabsTrigger>
+          <TabsTrigger value="upgrade" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Upgrade</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -780,6 +733,11 @@ export default function EnhancedAnalyticsDashboard() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Upgrade Tab */}
+        <TabsContent value="upgrade" className="space-y-6" role="tabpanel" id="upgrade-panel" aria-labelledby="upgrade-tab">
+          <UpgradeRunUI repoUrl={repoData.repo_url} />
         </TabsContent>
       </Tabs>
     </div>

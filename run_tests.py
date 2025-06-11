@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """
-Main test runner for codebase-analytics
-
-This script runs all tests in the tests directory and reports successes and failures.
+Test runner for the codebase analytics project.
+Runs all tests and reports results.
 """
 
 import unittest
 import sys
 import os
 import time
+import argparse
 from collections import defaultdict
+
+# Add the parent directory to the path so we can import the backend module
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+
+# Import test modules
+from tests.test_context_summary import TestContextSummary
+from tests.test_upgrade_analysis import TestUpgradeAnalysis
 
 def run_tests():
     """Run all tests and report results"""
@@ -102,4 +109,3 @@ if __name__ == "__main__":
     # Run tests and exit with appropriate status code
     success = run_tests()
     sys.exit(0 if success else 1)
-

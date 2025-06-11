@@ -1,0 +1,37 @@
+2025-06-11 23:51:49,326 - root - INFO - Upgrade analysis request for test/repo, branch: main, depth: 2
+2025-06-11 23:51:49,326 - root - INFO - Options: {"run_tests": true, "create_pr": false, "include_dev_dependencies": true, "skip_major_versions": false}
+2025-06-11 23:51:49,326 - root - INFO - Cloning repository to /tmp/tmpdq6_zlle
+2025-06-11 23:51:49,327 - root - INFO - Analyzing repository for upgrade paths
+2025-06-11 23:51:49,327 - backend.api - INFO - Request: POST /upgrade_analysis - Status: 200 - Time: 0.0030s
+2025-06-11 23:51:49,328 - httpx - INFO - HTTP Request: POST http://testserver/upgrade_analysis "HTTP/1.1 200 OK"
+2025-06-11 23:51:49,330 - root - INFO - Upgrade analysis request for test/repo, branch: main, depth: 2
+2025-06-11 23:51:49,330 - root - INFO - Options: {"run_tests": true, "create_pr": false, "include_dev_dependencies": true, "skip_major_versions": false}
+2025-06-11 23:51:49,331 - root - INFO - Cloning repository to /tmp/tmpcwcke4b3
+2025-06-11 23:51:49,331 - root - ERROR - Error analyzing upgrade paths: Git error
+2025-06-11 23:51:49,333 - root - ERROR - Traceback (most recent call last):
+  File "/tmp/Zeeeepa/codebase-analytics/backend/api.py", line 798, in analyze_upgrade_paths
+    repo = git.Repo.clone_from(
+        normalize_repo_url(repo_url),
+    ...<2 lines>...
+        depth=1
+    )
+  File "/usr/local/lib/python3.13/unittest/mock.py", line 1169, in __call__
+    return self._mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/unittest/mock.py", line 1173, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.13/unittest/mock.py", line 1228, in _execute_mock_call
+    raise effect
+Exception: Git error
+
+2025-06-11 23:51:49,333 - backend.api - INFO - Request: POST /upgrade_analysis - Status: 500 - Time: 0.0032s
+2025-06-11 23:51:49,334 - httpx - INFO - HTTP Request: POST http://testserver/upgrade_analysis "HTTP/1.1 500 Internal Server Error"
+2025-06-11 23:51:49,335 - backend.api - INFO - Request: POST /upgrade_analysis - Status: 422 - Time: 0.0005s
+2025-06-11 23:51:49,336 - httpx - INFO - HTTP Request: POST http://testserver/upgrade_analysis "HTTP/1.1 422 Unprocessable Entity"
+2025-06-11 23:51:49,337 - root - INFO - Upgrade analysis request for test/repo, branch: main, depth: 2
+2025-06-11 23:51:49,337 - root - INFO - Options: {"run_tests": true, "create_pr": false, "include_dev_dependencies": true, "skip_major_versions": false}
+2025-06-11 23:51:49,338 - root - INFO - Cloning repository to /tmp/tmp5ytxk3bc
+2025-06-11 23:51:49,338 - root - INFO - Analyzing repository for upgrade paths
+2025-06-11 23:51:49,338 - backend.api - INFO - Request: POST /upgrade_analysis - Status: 200 - Time: 0.0010s
+2025-06-11 23:51:49,338 - httpx - INFO - HTTP Request: POST http://testserver/upgrade_analysis "HTTP/1.1 200 OK"
