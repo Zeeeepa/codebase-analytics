@@ -17,6 +17,7 @@ import argparse
 import tempfile
 import subprocess
 import threading
+import git
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -504,11 +505,172 @@ class SymbolResponse(BaseModel):
     usages: List[Dict[str, Any]]
     analysis_time: float
 
-# API endpoints
+# Add a new endpoint that matches what the frontend is calling
 @app.get("/", include_in_schema=False)
 async def root():
     return {"message": "Welcome to the Codebase Analytics API"}
 
+# Add a new endpoint that matches what the frontend is calling
+@app.post("/analyze")
+async def analyze(
+    repo_url: str,
+    analysis_depth: str = "comprehensive",
+    focus_areas: List[str] = None,
+    include_context: bool = True,
+    max_issues: int = 200,
+    enable_ai_insights: bool = True,
+    api_key: str = Depends(get_api_key)
+):
+    """
+    Analyze a repository with the specified parameters.
+    This endpoint is called by the frontend and uses the context summary functions.
+    """
+    start_time = time.time()
+    logger.info(f"Analyzing repository: {repo_url} with depth: {analysis_depth}")
+    
+    # Clone the repository to a temporary directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+        try:
+            # Clone the repository
+            logger.info(f"Cloning repository to {temp_dir}")
+            repo = git.Repo.clone_from(repo_url, temp_dir)
+            
+            # Create a Codebase object using graph-sitter
+            from graph_sitter.core.context import Context
+            from graph_sitter.core.codebase import Codebase
+            
+            ctx = Context()
+            codebase = Codebase(ctx, temp_dir)
+            
+            # Get codebase summary
+            codebase_summary = get_context_summary_dict(codebase)
+            
+            # Get file summaries
+            file_metrics = []
+            for file in codebase.files:
+                file_summary = get_context_summary_dict(file)
+                file_metrics.append({
+                    "path": file.path,
+                    "name": file.name,
+                    "loc": len(file.source_code.split("\n")) if hasattr(file, "source_code") else 0,
+                    "complexity": 1.0,  # Placeholder, would need actual complexity calculation
+                    "maintainability": 80.0,  # Placeholder
+                    "risk_score": 20.0,  # Placeholder
+                    "functions": len(file.functions),
+                    "classes": len(file.classes)
+                })
+            
+            # Calculate quality metrics
+            quality_score = 85  # Placeholder
+            quality_grade = "B"  # Placeholder
+            
+            # Prepare the response in the format expected by the frontend
+            analysis_result = {
+                "repo_url": repo_url,
+                "description": "Repository analysis using graph-sitter",
+                "quality_score": quality_score,
+                "quality_grade": quality_grade,
+                "line_metrics": {
+                    "total": {
+                        "loc": sum(f["loc"] for f in file_metrics),
+                        "sloc": sum(f["loc"] for f in file_metrics) * 0.8,  # Estimate
+                        "lloc": sum(f["loc"] for f in file_metrics) * 0.6,  # Estimate
+                        "comments": sum(f["loc"] for f in file_metrics) * 0.2,  # Estimate
+                        "comment_density": 20.0  # Placeholder
+                    }
+                },
+                "cyclomatic_complexity": {
+                    "average": 2.5,  # Placeholder
+                    "total": len(list(codebase.functions)) * 2.5  # Placeholder
+                },
+                "maintainability_index": {
+                    "average": 80.0  # Placeholder
+                },
+                "halstead_metrics": {
+                    "total_volume": 10000,  # Placeholder
+                    "average_volume": 100  # Placeholder
+                },
+                "depth_of_inheritance": {
+                    "average": 1.5  # Placeholder
+                },
+                "num_files": len(list(codebase.files)),
+                "num_functions": len(list(codebase.functions)),
+                "num_classes": len(list(codebase.classes)),
+                "monthly_commits": {
+                    "2025-01": 10,  # Placeholder
+                    "2025-02": 15,  # Placeholder
+                    "2025-03": 20,  # Placeholder
+                    "2025-04": 25,  # Placeholder
+                    "2025-05": 30,  # Placeholder
+                    "2025-06": 35  # Placeholder
+                },
+                "issues": {
+                    "statistics": {
+                        "total": 10,  # Placeholder
+                        "critical": 1,  # Placeholder
+                        "high": 2,  # Placeholder
+                        "medium": 3,  # Placeholder
+                        "low": 4,  # Placeholder
+                        "by_category": {
+                            "security": 2,  # Placeholder
+                            "complexity": 3,  # Placeholder
+                            "maintainability": 3,  # Placeholder
+                            "style": 1,  # Placeholder
+                            "performance": 1  # Placeholder
+                        }
+                    },
+                    "details": []  # Would contain actual issues
+                },
+                "visualizations": {
+                    "dependency_graph": {
+                        "nodes": [],  # Would contain actual nodes
+                        "edges": [],  # Would contain actual edges
+                        "stats": {
+                            "total_nodes": len(codebase.ctx.get_nodes()),
+                            "total_edges": len(codebase.ctx.edges),
+                            "file_count": len(list(codebase.files)),
+                            "function_count": len(list(codebase.functions))
+                        }
+                    },
+                    "complexity_heatmap": {
+                        "files": [
+                            {
+                                "file": file.name,
+                                "total_complexity": 10,  # Placeholder
+                                "avg_complexity": 2.5,  # Placeholder
+                                "lines": len(file.source_code.split("\n")) if hasattr(file, "source_code") else 0,
+                                "risk_level": "low"  # Placeholder
+                            }
+                            for file in list(codebase.files)[:20]  # Limit to 20 files
+                        ],
+                        "summary": {
+                            "high_risk": 5,  # Placeholder
+                            "medium_risk": 10,  # Placeholder
+                            "low_risk": 15  # Placeholder
+                        }
+                    },
+                    "file_metrics": file_metrics,
+                    "risk_distribution": {
+                        "high_risk_files": 5,  # Placeholder
+                        "medium_risk_files": 10,  # Placeholder
+                        "low_risk_files": len(list(codebase.files)) - 15  # Placeholder
+                    }
+                }
+            }
+            
+            # Add analysis time
+            analysis_result["analysis_time"] = time.time() - start_time
+            
+            return analysis_result
+            
+        except Exception as e:
+            logger.error(f"Error analyzing repository: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Error analyzing repository: {str(e)}"
+            )
+
+# Update the existing endpoints to use the real context summary functions
 @app.post("/api/analyze/codebase", response_model=CodebaseResponse)
 async def analyze_codebase(request: CodebaseRequest, api_key: str = Depends(get_api_key)):
     """
@@ -516,27 +678,52 @@ async def analyze_codebase(request: CodebaseRequest, api_key: str = Depends(get_
     """
     start_time = time.time()
     
-    # Mock implementation for now
-    analysis_result = {
-        "repo_url": request.repo_url,
-        "branch": request.branch or "main",
-        "summary": {
-            "files": 120,
-            "classes": 45,
-            "functions": 230,
-            "symbols": 560,
-            "complexity": 0.75,
-            "maintainability": 0.82,
-            "test_coverage": 0.68
-        },
-        "files": 120,
-        "classes": 45,
-        "functions": 230,
-        "symbols": 560,
-        "analysis_time": time.time() - start_time
-    }
+    try:
+        # Clone the repository to a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Clone the repository
+            repo = git.Repo.clone_from(request.repo_url, temp_dir)
+            if request.branch:
+                repo.git.checkout(request.branch)
+            
+            # Create a Codebase object using graph-sitter
+            from graph_sitter.core.context import Context
+            from graph_sitter.core.codebase import Codebase
+            
+            ctx = Context()
+            codebase = Codebase(ctx, temp_dir)
+            
+            # Get codebase summary using our context summary functions
+            codebase_summary = get_context_summary_dict(codebase)
+            
+            # Prepare the response
+            analysis_result = {
+                "repo_url": request.repo_url,
+                "branch": request.branch or "main",
+                "summary": {
+                    "files": codebase_summary["files"],
+                    "classes": codebase_summary["symbols"]["classes"],
+                    "functions": codebase_summary["symbols"]["functions"],
+                    "symbols": codebase_summary["symbols"]["total"],
+                    "complexity": 0.75,  # Placeholder
+                    "maintainability": 0.82,  # Placeholder
+                    "test_coverage": 0.68  # Placeholder
+                },
+                "files": codebase_summary["files"],
+                "classes": codebase_summary["symbols"]["classes"],
+                "functions": codebase_summary["symbols"]["functions"],
+                "symbols": codebase_summary["symbols"]["total"],
+                "analysis_time": time.time() - start_time
+            }
+            
+            return analysis_result
     
-    return analysis_result
+    except Exception as e:
+        logger.error(f"Error analyzing codebase: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error analyzing codebase: {str(e)}"
+        )
 
 @app.post("/api/analyze/file", response_model=FileResponse)
 async def analyze_file(request: FileRequest, api_key: str = Depends(get_api_key)):
@@ -545,26 +732,70 @@ async def analyze_file(request: FileRequest, api_key: str = Depends(get_api_key)
     """
     start_time = time.time()
     
-    # Mock implementation for now
-    analysis_result = {
-        "repo_url": request.repo_url,
-        "file_path": request.file_path,
-        "branch": request.branch or "main",
-        "summary": {
-            "lines": 250,
-            "classes": 2,
-            "functions": 8,
-            "imports": 5,
-            "complexity": 0.65,
-            "maintainability": 0.78
-        },
-        "classes": ["UserService", "AuthManager"],
-        "functions": ["authenticate", "validate_token", "get_user", "update_user", "delete_user", "create_user", "list_users", "search_users"],
-        "imports": ["os", "sys", "json", "datetime", "requests"],
-        "analysis_time": time.time() - start_time
-    }
+    try:
+        # Clone the repository to a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Clone the repository
+            repo = git.Repo.clone_from(request.repo_url, temp_dir)
+            if request.branch:
+                repo.git.checkout(request.branch)
+            
+            # Create a Codebase object using graph-sitter
+            from graph_sitter.core.context import Context
+            from graph_sitter.core.codebase import Codebase
+            
+            ctx = Context()
+            codebase = Codebase(ctx, temp_dir)
+            
+            # Find the requested file
+            file_path = os.path.join(temp_dir, request.file_path)
+            file = None
+            for f in codebase.files:
+                if f.path == file_path or f.name == request.file_path:
+                    file = f
+                    break
+            
+            if not file:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"File not found: {request.file_path}"
+                )
+            
+            # Get file summary using our context summary functions
+            file_summary = get_context_summary_dict(file)
+            
+            # Get class and function names
+            class_names = [cls.name for cls in file.classes]
+            function_names = [func.name for func in file.functions]
+            import_names = [imp.imported_name for imp in file.imports]
+            
+            # Prepare the response
+            analysis_result = {
+                "repo_url": request.repo_url,
+                "file_path": request.file_path,
+                "branch": request.branch or "main",
+                "summary": {
+                    "lines": len(file.source_code.split("\n")) if hasattr(file, "source_code") else 0,
+                    "classes": len(class_names),
+                    "functions": len(function_names),
+                    "imports": len(import_names),
+                    "complexity": 0.65,  # Placeholder
+                    "maintainability": 0.78  # Placeholder
+                },
+                "classes": class_names,
+                "functions": function_names,
+                "imports": import_names,
+                "analysis_time": time.time() - start_time
+            }
+            
+            return analysis_result
     
-    return analysis_result
+    except Exception as e:
+        logger.error(f"Error analyzing file: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error analyzing file: {str(e)}"
+        )
 
 @app.post("/api/analyze/symbol", response_model=SymbolResponse)
 async def analyze_symbol(request: SymbolRequest, api_key: str = Depends(get_api_key)):
@@ -573,29 +804,81 @@ async def analyze_symbol(request: SymbolRequest, api_key: str = Depends(get_api_
     """
     start_time = time.time()
     
-    # Mock implementation for now
-    analysis_result = {
-        "repo_url": request.repo_url,
-        "symbol_name": request.symbol_name,
-        "file_path": request.file_path,
-        "branch": request.branch or "main",
-        "summary": {
-            "type": "function",
-            "lines": 25,
-            "parameters": 3,
-            "return_type": "User",
-            "complexity": 0.45,
-            "maintainability": 0.82
-        },
-        "usages": [
-            {"file": "src/controllers/user_controller.py", "line": 45, "type": "call"},
-            {"file": "src/controllers/auth_controller.py", "line": 32, "type": "call"},
-            {"file": "tests/test_user_service.py", "line": 78, "type": "call"}
-        ],
-        "analysis_time": time.time() - start_time
-    }
+    try:
+        # Clone the repository to a temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Clone the repository
+            repo = git.Repo.clone_from(request.repo_url, temp_dir)
+            if request.branch:
+                repo.git.checkout(request.branch)
+            
+            # Create a Codebase object using graph-sitter
+            from graph_sitter.core.context import Context
+            from graph_sitter.core.codebase import Codebase
+            
+            ctx = Context()
+            codebase = Codebase(ctx, temp_dir)
+            
+            # Find the requested symbol
+            symbol = None
+            for s in codebase.symbols:
+                if s.name == request.symbol_name:
+                    if request.file_path:
+                        # If file_path is specified, check if the symbol is in that file
+                        file_path = os.path.join(temp_dir, request.file_path)
+                        if s.file and (s.file.path == file_path or s.file.name == request.file_path):
+                            symbol = s
+                            break
+                    else:
+                        # If file_path is not specified, use the first matching symbol
+                        symbol = s
+                        break
+            
+            if not symbol:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Symbol not found: {request.symbol_name}"
+                )
+            
+            # Get symbol summary using our context summary functions
+            symbol_summary = get_context_summary_dict(symbol)
+            
+            # Get symbol usages
+            usages = []
+            for usage in symbol.symbol_usages:
+                if hasattr(usage, "file") and usage.file:
+                    usages.append({
+                        "file": usage.file.name,
+                        "line": usage.line if hasattr(usage, "line") else 0,
+                        "type": "call" if type(usage).__name__ == "Function" else "reference"
+                    })
+            
+            # Prepare the response
+            analysis_result = {
+                "repo_url": request.repo_url,
+                "symbol_name": request.symbol_name,
+                "file_path": request.file_path,
+                "branch": request.branch or "main",
+                "summary": {
+                    "type": symbol_summary["type"],
+                    "lines": 25,  # Placeholder
+                    "parameters": 3,  # Placeholder
+                    "return_type": "User",  # Placeholder
+                    "complexity": 0.45,  # Placeholder
+                    "maintainability": 0.82  # Placeholder
+                },
+                "usages": usages,
+                "analysis_time": time.time() - start_time
+            }
+            
+            return analysis_result
     
-    return analysis_result
+    except Exception as e:
+        logger.error(f"Error analyzing symbol: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error analyzing symbol: {str(e)}"
+        )
 
 @app.get("/api/health")
 async def health_check():
@@ -613,4 +896,3 @@ if __name__ == "__main__":
     
     import uvicorn
     uvicorn.run(app, host=args.host, port=args.port)
-
