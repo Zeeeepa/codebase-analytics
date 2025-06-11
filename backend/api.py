@@ -14,6 +14,7 @@ import tempfile
 import traceback
 import re
 import git
+import argparse
 from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
 
@@ -509,7 +510,7 @@ class CodebaseRequest(BaseModel):
     branch: Optional[str] = Field(None, description="Branch to analyze (default: main)")
     depth: Optional[int] = Field(1, description="Depth of analysis (1-3)")
     
-    @validator('depth')
+    @field_validator('depth')
     def validate_depth(cls, v):
         if v not in [1, 2, 3]:
             raise ValueError('Depth must be between 1 and 3')
