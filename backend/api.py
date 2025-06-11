@@ -7,24 +7,25 @@ Provides dynamic analysis based on actual code state and semantic understanding.
 
 import os
 import sys
-import re
-import json
 import time
-import uuid
-import hashlib
+import json
 import logging
-import argparse
 import tempfile
-import subprocess
-import threading
+import traceback
+import re
 import git
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from typing import Dict, List, Any, Optional, Union
 from datetime import datetime
-from enum import Enum
-from pathlib import Path
-from typing import Dict, List, Optional, Any, Set, Tuple, Union
-from collections import defaultdict, Counter
+
+import fastapi
+from fastapi import FastAPI, HTTPException, Depends, Query, status, Request, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from fastapi.security import APIKeyHeader
+from pydantic import BaseModel, Field, validator, Field, field_validator, HttpUrl
+from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 # Import graph-sitter components
 from graph_sitter.core.class_definition import Class
@@ -35,17 +36,6 @@ from graph_sitter.core.function import Function
 from graph_sitter.core.import_resolution import Import
 from graph_sitter.core.symbol import Symbol
 from graph_sitter.enums import EdgeType, SymbolType
-
-import fastapi
-from fastapi import FastAPI, HTTPException, Depends, Query, status, Request, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from fastapi.security import APIKeyHeader
-from pydantic import BaseModel, Field, validator
-from starlette.concurrency import run_in_threadpool
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
-
 
 # Add graph-sitter context summary functions
 def get_codebase_summary(codebase: 'Codebase') -> str:
@@ -568,18 +558,55 @@ class SymbolResponse(BaseModel):
 # Request model for analyze endpoint
 class AnalyzeRequest(BaseModel):
     repo_url: str
-    analysis_depth: str = Field(default="comprehensive")
-    focus_areas: List[str] = Field(default_factory=lambda: ["all"])
-    include_context: bool = Field(default=True)
-    max_issues: int = Field(default=200)
-    enable_ai_insights: bool = Field(default=True)
+    analysis_depth: str = Field(
+        default="comprehensive",
+        description="Depth of analysis to perform: basic, standard, or comprehensive"
+    )
+    focus_areas: List[str] = Field(
+        default_factory=lambda: ["all"],
+        description="Areas to focus analysis on: code, tests, documentation, security, performance, or all"
+    )
+    include_context: bool = Field(
+        default=True,
+        description="Whether to include context information in the analysis"
+    )
+    max_issues: int = Field(
+        default=200,
+        description="Maximum number of issues to return",
+        ge=1,
+        le=1000
+    )
+    enable_ai_insights: bool = Field(
+        default=True,
+        description="Whether to enable AI-powered insights"
+    )
     
-    @validator('analysis_depth')
+    @field_validator('analysis_depth')
     def validate_depth(cls, v):
         valid_depths = ["basic", "standard", "comprehensive"]
         if v not in valid_depths:
             raise ValueError(f"analysis_depth must be one of {valid_depths}")
         return v
+    
+    @field_validator('focus_areas')
+    def validate_focus_areas(cls, v):
+        valid_areas = ["code", "tests", "documentation", "security", "performance", "all"]
+        for area in v:
+            if area not in valid_areas:
+                raise ValueError(f"focus_areas must contain only values from {valid_areas}")
+        return v
+    
+    @field_validator('repo_url')
+    def validate_repo_url(cls, v):
+        # Check if it's already a valid URL
+        if v.startswith(("http://", "https://", "git://")):
+            return v
+        
+        # Check if it's a valid GitHub repo format (username/repo)
+        if re.match(r'^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$', v):
+            return v
+        
+        raise ValueError("repo_url must be a valid URL or in the format 'username/repo'")
 
 # Add a new endpoint that matches what the frontend is calling
 @app.get("/", include_in_schema=False)
@@ -602,16 +629,53 @@ async def analyze(
     # Clone the repository to a temporary directory
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
+            # Format the repository URL if needed
+            repo_url = request.repo_url
+            if not repo_url.startswith(("http://", "https://", "git://")):
+                # If it's just a repo name like "username/repo", convert to GitHub URL
+                if "/" in repo_url and not repo_url.startswith("/"):
+                    repo_url = f"https://github.com/{repo_url}"
+                else:
+                    # Invalid format
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Invalid repository URL format: {repo_url}. Please provide a valid GitHub repository URL or username/repo format."
+                    )
+            
             # Clone the repository
-            logger.info(f"Cloning repository to {temp_dir}")
-            repo = git.Repo.clone_from(request.repo_url, temp_dir)
+            logger.info(f"Cloning repository from {repo_url} to {temp_dir}")
+            try:
+                repo = git.Repo.clone_from(repo_url, temp_dir)
+            except git.exc.GitCommandError as e:
+                if "not found" in str(e) or "does not exist" in str(e):
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Repository not found: {repo_url}. Please check that the repository exists and is accessible."
+                    )
+                elif "Authentication failed" in str(e) or "could not read Username" in str(e):
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail=f"Authentication failed for repository: {repo_url}. Private repositories require authentication."
+                    )
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Error cloning repository: {str(e)}"
+                    )
             
             # Create a Codebase object using graph-sitter
-            from graph_sitter.core.context import Context
-            from graph_sitter.core.codebase import Codebase
-            
-            ctx = Context()
-            codebase = Codebase(ctx, temp_dir)
+            try:
+                from graph_sitter.core.context import Context
+                from graph_sitter.core.codebase import Codebase
+                
+                ctx = Context()
+                codebase = Codebase(ctx, temp_dir)
+            except Exception as e:
+                logger.error(f"Error creating Codebase object: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Error parsing codebase: {str(e)}"
+                )
             
             # Analyze the codebase
             logger.info("Analyzing codebase...")
@@ -653,6 +717,9 @@ async def analyze(
             
             return analysis_result
             
+        except HTTPException:
+            # Re-raise HTTP exceptions
+            raise
         except Exception as e:
             logger.error(f"Error analyzing repository: {str(e)}")
             raise HTTPException(
