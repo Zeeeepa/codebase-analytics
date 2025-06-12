@@ -20,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import modal
 from collections import Counter
 import networkx as nx
+from pathlib import Path
 
 image = (
     modal.Image.debian_slim()
@@ -496,34 +497,81 @@ def analyze_file_issues(file) -> Dict[str, List[Dict[str, str]]]:
 
 def build_repo_structure(files, file_issues, file_symbols) -> Dict:
     """Build a hierarchical repository structure with issue counts and symbols."""
-    root = {'name': 'root', 'children': {}}
+    root = {
+        'name': 'root',
+        'type': 'directory',
+        'path': '',
+        'children': {},
+        'issues': {'critical': 0, 'major': 0, 'minor': 0},
+        'stats': {
+            'files': 0,
+            'directories': 0,
+            'symbols': 0,
+            'issues': 0
+        }
+    }
     
+    # First pass: Create all directories
+    all_dirs = set()
     for file in files:
-        path_parts = file.filepath.split('/')
+        dir_path = os.path.dirname(file.filepath)
+        if dir_path:
+            parts = dir_path.split('/')
+            current_path = ''
+            for part in parts:
+                current_path = os.path.join(current_path, part) if current_path else part
+                all_dirs.add(current_path)
+    
+    # Create directory nodes
+    for dir_path in sorted(all_dirs):
+        parts = dir_path.split('/')
         current = root
+        current_path = ''
         
-        # Build the tree structure
-        for i, part in enumerate(path_parts[:-1]):
+        for part in parts:
+            current_path = os.path.join(current_path, part) if current_path else part
             if part not in current['children']:
                 current['children'][part] = {
                     'name': part,
                     'type': 'directory',
-                    'path': '/'.join(path_parts[:i+1]),
+                    'path': current_path,
                     'children': {},
-                    'issues': {'critical': 0, 'major': 0, 'minor': 0}
+                    'issues': {'critical': 0, 'major': 0, 'minor': 0},
+                    'stats': {
+                        'files': 0,
+                        'directories': 0,
+                        'symbols': 0,
+                        'issues': 0
+                    }
                 }
+                current['stats']['directories'] += 1
             current = current['children'][part]
+    
+    # Add files
+    for file in sorted(files, key=lambda f: f.filepath):
+        dir_path = os.path.dirname(file.filepath)
+        filename = os.path.basename(file.filepath)
         
-        # Add the file
-        filename = path_parts[-1]
+        # Navigate to the correct directory
+        current = root
+        if dir_path:
+            for part in dir_path.split('/'):
+                current = current['children'][part]
+        
+        # Create file node
         file_node = {
             'name': filename,
             'type': 'file',
+            'file_type': get_file_type(filename),
             'path': file.filepath,
-            'issues': {'critical': 0, 'major': 0, 'minor': 0}
+            'issues': {'critical': 0, 'major': 0, 'minor': 0},
+            'stats': {
+                'symbols': 0,
+                'issues': 0
+            }
         }
         
-        # Add issue counts if present
+        # Add issue counts
         if file.filepath in file_issues:
             issues = file_issues[file.filepath]
             file_node['issues'] = {
@@ -531,21 +579,102 @@ def build_repo_structure(files, file_issues, file_symbols) -> Dict:
                 'major': len(issues['major']),
                 'minor': len(issues['minor'])
             }
+            file_node['stats']['issues'] = sum(file_node['issues'].values())
             
-            # Propagate counts up the tree
-            temp = root
-            for part in path_parts[:-1]:
-                temp = temp['children'][part]
+            # Propagate issue counts up the tree
+            temp_path = dir_path
+            temp = current
+            while temp is not None:
                 for severity in ['critical', 'major', 'minor']:
                     temp['issues'][severity] += file_node['issues'][severity]
+                temp['stats']['issues'] += file_node['stats']['issues']
+                if temp_path:
+                    parent_path = os.path.dirname(temp_path)
+                    temp = root
+                    if parent_path:
+                        for part in parent_path.split('/'):
+                            temp = temp['children'][part]
+                    temp_path = parent_path
+                else:
+                    temp = None
         
-        # Add symbols if present
+        # Add symbols
         if file.filepath in file_symbols:
             file_node['symbols'] = file_symbols[file.filepath]
+            file_node['stats']['symbols'] = len(file_symbols[file.filepath])
+            
+            # Propagate symbol counts up the tree
+            temp_path = dir_path
+            temp = current
+            while temp is not None:
+                temp['stats']['symbols'] += file_node['stats']['symbols']
+                if temp_path:
+                    parent_path = os.path.dirname(temp_path)
+                    temp = root
+                    if parent_path:
+                        for part in parent_path.split('/'):
+                            temp = temp['children'][part]
+                    temp_path = parent_path
+                else:
+                    temp = None
         
         current['children'][filename] = file_node
+        current['stats']['files'] += 1
+        root['stats']['files'] += 1
     
     return root
+
+def get_file_type(filename: str) -> str:
+    """Get the type of file based on its extension."""
+    ext = Path(filename).suffix.lower()
+    if ext in ['.py', '.pyi', '.pyx']:
+        return 'python'
+    elif ext in ['.js', '.jsx', '.ts', '.tsx']:
+        return 'javascript'
+    elif ext in ['.java']:
+        return 'java'
+    elif ext in ['.c', '.cpp', '.h', '.hpp']:
+        return 'cpp'
+    elif ext in ['.go']:
+        return 'go'
+    elif ext in ['.rs']:
+        return 'rust'
+    elif ext in ['.rb']:
+        return 'ruby'
+    elif ext in ['.php']:
+        return 'php'
+    elif ext in ['.cs']:
+        return 'csharp'
+    elif ext in ['.swift']:
+        return 'swift'
+    elif ext in ['.kt']:
+        return 'kotlin'
+    elif ext in ['.scala']:
+        return 'scala'
+    elif ext in ['.html', '.htm']:
+        return 'html'
+    elif ext in ['.css', '.scss', '.sass', '.less']:
+        return 'css'
+    elif ext in ['.json']:
+        return 'json'
+    elif ext in ['.xml']:
+        return 'xml'
+    elif ext in ['.md', '.markdown']:
+        return 'markdown'
+    elif ext in ['.yml', '.yaml']:
+        return 'yaml'
+    elif ext in ['.sh', '.bash']:
+        return 'shell'
+    elif ext in ['.sql']:
+        return 'sql'
+    elif ext in ['.dockerfile', '.containerfile']:
+        return 'docker'
+    elif ext in ['.gitignore', '.dockerignore']:
+        return 'config'
+    elif ext in ['.txt']:
+        return 'text'
+    else:
+        return 'unknown'
 
 @app.get("/api/codebase/stats")
 async def get_codebase_stats(codebase_id: str) -> CodebaseStats:
