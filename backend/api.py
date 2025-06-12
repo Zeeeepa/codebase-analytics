@@ -1191,4 +1191,22 @@ def fastapi_modal_app():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
+    import socket
+    
+    def find_available_port(start_port=8000, max_port=8100):
+        """Find an available port starting from start_port"""
+        for port in range(start_port, max_port):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(('0.0.0.0', port))
+                    return port
+            except OSError:
+                continue
+        raise RuntimeError(f"No available ports found between {start_port} and {max_port}")
+    
+    # Find an available port
+    port = find_available_port()
+    print(f"🚀 Starting FastAPI server on http://localhost:{port}")
+    print(f"📚 API documentation available at http://localhost:{port}/docs")
+    
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=port)
