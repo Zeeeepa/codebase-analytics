@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaFolder, FaFolderOpen, FaFile } from 'react-icons/fa';
+import { FaFolder, FaFolderOpen, FaFile, FaCode, FaExclamationTriangle } from 'react-icons/fa';
 import { MdError, MdWarning, MdInfo } from 'react-icons/md';
 
 interface IssueCount {
@@ -8,18 +8,32 @@ interface IssueCount {
   minor: number;
 }
 
+interface Symbol {
+  id: string;
+  name: string;
+  type: 'function' | 'class' | 'variable';
+  issues?: {
+    type: 'critical' | 'major' | 'minor';
+    message: string;
+  }[];
+}
+
 interface FileNode {
   name: string;
   type: 'file' | 'directory';
   path: string;
   issues?: IssueCount;
-  children?: FileNode[];
+  symbols?: Symbol[];
+  children?: { [key: string]: FileNode };
 }
 
 interface RepoStructureProps {
   data: FileNode;
   onFileClick: (path: string) => void;
   onFolderClick: (path: string) => void;
+  onSymbolClick: (symbol: Symbol) => void;
+  onViewCallChain: (symbolId: string) => void;
+  onViewContext: (symbolId: string) => void;
 }
 
 const IssueTag: React.FC<{ count: number; type: 'critical' | 'major' | 'minor' }> = ({ count, type }) => {
@@ -57,12 +71,81 @@ const IssueTag: React.FC<{ count: number; type: 'critical' | 'major' | 'minor' }
   );
 };
 
+const SymbolList: React.FC<{
+  symbols: Symbol[];
+  onSymbolClick: (symbol: Symbol) => void;
+  onViewCallChain: (symbolId: string) => void;
+  onViewContext: (symbolId: string) => void;
+}> = ({ symbols, onSymbolClick, onViewCallChain, onViewContext }) => {
+  return (
+    <div className="pl-8 border-l-2 border-gray-200">
+      {symbols.map((symbol, index) => (
+        <div key={`${symbol.id}-${index}`} className="py-1">
+          <div className="flex items-center group">
+            <FaCode className="mr-2 text-gray-500" />
+            <span
+              className="flex-1 cursor-pointer hover:text-blue-500"
+              onClick={() => onSymbolClick(symbol)}
+            >
+              {symbol.name}
+            </span>
+            <div className="hidden group-hover:flex space-x-2">
+              <button
+                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
+                onClick={() => onViewCallChain(symbol.id)}
+              >
+                View Call Chain
+              </button>
+              <button
+                className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
+                onClick={() => onViewContext(symbol.id)}
+              >
+                View Context
+              </button>
+            </div>
+          </div>
+          {symbol.issues && symbol.issues.length > 0 && (
+            <div className="pl-6 mt-1">
+              {symbol.issues.map((issue, i) => (
+                <div
+                  key={i}
+                  className={`text-sm ${
+                    issue.type === 'critical'
+                      ? 'text-red-500'
+                      : issue.type === 'major'
+                      ? 'text-yellow-500'
+                      : 'text-blue-500'
+                  }`}
+                >
+                  <FaExclamationTriangle className="inline mr-1" />
+                  {issue.message}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
 const FileTreeNode: React.FC<{
   node: FileNode;
   level: number;
   onFileClick: (path: string) => void;
   onFolderClick: (path: string) => void;
-}> = ({ node, level, onFileClick, onFolderClick }) => {
+  onSymbolClick: (symbol: Symbol) => void;
+  onViewCallChain: (symbolId: string) => void;
+  onViewContext: (symbolId: string) => void;
+}> = ({
+  node,
+  level,
+  onFileClick,
+  onFolderClick,
+  onSymbolClick,
+  onViewCallChain,
+  onViewContext,
+}) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const handleClick = () => {
@@ -71,12 +154,17 @@ const FileTreeNode: React.FC<{
       onFolderClick(node.path);
     } else {
       onFileClick(node.path);
+      setIsOpen(!isOpen); // Toggle symbol list for files
     }
   };
 
   const getIcon = () => {
     if (node.type === 'directory') {
-      return isOpen ? <FaFolderOpen className="text-yellow-500" /> : <FaFolder className="text-yellow-500" />;
+      return isOpen ? (
+        <FaFolderOpen className="text-yellow-500" />
+      ) : (
+        <FaFolder className="text-yellow-500" />
+      );
     }
     return <FaFile className="text-gray-500" />;
   };
@@ -98,24 +186,43 @@ const FileTreeNode: React.FC<{
           </div>
         )}
       </div>
-      {isOpen && node.children && (
-        <div>
-          {node.children.map((child, index) => (
-            <FileTreeNode
-              key={`${child.path}-${index}`}
-              node={child}
-              level={level + 1}
-              onFileClick={onFileClick}
-              onFolderClick={onFolderClick}
+      {isOpen && (
+        <>
+          {node.symbols && (
+            <SymbolList
+              symbols={node.symbols}
+              onSymbolClick={onSymbolClick}
+              onViewCallChain={onViewCallChain}
+              onViewContext={onViewContext}
             />
-          ))}
-        </div>
+          )}
+          {node.children &&
+            Object.entries(node.children).map(([key, child]) => (
+              <FileTreeNode
+                key={`${child.path}-${key}`}
+                node={child}
+                level={level + 1}
+                onFileClick={onFileClick}
+                onFolderClick={onFolderClick}
+                onSymbolClick={onSymbolClick}
+                onViewCallChain={onViewCallChain}
+                onViewContext={onViewContext}
+              />
+            ))}
+        </>
       )}
     </div>
   );
 };
 
-export const RepoStructure: React.FC<RepoStructureProps> = ({ data, onFileClick, onFolderClick }) => {
+export const RepoStructure: React.FC<RepoStructureProps> = ({
+  data,
+  onFileClick,
+  onFolderClick,
+  onSymbolClick,
+  onViewCallChain,
+  onViewContext,
+}) => {
   return (
     <div className="border rounded-lg shadow-sm bg-white">
       <div className="p-4 border-b bg-gray-50">
@@ -127,6 +234,9 @@ export const RepoStructure: React.FC<RepoStructureProps> = ({ data, onFileClick,
           level={0}
           onFileClick={onFileClick}
           onFolderClick={onFolderClick}
+          onSymbolClick={onSymbolClick}
+          onViewCallChain={onViewCallChain}
+          onViewContext={onViewContext}
         />
       </div>
     </div>

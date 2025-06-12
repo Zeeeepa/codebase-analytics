@@ -102,6 +102,46 @@ class ExtendedAnalysis(BaseModel):
 class RepoRequest(BaseModel):
     repo_url: str
 
+class Symbol(BaseModel):
+    id: str
+    name: str
+    type: str  # 'function', 'class', or 'variable'
+    filepath: str
+    start_line: int
+    end_line: int
+    issues: Optional[List[Dict[str, str]]] = None
+
+class FileNode(BaseModel):
+    name: str
+    type: str  # 'file' or 'directory'
+    path: str
+    issues: Optional[Dict[str, int]] = None
+    symbols: Optional[List[Symbol]] = None
+    children: Optional[Dict[str, 'FileNode']] = None
+
+class AnalysisResponse(BaseModel):
+    # Basic stats
+    repo_url: str
+    description: str
+    num_files: int
+    num_functions: int
+    num_classes: int
+    
+    # Line metrics
+    line_metrics: Dict[str, Dict[str, float]]
+    
+    # Complexity metrics
+    cyclomatic_complexity: Dict[str, float]
+    depth_of_inheritance: Dict[str, float]
+    halstead_metrics: Dict[str, int]
+    maintainability_index: Dict[str, int]
+    
+    # Git metrics
+    monthly_commits: Dict[str, int]
+    
+    # Repository structure with symbols
+    repo_structure: FileNode
+
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
     """
     Get the number of commits per month for the last 12 months.
@@ -454,8 +494,8 @@ def analyze_file_issues(file) -> Dict[str, List[Dict[str, str]]]:
 
     return issues
 
-def build_repo_structure(files, file_issues) -> Dict:
-    """Build a hierarchical repository structure with issue counts."""
+def build_repo_structure(files, file_issues, file_symbols) -> Dict:
+    """Build a hierarchical repository structure with issue counts and symbols."""
     root = {'name': 'root', 'children': {}}
     
     for file in files:
@@ -468,6 +508,7 @@ def build_repo_structure(files, file_issues) -> Dict:
                 current['children'][part] = {
                     'name': part,
                     'type': 'directory',
+                    'path': '/'.join(path_parts[:i+1]),
                     'children': {},
                     'issues': {'critical': 0, 'major': 0, 'minor': 0}
                 }
@@ -478,6 +519,7 @@ def build_repo_structure(files, file_issues) -> Dict:
         file_node = {
             'name': filename,
             'type': 'file',
+            'path': file.filepath,
             'issues': {'critical': 0, 'major': 0, 'minor': 0}
         }
         
@@ -485,9 +527,9 @@ def build_repo_structure(files, file_issues) -> Dict:
         if file.filepath in file_issues:
             issues = file_issues[file.filepath]
             file_node['issues'] = {
-                'critical': len(issues.critical),
-                'major': len(issues.major),
-                'minor': len(issues.minor)
+                'critical': len(issues['critical']),
+                'major': len(issues['major']),
+                'minor': len(issues['minor'])
             }
             
             # Propagate counts up the tree
@@ -496,6 +538,10 @@ def build_repo_structure(files, file_issues) -> Dict:
                 temp = temp['children'][part]
                 for severity in ['critical', 'major', 'minor']:
                     temp['issues'][severity] += file_node['issues'][severity]
+        
+        # Add symbols if present
+        if file.filepath in file_symbols:
+            file_node['symbols'] = file_symbols[file.filepath]
         
         current['children'][filename] = file_node
     
@@ -634,8 +680,8 @@ async def get_function_call_chain(function_id: str) -> List[str]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @fastapi_app.post("/analyze_repo")
-async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
+async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
+    """Single entry point for repository analysis."""
     repo_url = request.repo_url
     codebase = Codebase.from_repo(repo_url)
 
@@ -652,16 +698,82 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
 
     monthly_commits = get_monthly_commits(repo_url)
 
+    # Analyze files and collect symbols
+    file_issues = {}
+    file_symbols = {}
+    
     for file in codebase.files:
+        # Line metrics
         loc, lloc, sloc, comments = count_lines(file.source)
         total_loc += loc
         total_lloc += lloc
         total_sloc += sloc
         total_comments += comments
 
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
+        # Analyze issues
+        issues = analyze_file_issues(file)
+        if any(len(v) > 0 for v in issues.values()):
+            file_issues[file.filepath] = issues
 
+        # Collect symbols
+        symbols = []
+        
+        # Add functions as symbols
+        for func in file.functions:
+            issues = []
+            
+            # Check for issues
+            if not any(func.name in str(usage) for usage in func.usages):
+                issues.append({
+                    'type': 'minor',
+                    'message': f'Unused function'
+                })
+            
+            if hasattr(func, 'code_block'):
+                code = func.code_block.source
+                if 'None' in code and not any(s in code for s in ['is None', '== None', '!= None']):
+                    issues.append({
+                        'type': 'critical',
+                        'message': f'Potential unsafe null reference'
+                    })
+                
+                if 'TODO' in code or 'FIXME' in code:
+                    issues.append({
+                        'type': 'major',
+                        'message': f'Incomplete implementation'
+                    })
+
+            symbols.append(Symbol(
+                id=str(hash(func.name + file.filepath)),
+                name=func.name,
+                type='function',
+                filepath=file.filepath,
+                start_line=func.start_point[0] if hasattr(func, 'start_point') else 0,
+                end_line=func.end_point[0] if hasattr(func, 'end_point') else 0,
+                issues=issues if issues else None
+            ))
+        
+        # Add classes as symbols
+        for cls in file.classes:
+            symbols.append(Symbol(
+                id=str(hash(cls.name + file.filepath)),
+                name=cls.name,
+                type='class',
+                filepath=file.filepath,
+                start_line=cls.start_point[0] if hasattr(cls, 'start_point') else 0,
+                end_line=cls.end_point[0] if hasattr(cls, 'end_point') else 0
+            ))
+        
+        if symbols:
+            file_symbols[file.filepath] = symbols
+
+    # Build repository structure with symbols
+    repo_structure = build_repo_structure(codebase.files, file_issues, file_symbols)
+
+    # Calculate metrics
+    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
     num_callables = 0
+    
     for func in callables:
         if not hasattr(func, "code_block"):
             continue
@@ -683,83 +795,13 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
 
     desc = get_github_repo_description(repo_url)
 
-    # New extended analysis
-    test_functions = [x for x in codebase.functions if x.name.startswith('test_')]
-    test_classes = [x for x in codebase.classes if x.name.startswith('Test')]
-    tests_per_file = len(test_functions) / len(codebase.files) if codebase.files else 0
-    
-    # Get top test files
-    file_test_counts = Counter([x.file for x in test_classes])
-    top_test_files = [
-        {
-            'filepath': file.filepath,
-            'test_count': num_tests,
-            'file_length': len(file.source),
-            'function_count': len(file.functions)
-        }
-        for file, num_tests in file_test_counts.most_common(5)
-    ]
-
-    # Function analysis
-    recursive = [
-        f.name for f in codebase.functions 
-        if any(call.name == f.name for call in f.function_calls)
-    ][:5]
-
-    most_called = max(codebase.functions, key=lambda f: len(f.call_sites))
-    most_called_info = {
-        'name': most_called.name,
-        'call_count': len(most_called.call_sites),
-        'callers': [
-            {
-                'function': call.parent_function.name,
-                'line': call.start_point[0]
-            }
-            for call in most_called.call_sites
-        ]
-    }
-
-    most_calls = max(codebase.functions, key=lambda f: len(f.function_calls))
-    most_calls_info = {
-        'name': most_calls.name,
-        'calls_count': len(most_calls.function_calls),
-        'called_functions': [call.name for call in most_calls.function_calls]
-    }
-
-    unused = [
-        {'name': f.name, 'filepath': f.filepath}
-        for f in codebase.functions if len(f.call_sites) == 0
-    ]
-
-    dead_code = [
-        {'name': f.name, 'filepath': f.filepath}
-        for f in find_dead_code(codebase)
-    ]
-
-    # Class analysis
-    deepest_class = None
-    if codebase.classes:
-        deepest = max(codebase.classes, key=lambda x: len(x.superclasses))
-        deepest_class = {
-            'name': deepest.name,
-            'depth': len(deepest.superclasses),
-            'chain': [s.name for s in deepest.superclasses]
-        }
-
-    # File issues analysis
-    file_issues = {}
-    for file in codebase.files:
-        issues = analyze_file_issues(file)
-        if any(len(v) > 0 for v in issues.values()):
-            file_issues[file.filepath] = FileIssue(**issues)
-
-    # Repository structure
-    repo_structure = build_repo_structure(codebase.files, file_issues)
-
-    # Combine original and new analysis
-    results = {
-        "repo_url": repo_url,
-        "line_metrics": {
+    return AnalysisResponse(
+        repo_url=repo_url,
+        description=desc,
+        num_files=num_files,
+        num_functions=num_functions,
+        num_classes=num_classes,
+        line_metrics={
             "total": {
                 "loc": total_loc,
                 "lloc": total_lloc,
@@ -770,52 +812,69 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
                 else 0,
             },
         },
-        "cyclomatic_complexity": {
+        cyclomatic_complexity={
             "average": total_complexity / num_callables if num_callables > 0 else 0,
         },
-        "depth_of_inheritance": {
+        depth_of_inheritance={
             "average": total_doi / len(codebase.classes) if codebase.classes else 0,
         },
-        "halstead_metrics": {
+        halstead_metrics={
             "total_volume": int(total_volume),
             "average_volume": int(total_volume / num_callables)
             if num_callables > 0
             else 0,
         },
-        "maintainability_index": {
+        maintainability_index={
             "average": int(total_mi / num_callables) if num_callables > 0 else 0,
         },
-        "description": desc,
-        "num_files": num_files,
-        "num_functions": num_functions,
-        "num_classes": num_classes,
-        "monthly_commits": monthly_commits,
-        "extended_analysis": ExtendedAnalysis(
-            test_analysis=TestAnalysis(
-                total_test_functions=len(test_functions),
-                total_test_classes=len(test_classes),
-                tests_per_file=tests_per_file,
-                top_test_files=top_test_files
-            ),
-            function_analysis=FunctionAnalysis(
-                total_functions=len(codebase.functions),
-                most_called_function=most_called_info,
-                function_with_most_calls=most_calls_info,
-                recursive_functions=recursive,
-                unused_functions=unused,
-                dead_code=dead_code
-            ),
-            class_analysis=ClassAnalysis(
-                total_classes=len(codebase.classes),
-                deepest_inheritance=deepest_class,
-                total_imports=len(codebase.imports)
-            ),
-            file_issues=file_issues,
-            repo_structure=repo_structure
-        )
-    }
+        monthly_commits=monthly_commits,
+        repo_structure=repo_structure
+    )
 
-    return results
+@fastapi_app.get("/function/{function_id}/call-chain")
+async def get_function_call_chain(function_id: str) -> List[str]:
+    """Get the maximum call chain for a function."""
+    try:
+        function = get_function_by_id(function_id)
+        chain = get_max_call_chain(function)
+        return [f.name for f in chain]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@fastapi_app.get("/function/{function_id}/context")
+async def get_function_context(function_id: str) -> FunctionContext:
+    """Get detailed context for a specific function."""
+    try:
+        function = get_function_by_id(function_id)
+        
+        context = {
+            "implementation": {
+                "source": function.source,
+                "filepath": function.filepath
+            },
+            "dependencies": [],
+            "usages": []
+        }
+        
+        # Add dependencies
+        for dep in function.dependencies:
+            if isinstance(dep, Import):
+                dep = hop_through_imports(dep)
+            context["dependencies"].append({
+                "source": dep.source,
+                "filepath": dep.filepath
+            })
+        
+        # Add usages
+        for usage in function.usages:
+            context["usages"].append({
+                "source": usage.usage_symbol.source,
+                "filepath": usage.usage_symbol.filepath
+            })
+        
+        return FunctionContext(**context)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Helper function to get a function by ID (you'll need to implement this)
 def get_function_by_id(function_id: str):
@@ -834,4 +893,3 @@ def fastapi_modal_app():
 
 if __name__ == "__main__":
     app.deploy("analytics-app")
-
