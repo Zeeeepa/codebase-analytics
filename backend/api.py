@@ -79,6 +79,7 @@ class FunctionContext(BaseModelWithConfig):
     dependencies: List[Dict[str, Any]]
     usages: List[Dict[str, Any]]
 
+# Models for extended analysis
 class TestAnalysis(BaseModelWithConfig):
     total_test_functions: int
     total_test_classes: int
