@@ -836,7 +836,7 @@ def get_detailed_symbol_context(symbol: Symbol) -> Dict[str, Any]:
     base_info['usage_stats'] = usage_stats
     return base_info
 
-@app.get("/api/codebase/stats")
+@fastapi_app.get("/api/codebase/stats")
 async def get_codebase_stats(codebase_id: str) -> CodebaseStats:
     """Get comprehensive statistics about the codebase."""
     try:
@@ -904,7 +904,7 @@ async def get_codebase_stats(codebase_id: str) -> CodebaseStats:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/codebase/test-files")
+@fastapi_app.get("/api/codebase/test-files")
 async def get_test_file_stats(codebase_id: str) -> List[FileTestStats]:
     """Get statistics about test files in the codebase."""
     try:
@@ -923,7 +923,7 @@ async def get_test_file_stats(codebase_id: str) -> List[FileTestStats]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/function/{function_id}/context")
+@fastapi_app.get("/api/function/{function_id}/context")
 async def get_function_context(function_id: str) -> FunctionContext:
     """Get detailed context for a specific function."""
     try:
@@ -958,7 +958,7 @@ async def get_function_context(function_id: str) -> FunctionContext:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/function/{function_id}/call-chain")
+@fastapi_app.get("/api/function/{function_id}/call-chain")
 async def get_function_call_chain(function_id: str) -> List[str]:
     """Get the maximum call chain for a function."""
     try:
