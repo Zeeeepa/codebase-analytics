@@ -21,6 +21,14 @@ import modal
 from collections import Counter
 import networkx as nx
 from pathlib import Path
+from graph_sitter.core.class_definition import Class
+from graph_sitter.core.codebase import Codebase
+from graph_sitter.core.external_module import ExternalModule
+from graph_sitter.core.file import SourceFile
+from graph_sitter.core.function import Function
+from graph_sitter.core.import_resolution import Import
+from graph_sitter.core.symbol import Symbol
+from graph_sitter.enums import EdgeType, SymbolType
 
 image = (
     modal.Image.debian_slim()
@@ -676,6 +684,158 @@ def get_file_type(filename: str) -> str:
     else:
         return 'unknown'
 
+def get_detailed_symbol_context(symbol: Symbol) -> Dict[str, Any]:
+    """Get detailed context for any symbol type."""
+    base_info = {
+        'id': str(hash(symbol.name + symbol.filepath)),
+        'name': symbol.name,
+        'type': symbol.__class__.__name__,
+        'filepath': symbol.filepath,
+        'start_line': symbol.start_point[0] if hasattr(symbol, 'start_point') else 0,
+        'end_line': symbol.end_point[0] if hasattr(symbol, 'end_point') else 0,
+        'source': symbol.source if hasattr(symbol, 'source') else None,
+    }
+
+    # Get usage statistics
+    usages = symbol.symbol_usages
+    imported_symbols = [x.imported_symbol for x in usages if isinstance(x, Import)]
+    
+    usage_stats = {
+        'total_usages': len(usages),
+        'usage_breakdown': {
+            'functions': len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function]),
+            'classes': len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class]),
+            'global_vars': len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar]),
+            'interfaces': len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])
+        },
+        'imports': {
+            'total': len(imported_symbols),
+            'breakdown': {
+                'functions': len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function]),
+                'classes': len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class]),
+                'global_vars': len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar]),
+                'interfaces': len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface]),
+                'external_modules': len([x for x in imported_symbols if isinstance(x, ExternalModule)]),
+                'files': len([x for x in imported_symbols if isinstance(x, SourceFile)])
+            }
+        }
+    }
+
+    # Add type-specific information
+    if isinstance(symbol, Function):
+        base_info.update({
+            'function_info': {
+                'return_statements': len(symbol.return_statements),
+                'parameters': [
+                    {
+                        'name': p.name,
+                        'type': p.type if hasattr(p, 'type') else None,
+                        'default_value': p.default_value if hasattr(p, 'default_value') else None
+                    }
+                    for p in symbol.parameters
+                ],
+                'function_calls': [
+                    {
+                        'name': call.name,
+                        'args': [arg.source for arg in call.args] if hasattr(call, 'args') else [],
+                        'line': call.start_point[0] if hasattr(call, 'start_point') else 0
+                    }
+                    for call in symbol.function_calls
+                ],
+                'call_sites': [
+                    {
+                        'caller': site.parent_function.name if hasattr(site, 'parent_function') else None,
+                        'line': site.start_point[0] if hasattr(site, 'start_point') else 0,
+                        'file': site.filepath if hasattr(site, 'filepath') else None
+                    }
+                    for site in symbol.call_sites
+                ],
+                'decorators': [d.source for d in symbol.decorators] if hasattr(symbol, 'decorators') else [],
+                'dependencies': [
+                    {
+                        'name': dep.name,
+                        'type': dep.__class__.__name__,
+                        'filepath': dep.filepath if hasattr(dep, 'filepath') else None
+                    }
+                    for dep in symbol.dependencies
+                ] if hasattr(symbol, 'dependencies') else []
+            }
+        })
+
+        # Add complexity metrics
+        if hasattr(symbol, 'code_block'):
+            complexity = calculate_cyclomatic_complexity(symbol)
+            operators, operands = get_operators_and_operands(symbol)
+            volume, N1, N2, n1, n2 = calculate_halstead_volume(operators, operands)
+            loc = len(symbol.code_block.source.splitlines())
+            mi_score = calculate_maintainability_index(volume, complexity, loc)
+
+            base_info['metrics'] = {
+                'cyclomatic_complexity': {
+                    'value': complexity,
+                    'rank': cc_rank(complexity)
+                },
+                'halstead_metrics': {
+                    'volume': volume,
+                    'unique_operators': n1,
+                    'unique_operands': n2,
+                    'total_operators': N1,
+                    'total_operands': N2
+                },
+                'maintainability_index': {
+                    'value': mi_score,
+                    'rank': get_maintainability_rank(mi_score)
+                },
+                'lines_of_code': {
+                    'total': loc,
+                    'code': len([l for l in symbol.code_block.source.splitlines() if l.strip()]),
+                    'comments': len([l for l in symbol.code_block.source.splitlines() if l.strip().startswith('#')])
+                }
+            }
+
+    elif isinstance(symbol, Class):
+        base_info.update({
+            'class_info': {
+                'parent_classes': symbol.parent_class_names,
+                'methods': [
+                    {
+                        'name': m.name,
+                        'parameters': len(m.parameters) if hasattr(m, 'parameters') else 0,
+                        'line': m.start_point[0] if hasattr(m, 'start_point') else 0
+                    }
+                    for m in symbol.methods
+                ],
+                'attributes': [
+                    {
+                        'name': a.name,
+                        'type': a.type if hasattr(a, 'type') else None,
+                        'line': a.start_point[0] if hasattr(a, 'start_point') else 0
+                    }
+                    for a in symbol.attributes
+                ],
+                'decorators': [d.source for d in symbol.decorators] if hasattr(symbol, 'decorators') else [],
+                'dependencies': [
+                    {
+                        'name': dep.name,
+                        'type': dep.__class__.__name__,
+                        'filepath': dep.filepath if hasattr(dep, 'filepath') else None
+                    }
+                    for dep in symbol.dependencies
+                ] if hasattr(symbol, 'dependencies') else [],
+                'inheritance_depth': len(symbol.superclasses) if hasattr(symbol, 'superclasses') else 0,
+                'inheritance_chain': [
+                    {
+                        'name': s.name,
+                        'filepath': s.filepath if hasattr(s, 'filepath') else None
+                    }
+                    for s in symbol.superclasses
+                ] if hasattr(symbol, 'superclasses') else []
+            }
+        })
+
+    base_info['usage_stats'] = usage_stats
+    return base_info
+
 @app.get("/api/codebase/stats")
 async def get_codebase_stats(codebase_id: str) -> CodebaseStats:
     """Get comprehensive statistics about the codebase."""
@@ -909,7 +1069,7 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
 
         complexity = calculate_cyclomatic_complexity(func)
         operators, operands = get_operators_and_operands(func)
-        volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
+        volume, N1, N2, n1, n2 = calculate_halstead_volume(operators, operands)
         loc = len(func.code_block.source.splitlines())
         mi_score = calculate_maintainability_index(volume, complexity, loc)
 
@@ -1002,6 +1162,15 @@ async def get_function_context(function_id: str) -> FunctionContext:
             })
         
         return FunctionContext(**context)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@fastapi_app.get("/symbol/{symbol_id}/context")
+async def get_symbol_context(symbol_id: str) -> Dict[str, Any]:
+    """Get detailed context for any symbol."""
+    try:
+        symbol = get_symbol_by_id(symbol_id)  # You'll need to implement this
+        return get_detailed_symbol_context(symbol)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
