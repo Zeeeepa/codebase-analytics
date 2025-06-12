@@ -81,7 +81,7 @@ class TestAnalysis(BaseModel):
     total_test_functions: int
     total_test_classes: int
     tests_per_file: float
-    top_test_files: List[Dict[str, any]]
+    top_test_files: List[Dict[str, Any]]  # Changed from 'any' to 'Any'
 
 class FunctionAnalysis(BaseModel):
     total_functions: int
