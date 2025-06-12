@@ -1,11 +1,47 @@
-from collections import Counter
-from typing import Dict, List, Optional, Any
-import networkx as nx
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import Dict, List, Tuple, Any, Optional
+from codegen import Codebase
+from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
+from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
+from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
+from codegen.sdk.core.statements.while_statement import WhileStatement
+from codegen.sdk.core.expressions.binary_expression import BinaryExpression
+from codegen.sdk.core.expressions.unary_expression import UnaryExpression
+from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
+import math
+import re
+import requests
+from datetime import datetime, timedelta
+import subprocess
+import os
+import tempfile
+from fastapi.middleware.cors import CORSMiddleware
+import modal
+from collections import Counter
+import networkx as nx
 
-app = FastAPI()
+image = (
+    modal.Image.debian_slim()
+    .apt_install("git")
+    .pip_install(
+        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime",
+        "networkx"  # Added for call chain analysis
+    )
+)
 
+app = modal.App(name="analytics-app", image=image)
+fastapi_app = FastAPI()
+
+fastapi_app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Base models for codebase analysis
 class CodebaseStats(BaseModel):
     test_functions_count: int
     test_classes_count: int
@@ -31,6 +67,7 @@ class FunctionContext(BaseModel):
     dependencies: List[Dict]
     usages: List[Dict]
 
+# Models for extended analysis
 class TestAnalysis(BaseModel):
     total_test_functions: int
     total_test_classes: int
@@ -64,6 +101,405 @@ class ExtendedAnalysis(BaseModel):
 
 class RepoRequest(BaseModel):
     repo_url: str
+
+def get_monthly_commits(repo_path: str) -> Dict[str, int]:
+    """
+    Get the number of commits per month for the last 12 months.
+
+    Args:
+        repo_path: Path to the git repository
+
+    Returns:
+        Dictionary with month-year as key and number of commits as value
+    """
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)
+
+    date_format = "%Y-%m-%d"
+    since_date = start_date.strftime(date_format)
+    until_date = end_date.strftime(date_format)
+    repo_path = "https://github.com/" + repo_path
+
+    try:
+        original_dir = os.getcwd()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subprocess.run(["git", "clone", repo_path, temp_dir], check=True)
+            os.chdir(temp_dir)
+
+            cmd = [
+                "git",
+                "log",
+                f"--since={since_date}",
+                f"--until={until_date}",
+                "--format=%aI",
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            commit_dates = result.stdout.strip().split("\n")
+
+            monthly_counts = {}
+            current_date = start_date
+            while current_date <= end_date:
+                month_key = current_date.strftime("%Y-%m")
+                monthly_counts[month_key] = 0
+                current_date = (
+                    current_date.replace(day=1) + timedelta(days=32)
+                ).replace(day=1)
+
+            for date_str in commit_dates:
+                if date_str:  # Skip empty lines
+                    commit_date = datetime.fromisoformat(date_str.strip())
+                    month_key = commit_date.strftime("%Y-%m")
+                    if month_key in monthly_counts:
+                        monthly_counts[month_key] += 1
+
+            os.chdir(original_dir)
+            return dict(sorted(monthly_counts.items()))
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing git command: {e}")
+        return {}
+    except Exception as e:
+        print(f"Error processing git commits: {e}")
+        return {}
+    finally:
+        try:
+            os.chdir(original_dir)
+        except:
+            pass
+
+def calculate_cyclomatic_complexity(function):
+    def analyze_statement(statement):
+        complexity = 0
+
+        if isinstance(statement, IfBlockStatement):
+            complexity += 1
+            if hasattr(statement, "elif_statements"):
+                complexity += len(statement.elif_statements)
+
+        elif isinstance(statement, (ForLoopStatement, WhileStatement)):
+            complexity += 1
+
+        elif isinstance(statement, TryCatchStatement):
+            complexity += len(getattr(statement, "except_blocks", []))
+
+        if hasattr(statement, "condition") and isinstance(statement.condition, str):
+            complexity += statement.condition.count(
+                " and "
+            ) + statement.condition.count(" or ")
+
+        if hasattr(statement, "nested_code_blocks"):
+            for block in statement.nested_code_blocks:
+                complexity += analyze_block(block)
+
+        return complexity
+
+    def analyze_block(block):
+        if not block or not hasattr(block, "statements"):
+            return 0
+        return sum(analyze_statement(stmt) for stmt in block.statements)
+
+    return (
+        1 + analyze_block(function.code_block) if hasattr(function, "code_block") else 1
+    )
+
+def cc_rank(complexity):
+    if complexity < 0:
+        raise ValueError("Complexity must be a non-negative value")
+
+    ranks = [
+        (1, 5, "A"),
+        (6, 10, "B"),
+        (11, 20, "C"),
+        (21, 30, "D"),
+        (31, 40, "E"),
+        (41, float("inf"), "F"),
+    ]
+    for low, high, rank in ranks:
+        if low <= complexity <= high:
+            return rank
+    return "F"
+
+def calculate_doi(cls):
+    """Calculate the depth of inheritance for a given class."""
+    return len(cls.superclasses)
+
+def get_operators_and_operands(function):
+    operators = []
+    operands = []
+
+    for statement in function.code_block.statements:
+        for call in statement.function_calls:
+            operators.append(call.name)
+            for arg in call.args:
+                operands.append(arg.source)
+
+        if hasattr(statement, "expressions"):
+            for expr in statement.expressions:
+                if isinstance(expr, BinaryExpression):
+                    operators.extend([op.source for op in expr.operators])
+                    operands.extend([elem.source for elem in expr.elements])
+                elif isinstance(expr, UnaryExpression):
+                    operators.append(expr.ts_node.type)
+                    operands.append(expr.argument.source)
+                elif isinstance(expr, ComparisonExpression):
+                    operators.extend([op.source for op in expr.operators])
+                    operands.extend([elem.source for elem in expr.elements])
+
+        if hasattr(statement, "expression"):
+            expr = statement.expression
+            if isinstance(expr, BinaryExpression):
+                operators.extend([op.source for op in expr.operators])
+                operands.extend([elem.source for elem in expr.elements])
+            elif isinstance(expr, UnaryExpression):
+                operators.append(expr.ts_node.type)
+                operands.append(expr.argument.source)
+            elif isinstance(expr, ComparisonExpression):
+                operators.extend([op.source for op in expr.operators])
+                operands.extend([elem.source for elem in expr.elements])
+
+    return operators, operands
+
+def calculate_halstead_volume(operators, operands):
+    n1 = len(set(operators))
+    n2 = len(set(operands))
+
+    N1 = len(operators)
+    N2 = len(operands)
+
+    N = N1 + N2
+    n = n1 + n2
+
+    if n > 0:
+        volume = N * math.log2(n)
+        return volume, N1, N2, n1, n2
+    return 0, N1, N2, n1, n2
+
+def count_lines(source: str):
+    """Count different types of lines in source code."""
+    if not source.strip():
+        return 0, 0, 0, 0
+
+    lines = [line.strip() for line in source.splitlines()]
+    loc = len(lines)
+    sloc = len([line for line in lines if line])
+
+    in_multiline = False
+    comments = 0
+    code_lines = []
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        code_part = line
+        if not in_multiline and "#" in line:
+            comment_start = line.find("#")
+            if not re.search(r'["\'].*#.*["\']', line[:comment_start]):
+                code_part = line[:comment_start].strip()
+                if line[comment_start:].strip():
+                    comments += 1
+
+        if ('"""' in line or "'''" in line) and not (
+            line.count('"""') % 2 == 0 or line.count("'''") % 2 == 0
+        ):
+            if in_multiline:
+                in_multiline = False
+                comments += 1
+            else:
+                in_multiline = True
+                comments += 1
+                if line.strip().startswith('"""') or line.strip().startswith("'''"):
+                    code_part = ""
+        elif in_multiline:
+            comments += 1
+            code_part = ""
+        elif line.strip().startswith("#"):
+            comments += 1
+            code_part = ""
+
+        if code_part.strip():
+            code_lines.append(code_part)
+
+        i += 1
+
+    lloc = 0
+    continued_line = False
+    for line in code_lines:
+        if continued_line:
+            if not any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
+                continued_line = False
+            continue
+
+        lloc += len([stmt for stmt in line.split(";") if stmt.strip()])
+
+        if any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
+            continued_line = True
+
+    return loc, lloc, sloc, comments
+
+def calculate_maintainability_index(
+    halstead_volume: float, cyclomatic_complexity: float, loc: int
+) -> int:
+    """Calculate the normalized maintainability index for a given function."""
+    if loc <= 0:
+        return 100
+
+    try:
+        raw_mi = (
+            171
+            - 5.2 * math.log(max(1, halstead_volume))
+            - 0.23 * cyclomatic_complexity
+            - 16.2 * math.log(max(1, loc))
+        )
+        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
+        return int(normalized_mi)
+    except (ValueError, TypeError):
+        return 0
+
+def get_maintainability_rank(mi_score: float) -> str:
+    """Convert maintainability index score to a letter grade."""
+    if mi_score >= 85:
+        return "A"
+    elif mi_score >= 65:
+        return "B"
+    elif mi_score >= 45:
+        return "C"
+    elif mi_score >= 25:
+        return "D"
+    else:
+        return "F"
+
+def get_github_repo_description(repo_url):
+    api_url = f"https://api.github.com/repos/{repo_url}"
+
+    response = requests.get(api_url)
+
+    if response.status_code == 200:
+        repo_data = response.json()
+        return repo_data.get("description", "No description available")
+    else:
+        return ""
+
+def find_dead_code(codebase) -> List:
+    """Find functions that are never called."""
+    dead_functions = []
+    for function in codebase.functions:
+        if not any(function.function_calls):
+            dead_functions.append(function)
+    return dead_functions
+
+def get_max_call_chain(function) -> List:
+    """Get the longest call chain starting from a function."""
+    G = nx.DiGraph()
+    
+    def build_graph(func, depth=0):
+        if depth > 10:  # Prevent infinite recursion
+            return
+        for call in func.function_calls:
+            called_func = call.function_definition
+            G.add_edge(func, called_func)
+            build_graph(called_func, depth + 1)
+    
+    build_graph(function)
+    return nx.dag_longest_path(G)
+
+def analyze_file_issues(file) -> Dict[str, List[Dict[str, str]]]:
+    """Analyze a file for various types of issues."""
+    issues = {
+        'critical': [],
+        'major': [],
+        'minor': []
+    }
+    
+    # Check for implementation errors
+    for function in file.functions:
+        # Check for unused parameters
+        for param in function.parameters:
+            if not any(param.name in str(usage) for usage in function.usages):
+                issues['minor'].append({
+                    'type': 'unused_parameter',
+                    'message': f'Unused parameter "{param.name}" in function "{function.name}"'
+                })
+
+        # Check for null references
+        if hasattr(function, 'code_block'):
+            code = function.code_block.source
+            if 'None' in code and not any(s in code for s in ['is None', '== None', '!= None']):
+                issues['critical'].append({
+                    'type': 'unsafe_null_check',
+                    'message': f'Potential unsafe null reference in function "{function.name}"'
+                })
+
+        # Check for incomplete implementations
+        if 'TODO' in function.source or 'FIXME' in function.source:
+            issues['major'].append({
+                'type': 'incomplete_implementation',
+                'message': f'Incomplete implementation in function "{function.name}"'
+            })
+
+    # Check for code duplication
+    seen_blocks = {}
+    for function in file.functions:
+        if hasattr(function, 'code_block'):
+            code = function.code_block.source.strip()
+            if len(code) > 50:  # Only check substantial blocks
+                if code in seen_blocks:
+                    issues['major'].append({
+                        'type': 'code_duplication',
+                        'message': f'Code duplication between functions "{function.name}" and "{seen_blocks[code]}"'
+                    })
+                else:
+                    seen_blocks[code] = function.name
+
+    return issues
+
+def build_repo_structure(files, file_issues) -> Dict:
+    """Build a hierarchical repository structure with issue counts."""
+    root = {'name': 'root', 'children': {}}
+    
+    for file in files:
+        path_parts = file.filepath.split('/')
+        current = root
+        
+        # Build the tree structure
+        for i, part in enumerate(path_parts[:-1]):
+            if part not in current['children']:
+                current['children'][part] = {
+                    'name': part,
+                    'type': 'directory',
+                    'children': {},
+                    'issues': {'critical': 0, 'major': 0, 'minor': 0}
+                }
+            current = current['children'][part]
+        
+        # Add the file
+        filename = path_parts[-1]
+        file_node = {
+            'name': filename,
+            'type': 'file',
+            'issues': {'critical': 0, 'major': 0, 'minor': 0}
+        }
+        
+        # Add issue counts if present
+        if file.filepath in file_issues:
+            issues = file_issues[file.filepath]
+            file_node['issues'] = {
+                'critical': len(issues.critical),
+                'major': len(issues.major),
+                'minor': len(issues.minor)
+            }
+            
+            # Propagate counts up the tree
+            temp = root
+            for part in path_parts[:-1]:
+                temp = temp['children'][part]
+                for severity in ['critical', 'major', 'minor']:
+                    temp['issues'][severity] += file_node['issues'][severity]
+        
+        current['children'][filename] = file_node
+    
+    return root
 
 @app.get("/api/codebase/stats")
 async def get_codebase_stats(codebase_id: str) -> CodebaseStats:
@@ -197,137 +633,7 @@ async def get_function_call_chain(function_id: str) -> List[str]:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-def find_dead_code(codebase) -> List:
-    """Find functions that are never called."""
-    dead_functions = []
-    for function in codebase.functions:
-        if not any(function.function_calls):
-            dead_functions.append(function)
-    return dead_functions
-
-def get_max_call_chain(function) -> List:
-    """Get the longest call chain starting from a function."""
-    G = nx.DiGraph()
-    
-    def build_graph(func, depth=0):
-        if depth > 10:  # Prevent infinite recursion
-            return
-        for call in func.function_calls:
-            called_func = call.function_definition
-            G.add_edge(func, called_func)
-            build_graph(called_func, depth + 1)
-    
-    build_graph(function)
-    return nx.dag_longest_path(G)
-
-def analyze_file_issues(file) -> Dict[str, List[Dict[str, str]]]:
-    """Analyze a file for various types of issues."""
-    issues = {
-        'critical': [],
-        'major': [],
-        'minor': []
-    }
-    
-    # Check for implementation errors
-    for function in file.functions:
-        # Check for unused parameters
-        for param in function.parameters:
-            if not any(param.name in str(usage) for usage in function.usages):
-                issues['minor'].append({
-                    'type': 'unused_parameter',
-                    'message': f'Unused parameter "{param.name}" in function "{function.name}"'
-                })
-
-        # Check for null references
-        if hasattr(function, 'code_block'):
-            code = function.code_block.source
-            if 'None' in code and not any(s in code for s in ['is None', '== None', '!= None']):
-                issues['critical'].append({
-                    'type': 'unsafe_null_check',
-                    'message': f'Potential unsafe null reference in function "{function.name}"'
-                })
-
-        # Check for incomplete implementations
-        if 'TODO' in function.source or 'FIXME' in function.source:
-            issues['major'].append({
-                'type': 'incomplete_implementation',
-                'message': f'Incomplete implementation in function "{function.name}"'
-            })
-
-    # Check for code duplication
-    seen_blocks = {}
-    for function in file.functions:
-        if hasattr(function, 'code_block'):
-            code = function.code_block.source.strip()
-            if len(code) > 50:  # Only check substantial blocks
-                if code in seen_blocks:
-                    issues['major'].append({
-                        'type': 'code_duplication',
-                        'message': f'Code duplication between functions "{function.name}" and "{seen_blocks[code]}"'
-                    })
-                else:
-                    seen_blocks[code] = function.name
-
-    return issues
-
-def build_repo_structure(files, file_issues) -> Dict:
-    """Build a hierarchical repository structure with issue counts."""
-    root = {'name': 'root', 'children': {}}
-    
-    for file in files:
-        path_parts = file.filepath.split('/')
-        current = root
-        
-        # Build the tree structure
-        for i, part in enumerate(path_parts[:-1]):
-            if part not in current['children']:
-                current['children'][part] = {
-                    'name': part,
-                    'type': 'directory',
-                    'children': {},
-                    'issues': {'critical': 0, 'major': 0, 'minor': 0}
-                }
-            current = current['children'][part]
-        
-        # Add the file
-        filename = path_parts[-1]
-        file_node = {
-            'name': filename,
-            'type': 'file',
-            'issues': {'critical': 0, 'major': 0, 'minor': 0}
-        }
-        
-        # Add issue counts if present
-        if file.filepath in file_issues:
-            issues = file_issues[file.filepath]
-            file_node['issues'] = {
-                'critical': len(issues.critical),
-                'major': len(issues.major),
-                'minor': len(issues.minor)
-            }
-            
-            # Propagate counts up the tree
-            temp = root
-            for part in path_parts[:-1]:
-                temp = temp['children'][part]
-                for severity in ['critical', 'major', 'minor']:
-                    temp['issues'][severity] += file_node['issues'][severity]
-        
-        current['children'][filename] = file_node
-    
-    return root
-
-# Helper function to get a function by ID (you'll need to implement this)
-def get_function_by_id(function_id: str):
-    # Implementation depends on how you store/retrieve functions
-    pass
-
-# Helper function to resolve imports (you'll need to implement this)
-def hop_through_imports(import_symbol):
-    # Implementation depends on how you handle imports
-    pass
-
-@app.post("/analyze_repo")
+@fastapi_app.post("/analyze_repo")
 async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
     """Analyze a repository and return comprehensive metrics."""
     repo_url = request.repo_url
@@ -510,3 +816,22 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
     }
 
     return results
+
+# Helper function to get a function by ID (you'll need to implement this)
+def get_function_by_id(function_id: str):
+    # Implementation depends on how you store/retrieve functions
+    pass
+
+# Helper function to resolve imports (you'll need to implement this)
+def hop_through_imports(import_symbol):
+    # Implementation depends on how you handle imports
+    pass
+
+@app.function(image=image)
+@modal.asgi_app()
+def fastapi_modal_app():
+    return fastapi_app
+
+if __name__ == "__main__":
+    app.deploy("analytics-app")
+
