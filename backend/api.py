@@ -1190,4 +1190,5 @@ def fastapi_modal_app():
     return fastapi_app
 
 if __name__ == "__main__":
-    app.deploy()
+    import uvicorn
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
