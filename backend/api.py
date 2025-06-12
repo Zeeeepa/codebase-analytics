@@ -1190,4 +1190,4 @@ def fastapi_modal_app():
     return fastapi_app
 
 if __name__ == "__main__":
-    app.deploy("analytics-app")
+    app.deploy()
