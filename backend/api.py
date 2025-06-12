@@ -54,11 +54,30 @@ fastapi_app.add_middleware(
 class BaseModelWithConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+class CodebaseStats(BaseModelWithConfig):
+    test_functions_count: int
+    test_classes_count: int
+    tests_per_file: float
+    total_classes: int
+    total_functions: int
+    total_imports: int
+    deepest_inheritance_class: Optional[Dict[str, Any]]
+    recursive_functions: List[str]
+    most_called_function: Dict[str, Any]
+    function_with_most_calls: Dict[str, Any]
+    unused_functions: List[Dict[str, str]]
+    dead_code: List[Dict[str, str]]
+
 class FileTestStats(BaseModelWithConfig):
     filepath: str
     test_class_count: int
     file_length: int
     function_count: int
+
+class FunctionContext(BaseModelWithConfig):
+    implementation: Dict[str, Any]
+    dependencies: List[Dict[str, Any]]
+    usages: List[Dict[str, Any]]
 
 class TestAnalysis(BaseModelWithConfig):
     total_test_functions: int
@@ -358,4 +377,3 @@ def fastapi_modal_app():
 
 if __name__ == "__main__":
     app.deploy("analytics-app")
-
