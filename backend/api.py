@@ -85,15 +85,15 @@ class TestAnalysis(BaseModel):
 
 class FunctionAnalysis(BaseModel):
     total_functions: int
-    most_called_function: Dict[str, any]
-    function_with_most_calls: Dict[str, any]
+    most_called_function: Dict[str, Any]
+    function_with_most_calls: Dict[str, Any]
     recursive_functions: List[str]
     unused_functions: List[Dict[str, str]]
     dead_code: List[Dict[str, str]]
 
 class ClassAnalysis(BaseModel):
     total_classes: int
-    deepest_inheritance: Optional[Dict[str, any]]
+    deepest_inheritance: Optional[Dict[str, Any]]
     total_imports: int
 
 class FileIssue(BaseModel):
@@ -106,7 +106,7 @@ class ExtendedAnalysis(BaseModel):
     function_analysis: FunctionAnalysis
     class_analysis: ClassAnalysis
     file_issues: Dict[str, FileIssue]
-    repo_structure: Dict[str, any]
+    repo_structure: Dict[str, Any]  # Changed from 'any' to 'Any'
 
 class RepoRequest(BaseModel):
     repo_url: str
