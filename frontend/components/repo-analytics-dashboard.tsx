@@ -1,12 +1,15 @@
 "use client"
 
 import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain } from "lucide-react"
+import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, Zap } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import InteractiveCharts from "./InteractiveCharts"
+import { useInteractiveAnalysis } from "@/hooks/useInteractiveAnalysis"
 
 const mockRepoData = {
   name: "vercel/next.js",
@@ -87,6 +90,10 @@ export default function RepoAnalyticsDashboard() {
   const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
+  const [viewMode, setViewMode] = useState<'classic' | 'interactive'>('classic')
+  
+  // Interactive analysis hook
+  const { state: analysisState, actions: analysisActions } = useInteractiveAnalysis()
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -193,6 +200,12 @@ export default function RepoAnalyticsDashboard() {
     }
   }
 
+  const handleDrillDown = (metric: string, value: any) => {
+    console.log(`Drilling down into ${metric}:`, value)
+    analysisActions.drillDown(metric, value)
+    // Here you could fetch more detailed data or navigate to a detailed view
+  }
+
 function calculateCodebaseGrade(data: RepoData) {
   const { maintainabilityIndex } = data;
   
@@ -268,6 +281,23 @@ function calculateCodebaseGrade(data: RepoData) {
                   </h1>
                 </div>
                 <div className="flex items-center gap-3 ml-auto">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={viewMode === 'classic' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setViewMode('classic')}
+                    >
+                      Classic
+                    </Button>
+                    <Button
+                      variant={viewMode === 'interactive' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setViewMode('interactive')}
+                    >
+                      <Zap className="h-4 w-4 mr-1" />
+                      Interactive
+                    </Button>
+                  </div>
                   <Input
                     type="text"
                     placeholder="Enter the GitHub repo link or owner/repo"
@@ -285,6 +315,7 @@ function calculateCodebaseGrade(data: RepoData) {
             </div>
           </header>
           <main className="p-6 flex-grow">
+            {/* Repository Header - Always Visible */}
             <div className="grid mb-5 gap-6 grid-cols-1">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -313,6 +344,17 @@ function calculateCodebaseGrade(data: RepoData) {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Conditional Content Based on View Mode */}
+            {viewMode === 'interactive' ? (
+              <InteractiveCharts 
+                commitData={commitData}
+                repoData={repoData}
+                onDrillDown={handleDrillDown}
+              />
+            ) : (
+              /* Classic View */
+              <div>
             <div className="grid gap-6 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4">
               <Card onMouseEnter={() => handleMouseEnter('Maintainability Index')} onMouseLeave={handleMouseLeave}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -450,6 +492,8 @@ function calculateCodebaseGrade(data: RepoData) {
                 </CardContent>
               </Card>
             </div>
+              </div>
+            )}
           </main>
           <footer className="w-full text-center text-xs text-muted-foreground py-4">
           built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
