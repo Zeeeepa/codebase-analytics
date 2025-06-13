@@ -275,6 +275,14 @@ class VisualCodebaseExplorer:
                             "suggestion": "Add base case condition to prevent infinite recursion"
                         })
         
+        # Check for parameter-related issues
+        parameter_issues = self._detect_parameter_issues(func)
+        issues.extend(parameter_issues)
+        
+        # Check for function call parameter mismatches
+        call_issues = self._detect_function_call_issues(func)
+        issues.extend(call_issues)
+        
         return issues
 
     def _detect_class_issues(self, cls: Class) -> List[Dict[str, Any]]:
@@ -332,6 +340,119 @@ class VisualCodebaseExplorer:
         
         # Look for return type annotations (-> Type)
         return '->' in str(code) and 'None' not in str(code)
+    
+    def _detect_parameter_issues(self, func: Function) -> List[Dict[str, Any]]:
+        """Detect parameter-related functional issues."""
+        issues = []
+        
+        if not hasattr(func, 'parameters') or not hasattr(func, 'code_block'):
+            return issues
+        
+        try:
+            parameters = getattr(func, 'parameters', [])
+            code = getattr(func, 'code_block', '')
+            if hasattr(code, 'source'):
+                code = code.source
+            code_str = str(code)
+        except Exception as e:
+            # Skip parameter analysis if there are parsing issues
+            return issues
+        
+        for param in parameters:
+            param_name = getattr(param, 'name', '')
+            if not param_name or param_name in ['self', 'cls']:
+                continue
+            
+            # Check for unused parameters
+            if param_name not in code_str:
+                issues.append({
+                    "type": "unused_parameter",
+                    "severity": "minor",
+                    "message": f"Parameter '{param_name}' is defined but never used",
+                    "suggestion": f"Remove unused parameter '{param_name}' or use it in the function body"
+                })
+            
+            # Check for parameters with default values that are mutable
+            if hasattr(param, 'default_value'):
+                default_val = str(getattr(param, 'default_value', ''))
+                if any(mutable in default_val for mutable in ['[]', '{}', 'list()', 'dict()', 'set()']):
+                    issues.append({
+                        "type": "mutable_default_parameter",
+                        "severity": "major",
+                        "message": f"Parameter '{param_name}' has mutable default value",
+                        "suggestion": f"Use None as default and create mutable object inside function"
+                    })
+        
+        # Check for missing required parameters in function signature
+        if hasattr(func, 'function_calls'):
+            try:
+                for call in getattr(func, 'function_calls', []):
+                    if hasattr(call, 'function_definition') and call.function_definition:
+                        target_func = call.function_definition
+                        if hasattr(target_func, 'parameters'):
+                            required_params = [
+                                p for p in getattr(target_func, 'parameters', [])
+                                if not hasattr(p, 'default_value') and getattr(p, 'name', '') not in ['self', 'cls']
+                            ]
+                            
+                            if hasattr(call, 'arguments'):
+                                provided_args = len(getattr(call, 'arguments', []))
+                                if provided_args < len(required_params):
+                                    issues.append({
+                                        "type": "missing_required_arguments",
+                                        "severity": "critical",
+                                        "message": f"Function call to '{getattr(target_func, 'name', 'unknown')}' missing required arguments",
+                                        "suggestion": f"Provide all {len(required_params)} required arguments"
+                                    })
+            except Exception as e:
+                # Skip function call parameter analysis if there are parsing issues
+                pass
+        
+        return issues
+    
+    def _detect_function_call_issues(self, func: Function) -> List[Dict[str, Any]]:
+        """Detect issues with function calls and their parameters."""
+        issues = []
+        
+        if not hasattr(func, 'function_calls'):
+            return issues
+        
+        code = getattr(func, 'code_block', '')
+        if hasattr(code, 'source'):
+            code = code.source
+        code_str = str(code)
+        
+        # Check for common parameter passing errors
+        function_calls = getattr(func, 'function_calls', [])
+        
+        for call in function_calls:
+            call_name = getattr(call, 'name', '')
+            
+            # Check for calls with wrong parameter types (basic heuristics)
+            if 'str(' in code_str and 'int(' in code_str:
+                # Look for potential type conversion issues
+                if any(pattern in code_str for pattern in ['str(int(', 'int(str(']):
+                    issues.append({
+                        "type": "redundant_type_conversion",
+                        "severity": "minor",
+                        "message": "Redundant type conversions detected",
+                        "suggestion": "Review type conversion logic for efficiency"
+                    })
+            
+            # Check for calls to undefined functions (basic check)
+            if call_name and call_name not in ['print', 'len', 'str', 'int', 'float', 'bool', 'list', 'dict', 'set', 'tuple']:
+                # This is a simplified check - in a real implementation, you'd check against imports and defined functions
+                if not hasattr(call, 'function_definition') or not call.function_definition:
+                    # Only flag if it's not a built-in or method call
+                    if '.' not in call_name and not call_name.startswith('_'):
+                        issues.append({
+                            "type": "undefined_function_call",
+                            "severity": "major",
+                            "message": f"Call to potentially undefined function '{call_name}'",
+                            "suggestion": f"Ensure function '{call_name}' is defined or imported"
+                        })
+        
+        return issues
 
     def _analyze_error_patterns(self):
         """Analyze error patterns and hotspots in the codebase."""
@@ -666,6 +787,42 @@ class VisualCodebaseExplorer:
                 "title": f"Found {len(missing_returns)} functions with missing return statements",
                 "description": "Functions with return type annotations but no return statements may cause runtime errors",
                 "affected_nodes": [node.id for node in missing_returns[:5]]
+            })
+        
+        # Parameter-related issues
+        parameter_issues = [
+            node for node in self.nodes.values()
+            if node.type == "function" and any(
+                issue['type'] in ['unused_parameter', 'mutable_default_parameter', 'missing_required_arguments'] 
+                for issue in node.issues
+            )
+        ]
+        
+        if parameter_issues:
+            insights.append({
+                "type": "parameter_issues",
+                "priority": "medium",
+                "title": f"Found {len(parameter_issues)} functions with parameter issues",
+                "description": "Parameter problems including unused parameters, mutable defaults, and missing arguments",
+                "affected_nodes": [node.id for node in parameter_issues[:5]]
+            })
+        
+        # Function call issues
+        call_issues = [
+            node for node in self.nodes.values()
+            if node.type == "function" and any(
+                issue['type'] in ['undefined_function_call', 'redundant_type_conversion'] 
+                for issue in node.issues
+            )
+        ]
+        
+        if call_issues:
+            insights.append({
+                "type": "function_call_issues",
+                "priority": "major",
+                "title": f"Found {len(call_issues)} functions with call issues",
+                "description": "Problems with function calls including undefined functions and type conversion issues",
+                "affected_nodes": [node.id for node in call_issues[:5]]
             })
         
         return insights
