@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { RepoData, ExplorationData, BlastRadiusData, Symbol, FileNode, Issue, VisualNode } from '@/lib/api-types';
-import { useAnalysisState } from '@/hooks/useAnalysisState';
+import { useSharedAnalysisState } from '@/hooks/useSharedAnalysisState';
 
 interface DashboardContextType {
   // Repository data
@@ -64,7 +64,7 @@ interface DashboardContextType {
 
 const DashboardContext = createContext<DashboardContextType | undefined>(undefined);
 
-export function DashboardProvider({ children }: { children: ReactNode }) {
+export function DashboardProviderEnhanced({ children }: { children: ReactNode }) {
   // Repository data
   const [repoUrl, setRepoUrl] = useState<string>('');
   const [repoData, setRepoData] = useState<RepoData | null>(null);
@@ -108,7 +108,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setSelectedNode,
     setSelectedFilePath,
     setSelectedSymbolName
-  } = useAnalysisState();
+  } = useSharedAnalysisState();
   
   // Sync dashboard context with shared state
   useEffect(() => {
@@ -346,10 +346,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useDashboard() {
+export function useDashboardEnhanced() {
   const context = useContext(DashboardContext);
   if (context === undefined) {
-    throw new Error('useDashboard must be used within a DashboardProvider');
+    throw new Error('useDashboardEnhanced must be used within a DashboardProviderEnhanced');
   }
   return context;
 }

@@ -17,7 +17,7 @@ import {
   useViewOptions, 
   useIssueSelection, 
   useNodeSelection 
-} from '@/hooks/useAnalysisState';
+} from '@/hooks/useSharedAnalysisState';
 import { 
   Search, 
   Zap, 
@@ -25,46 +25,22 @@ import {
   FileCode, 
   Info,
   BarChart3,
-  Target,
-  Code2, 
-  Bug, 
-  AlertCircle,
-  Ban,
-  Unlink,
-  Repeat,
-  Gauge,
-  Shield,
-  FileWarning,
-  Sparkles,
-  Filter,
-  SortDesc
+  Target
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Separator } from '@/components/ui/separator';
 import { FilterBar } from '@/components/ui/filter-bar';
 import { SortBar } from '@/components/ui/sort-bar';
 import { IssueCard } from '@/components/ui/issue-card';
 import { NodeCard } from '@/components/ui/node-card';
-import { 
-  Issue, 
-  IssueType, 
-  IssueSeverity, 
-  IssueCategory,
-  VisualNode,
-  ExplorationData
-} from '@/lib/api-types';
+import { Issue, VisualNode } from '@/lib/api-types';
 
-export function ExplorerView() {
+export function ExplorerViewEnhanced() {
   const { 
     repoUrl, 
     explorationData, 
@@ -84,14 +60,10 @@ export function ExplorerView() {
     severityFilter, 
     categoryFilter, 
     typeFilter, 
-    searchQuery,
-    setSeverityFilter,
-    setCategoryFilter,
-    setTypeFilter,
-    setSearchQuery
+    searchQuery 
   } = useFilters();
   
-  const { sortBy, viewMode, setSortBy, setViewMode } = useViewOptions();
+  const { sortBy, viewMode } = useViewOptions();
   const { selectedIssue } = useIssueSelection();
   const { selectedNode } = useNodeSelection();
   

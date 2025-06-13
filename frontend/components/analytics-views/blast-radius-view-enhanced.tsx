@@ -4,8 +4,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { useDashboard } from '@/components/dashboard-context';
 import { apiService } from '@/lib/api-service';
 import { calculateBlastRadiusStats } from '@/lib/analysis-utils';
-import { useSymbolSelection, useNodeSelection } from '@/hooks/useAnalysisState';
-import { Target, AlertTriangle, Zap, Network, FileCode, ArrowRight, ArrowLeft, Bug, Code2 } from 'lucide-react';
+import { useSymbolSelection, useNodeSelection } from '@/hooks/useSharedAnalysisState';
+import { Target, AlertTriangle, Zap, Network, FileCode, ArrowRight, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -17,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NodeCard } from '@/components/ui/node-card';
 import { VisualNode } from '@/lib/api-types';
 
-export function BlastRadiusView() {
+export function BlastRadiusViewEnhanced() {
   const { 
     repoUrl, 
     blastRadiusData, 
