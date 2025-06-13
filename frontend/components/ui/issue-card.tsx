@@ -1,212 +1,209 @@
 "use client"
 
-import { Issue, IssueType, IssueSeverity, IssueCategory } from '@/lib/api-types'
+import { useState } from 'react';
+import { Issue, IssueSeverity, IssueCategory, IssueType } from '@/lib/api-types';
+import { useIssueSelection } from '@/hooks/useAnalysisState';
 import { 
-  getSeverityColor, 
-  getSeverityLabel, 
-  getCategoryColor, 
-  getCategoryLabel, 
-  getIssueTypeIcon, 
-  getIssueTypeLabel,
-  getImpactBadgeInfo
-} from '@/lib/analysis-utils'
-import { useIssueSelection } from '@/hooks/useSharedAnalysisState'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Button } from '@/components/ui/button'
-import { Info, AlertTriangle, AlertCircle, Ban, Code2, FileWarning, Repeat, Unlink, FileCode, Sparkles, Shield, Gauge, Bug, ExternalLink } from 'lucide-react'
-import { useState } from 'react'
+  AlertTriangle, 
+  Code2, 
+  Bug, 
+  AlertCircle,
+  Ban,
+  Unlink,
+  Repeat,
+  Gauge,
+  Shield,
+  FileWarning,
+  Sparkles,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Search,
+  FileCode
+} from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { cn } from '@/lib/utils';
 
 interface IssueCardProps {
-  issue: Issue
-  showLocation?: boolean
-  showCodeSnippet?: boolean
-  showSuggestion?: boolean
-  showRelatedSymbols?: boolean
-  showFixExamples?: boolean
-  onViewInFile?: (issue: Issue) => void
-  onViewRelatedIssues?: (issue: Issue) => void
-  className?: string
+  issue: Issue;
+  showSuggestion?: boolean;
+  showCodeSnippet?: boolean;
+  showFixExamples?: boolean;
+  showRelatedSymbols?: boolean;
+  onViewInFile?: (issue: Issue) => void;
+  onViewRelatedIssues?: (issue: Issue) => void;
+  className?: string;
 }
 
 export function IssueCard({
   issue,
-  showLocation = true,
-  showCodeSnippet = true,
   showSuggestion = true,
-  showRelatedSymbols = true,
+  showCodeSnippet = true,
   showFixExamples = true,
+  showRelatedSymbols = true,
   onViewInFile,
   onViewRelatedIssues,
-  className = ''
+  className
 }: IssueCardProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const { selectedIssue, setSelectedIssue } = useIssueSelection()
+  const [isOpen, setIsOpen] = useState(false);
+  const { selectedIssue, setSelectedIssue } = useIssueSelection();
   
-  const isSelected = selectedIssue?.id === issue.id
+  const isSelected = selectedIssue?.id === issue.id;
   
   const handleSelect = () => {
-    setSelectedIssue(isSelected ? null : issue)
-  }
+    setSelectedIssue(isSelected ? null : issue);
+  };
   
-  const getIconComponent = (type: IssueType | string) => {
+  const getIssueTypeIcon = (type: IssueType | string) => {
     switch (type) {
       case IssueType.UNUSED_IMPORT:
         return <Ban className="h-4 w-4" />;
       case IssueType.UNUSED_VARIABLE:
-      case IssueType.UNUSED_FUNCTION:
-      case IssueType.UNUSED_PARAMETER:
         return <Code2 className="h-4 w-4" />;
       case IssueType.UNDEFINED_VARIABLE:
-      case IssueType.UNDEFINED_FUNCTION:
         return <AlertCircle className="h-4 w-4" />;
       case IssueType.PARAMETER_MISMATCH:
         return <AlertTriangle className="h-4 w-4" />;
-      case IssueType.TYPE_ERROR:
-        return <FileWarning className="h-4 w-4" />;
       case IssueType.CIRCULAR_DEPENDENCY:
         return <Repeat className="h-4 w-4" />;
-      case IssueType.DEAD_CODE:
-        return <Unlink className="h-4 w-4" />;
-      case IssueType.COMPLEXITY_ISSUE:
-        return <FileCode className="h-4 w-4" />;
-      case IssueType.STYLE_ISSUE:
-        return <Sparkles className="h-4 w-4" />;
-      case IssueType.SECURITY_ISSUE:
-        return <Shield className="h-4 w-4" />;
       case IssueType.PERFORMANCE_ISSUE:
         return <Gauge className="h-4 w-4" />;
+      case IssueType.SECURITY_ISSUE:
+        return <Shield className="h-4 w-4" />;
+      case IssueType.SYNTAX_ERROR:
+        return <FileWarning className="h-4 w-4" />;
+      case IssueType.STYLE_ISSUE:
+        return <Sparkles className="h-4 w-4" />;
       default:
         return <Bug className="h-4 w-4" />;
     }
-  }
+  };
   
-  const renderImpactBadge = (score: number) => {
-    const { color, label } = getImpactBadgeInfo(score);
-    
-    return (
-      <Badge variant="outline" className={`text-white ${color}`}>
-        Impact: {label} ({score}/10)
-      </Badge>
-    );
-  }
+  const getSeverityColor = (severity: IssueSeverity | string) => {
+    switch (severity) {
+      case IssueSeverity.CRITICAL:
+        return 'bg-red-600';
+      case IssueSeverity.HIGH:
+        return 'bg-orange-500';
+      case IssueSeverity.MEDIUM:
+        return 'bg-yellow-500';
+      case IssueSeverity.LOW:
+        return 'bg-blue-500';
+      case IssueSeverity.INFO:
+        return 'bg-gray-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+  
+  const getCategoryColor = (category: IssueCategory | string) => {
+    switch (category) {
+      case IssueCategory.FUNCTIONAL:
+        return 'bg-purple-500';
+      case IssueCategory.STRUCTURAL:
+        return 'bg-indigo-500';
+      case IssueCategory.QUALITY:
+        return 'bg-teal-500';
+      case IssueCategory.SECURITY:
+        return 'bg-red-500';
+      case IssueCategory.PERFORMANCE:
+        return 'bg-amber-500';
+      default:
+        return 'bg-gray-500';
+    }
+  };
+  
+  const getImpactBadgeInfo = (score: number) => {
+    if (score >= 9) return { color: 'bg-red-600', label: 'Critical' };
+    if (score >= 7) return { color: 'bg-orange-500', label: 'High' };
+    if (score >= 5) return { color: 'bg-yellow-500', label: 'Medium' };
+    if (score >= 3) return { color: 'bg-blue-500', label: 'Low' };
+    return { color: 'bg-gray-500', label: 'Minimal' };
+  };
+  
+  const impactInfo = issue.impact_score ? getImpactBadgeInfo(issue.impact_score) : null;
   
   return (
-    <Card className={`overflow-hidden ${isSelected ? 'ring-2 ring-primary' : ''} ${className}`}>
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="w-full text-left">
-          <CardHeader className="pb-2">
-            <div className="flex items-start justify-between">
-              <div className="flex items-start gap-3">
-                <div className="mt-1">
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        {getIconComponent(issue.type)}
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{getIssueTypeLabel(issue.type)}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-                <div>
-                  <CardTitle className="text-base">{issue.message}</CardTitle>
-                  {issue.location && (
-                    <CardDescription className="text-xs mt-1">
-                      {issue.location.file_path}:{issue.location.start_line}
-                      {issue.location.end_line !== issue.location.start_line && 
-                        `-${issue.location.end_line}`}
-                    </CardDescription>
-                  )}
-                </div>
+    <Card 
+      className={cn(
+        "transition-all duration-200",
+        isSelected ? "border-primary shadow-md" : "",
+        className
+      )}
+    >
+      <Collapsible
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        className="w-full"
+      >
+        <div className="flex items-start p-4">
+          <div className="mr-3 mt-0.5">
+            {getIssueTypeIcon(issue.type)}
+          </div>
+          
+          <div className="flex-1">
+            <CollapsibleTrigger className="flex items-center justify-between w-full text-left">
+              <div>
+                <h3 className="font-medium">{issue.message}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {issue.location?.file_path}:{issue.location?.start_line}
+                </p>
               </div>
-              <div className="flex items-center gap-2">
-                <Info className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge 
-                      variant="outline" 
-                      className={`text-white ${getSeverityColor(issue.severity)}`}
-                    >
-                      {getSeverityLabel(issue.severity)}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Issue severity level</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger>
-                    <Badge 
-                      variant="outline" 
-                      className={`text-white ${getCategoryColor(issue.category)}`}
-                    >
-                      {getCategoryLabel(issue.category)}
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p>Issue category</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              
-              {issue.impact_score && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>
-                      {renderImpactBadge(issue.impact_score)}
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Impact score indicates the potential effect of this issue</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-            </div>
-          </CardHeader>
-        </CollapsibleTrigger>
+              {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </CollapsibleTrigger>
+          </div>
+        </div>
+        
+        <div className="px-4 pb-2 flex flex-wrap gap-2">
+          <Badge variant="outline" className={`${getSeverityColor(issue.severity)} text-white`}>
+            {issue.severity}
+          </Badge>
+          
+          <Badge variant="outline" className={`${getCategoryColor(issue.category)} text-white`}>
+            {issue.category}
+          </Badge>
+          
+          {impactInfo && (
+            <Badge variant="outline" className={`${impactInfo.color} text-white`}>
+              Impact: {impactInfo.label} ({issue.impact_score}/10)
+            </Badge>
+          )}
+        </div>
         
         <CollapsibleContent>
           <CardContent className="pt-0 pb-4">
-            <div className="space-y-4 text-sm">
+            <div className="space-y-4">
               {showSuggestion && issue.suggestion && (
-                <div className="bg-muted p-3 rounded-md">
-                  <p className="font-medium text-blue-600">💡 Suggestion:</p>
-                  <p>{issue.suggestion}</p>
+                <div>
+                  <p className="text-sm font-medium mb-1">💡 Suggestion:</p>
+                  <p className="text-sm text-muted-foreground">{issue.suggestion}</p>
                 </div>
               )}
               
               {showCodeSnippet && issue.code_snippet && (
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Code snippet:</p>
-                  <pre className="bg-muted p-3 rounded-md overflow-x-auto font-mono text-xs">
+                <div>
+                  <p className="text-sm font-medium mb-1">Code snippet:</p>
+                  <pre className="text-xs bg-muted p-2 rounded-md overflow-x-auto">
                     {issue.code_snippet}
                   </pre>
                 </div>
               )}
               
               {showFixExamples && issue.fix_examples && issue.fix_examples.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Fix example:</p>
-                  <pre className="bg-muted p-3 rounded-md overflow-x-auto font-mono text-xs">
+                <div>
+                  <p className="text-sm font-medium mb-1">Fix example:</p>
+                  <pre className="text-xs bg-muted p-2 rounded-md overflow-x-auto">
                     {issue.fix_examples[0]}
                   </pre>
                 </div>
               )}
               
               {showRelatedSymbols && issue.related_symbols && issue.related_symbols.length > 0 && (
-                <div className="space-y-1">
-                  <p className="text-muted-foreground">Related symbols:</p>
+                <div>
+                  <p className="text-sm font-medium mb-1">Related symbols:</p>
                   <div className="flex flex-wrap gap-2">
                     {issue.related_symbols.map((symbol, index) => (
                       <Badge key={index} variant="secondary">
@@ -217,49 +214,45 @@ export function IssueCard({
                 </div>
               )}
               
-              <div className="flex items-center justify-between pt-2">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-wrap gap-2 mt-4">
+                {onViewInFile && (
                   <Button 
                     variant="outline" 
                     size="sm" 
-                    onClick={handleSelect}
+                    onClick={() => onViewInFile(issue)}
+                    className="flex items-center gap-1"
                   >
-                    {isSelected ? 'Deselect' : 'Select'}
+                    <FileCode className="h-3 w-3" />
+                    View in File
                   </Button>
-                  
-                  {onViewInFile && (
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onViewInFile(issue);
-                      }}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-1" />
-                      View in File
-                    </Button>
-                  )}
-                </div>
+                )}
                 
                 {onViewRelatedIssues && (
                   <Button 
-                    variant="ghost" 
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onViewRelatedIssues(issue);
-                    }}
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => onViewRelatedIssues(issue)}
+                    className="flex items-center gap-1"
                   >
+                    <Search className="h-3 w-3" />
                     Find Related Issues
                   </Button>
                 )}
+                
+                <Button 
+                  variant={isSelected ? "default" : "outline"} 
+                  size="sm" 
+                  onClick={handleSelect}
+                  className="flex items-center gap-1"
+                >
+                  {isSelected ? 'Deselect' : 'Select'}
+                </Button>
               </div>
             </div>
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
     </Card>
-  )
+  );
 }
 

@@ -1,28 +1,50 @@
 "use client"
 
-import { IssueType, IssueSeverity, IssueCategory } from '@/lib/api-types'
-import { useFilters } from '@/hooks/useSharedAnalysisState'
-import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Filter, X, Search } from 'lucide-react'
+import { useFilters } from '@/hooks/useAnalysisState';
+import { IssueType, IssueSeverity, IssueCategory } from '@/lib/api-types';
+import { 
+  Filter, 
+  X, 
+  AlertTriangle, 
+  Code2, 
+  Bug, 
+  AlertCircle,
+  Ban,
+  Unlink,
+  Repeat,
+  Gauge,
+  Shield,
+  FileWarning,
+  Sparkles,
+  Search
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 interface FilterBarProps {
-  showTypeFilter?: boolean
-  showSeverityFilter?: boolean
-  showCategoryFilter?: boolean
-  showSearchFilter?: boolean
-  showResetButton?: boolean
-  className?: string
+  showSeverityFilter?: boolean;
+  showCategoryFilter?: boolean;
+  showTypeFilter?: boolean;
+  showSearchFilter?: boolean;
+  showResetButton?: boolean;
+  className?: string;
 }
 
 export function FilterBar({
-  showTypeFilter = true,
   showSeverityFilter = true,
   showCategoryFilter = true,
+  showTypeFilter = true,
   showSearchFilter = true,
   showResetButton = true,
-  className = ''
+  className
 }: FilterBarProps) {
   const {
     severityFilter,
@@ -34,23 +56,24 @@ export function FilterBar({
     setTypeFilter,
     setSearchQuery,
     resetFilters
-  } = useFilters()
+  } = useFilters();
   
+  // Check if any filters are active
   const hasActiveFilters = 
     severityFilter !== 'all' || 
     categoryFilter !== 'all' || 
     typeFilter !== 'all' || 
-    searchQuery !== ''
+    searchQuery !== '';
   
   return (
-    <div className={`flex flex-wrap gap-2 ${className}`}>
+    <div className={cn("flex flex-wrap gap-2", className)}>
       {showSeverityFilter && (
-        <Select 
-          value={severityFilter} 
-          onValueChange={(value) => setSeverityFilter(value as any)}
+        <Select
+          value={severityFilter}
+          onValueChange={(value) => setSeverityFilter(value as IssueSeverity | 'all')}
         >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by Severity" />
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="All Severities" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Severities</SelectItem>
@@ -64,12 +87,12 @@ export function FilterBar({
       )}
       
       {showCategoryFilter && (
-        <Select 
-          value={categoryFilter} 
-          onValueChange={(value) => setCategoryFilter(value as any)}
+        <Select
+          value={categoryFilter}
+          onValueChange={(value) => setCategoryFilter(value as IssueCategory | 'all')}
         >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by Category" />
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="All Categories" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
@@ -83,36 +106,31 @@ export function FilterBar({
       )}
       
       {showTypeFilter && (
-        <Select 
-          value={typeFilter} 
-          onValueChange={(value) => setTypeFilter(value as any)}
+        <Select
+          value={typeFilter}
+          onValueChange={(value) => setTypeFilter(value as IssueType | 'all')}
         >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by Type" />
+          <SelectTrigger className="w-[140px]">
+            <SelectValue placeholder="All Types" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
             <SelectItem value={IssueType.UNUSED_IMPORT}>Unused Import</SelectItem>
             <SelectItem value={IssueType.UNUSED_VARIABLE}>Unused Variable</SelectItem>
-            <SelectItem value={IssueType.UNUSED_FUNCTION}>Unused Function</SelectItem>
-            <SelectItem value={IssueType.UNUSED_PARAMETER}>Unused Parameter</SelectItem>
             <SelectItem value={IssueType.UNDEFINED_VARIABLE}>Undefined Variable</SelectItem>
-            <SelectItem value={IssueType.UNDEFINED_FUNCTION}>Undefined Function</SelectItem>
             <SelectItem value={IssueType.PARAMETER_MISMATCH}>Parameter Mismatch</SelectItem>
-            <SelectItem value={IssueType.TYPE_ERROR}>Type Error</SelectItem>
             <SelectItem value={IssueType.CIRCULAR_DEPENDENCY}>Circular Dependency</SelectItem>
-            <SelectItem value={IssueType.DEAD_CODE}>Dead Code</SelectItem>
-            <SelectItem value={IssueType.COMPLEXITY_ISSUE}>Complexity Issue</SelectItem>
-            <SelectItem value={IssueType.STYLE_ISSUE}>Style Issue</SelectItem>
-            <SelectItem value={IssueType.SECURITY_ISSUE}>Security Issue</SelectItem>
             <SelectItem value={IssueType.PERFORMANCE_ISSUE}>Performance Issue</SelectItem>
+            <SelectItem value={IssueType.SECURITY_ISSUE}>Security Issue</SelectItem>
+            <SelectItem value={IssueType.SYNTAX_ERROR}>Syntax Error</SelectItem>
+            <SelectItem value={IssueType.STYLE_ISSUE}>Style Issue</SelectItem>
           </SelectContent>
         </Select>
       )}
       
       {showSearchFilter && (
         <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search issues..."
             value={searchQuery}
@@ -127,22 +145,24 @@ export function FilterBar({
               onClick={() => setSearchQuery('')}
             >
               <X className="h-4 w-4" />
+              <span className="sr-only">Clear search</span>
             </Button>
           )}
         </div>
       )}
       
       {showResetButton && hasActiveFilters && (
-        <Button 
-          variant="outline" 
+        <Button
+          variant="outline"
           size="icon"
           onClick={resetFilters}
           title="Reset filters"
         >
           <X className="h-4 w-4" />
+          <span className="sr-only">Reset filters</span>
         </Button>
       )}
     </div>
-  )
+  );
 }
 

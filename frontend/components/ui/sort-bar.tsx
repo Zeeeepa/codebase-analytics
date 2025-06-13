@@ -1,81 +1,123 @@
 "use client"
 
-import { useViewOptions } from '@/hooks/useSharedAnalysisState'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Button } from '@/components/ui/button'
-import { SortDesc, LayoutGrid, LayoutList, Network, Table } from 'lucide-react'
+import { useViewOptions } from '@/hooks/useAnalysisState';
+import { 
+  SortDesc, 
+  List, 
+  LayoutGrid, 
+  Network, 
+  Table2, 
+  AlertTriangle, 
+  BarChart3, 
+  FileCode, 
+  Code2 
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 interface SortBarProps {
-  showSortOptions?: boolean
-  showViewModeOptions?: boolean
-  className?: string
+  showSortOptions?: boolean;
+  showViewModeOptions?: boolean;
+  className?: string;
 }
 
 export function SortBar({
   showSortOptions = true,
   showViewModeOptions = true,
-  className = ''
+  className
 }: SortBarProps) {
-  const { sortBy, viewMode, setSortBy, setViewMode } = useViewOptions()
+  const { sortBy, viewMode, setSortBy, setViewMode } = useViewOptions();
   
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
+    <div className={cn("flex items-center gap-2", className)}>
       {showSortOptions && (
-        <Select value={sortBy} onValueChange={(value) => setSortBy(value as any)}>
-          <SelectTrigger className="w-[180px]">
-            <SortDesc className="h-4 w-4 mr-2" />
+        <Select
+          value={sortBy}
+          onValueChange={(value) => setSortBy(value as 'impact' | 'severity' | 'type' | 'name')}
+        >
+          <SelectTrigger className="w-[140px]">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="impact">Sort by Impact</SelectItem>
-            <SelectItem value="severity">Sort by Severity</SelectItem>
-            <SelectItem value="type">Sort by Type</SelectItem>
-            <SelectItem value="name">Sort by Name</SelectItem>
+            <SelectItem value="impact">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                <span>Sort by Impact</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="severity">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                <span>Sort by Severity</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="type">
+              <div className="flex items-center gap-2">
+                <FileCode className="h-4 w-4" />
+                <span>Sort by Type</span>
+              </div>
+            </SelectItem>
+            <SelectItem value="name">
+              <div className="flex items-center gap-2">
+                <Code2 className="h-4 w-4" />
+                <span>Sort by Name</span>
+              </div>
+            </SelectItem>
           </SelectContent>
         </Select>
       )}
       
       {showViewModeOptions && (
-        <div className="flex items-center border rounded-md">
+        <div className="flex items-center gap-1">
           <Button
             variant={viewMode === 'list' ? 'default' : 'ghost'}
-            size="sm"
-            className="rounded-r-none"
+            size="icon"
             onClick={() => setViewMode('list')}
             title="List view"
           >
-            <LayoutList className="h-4 w-4" />
+            <List className="h-4 w-4" />
+            <span className="sr-only">List view</span>
           </Button>
+          
           <Button
             variant={viewMode === 'tree' ? 'default' : 'ghost'}
-            size="sm"
-            className="rounded-none border-l border-r"
+            size="icon"
             onClick={() => setViewMode('tree')}
             title="Tree view"
           >
             <LayoutGrid className="h-4 w-4" />
+            <span className="sr-only">Tree view</span>
           </Button>
+          
           <Button
             variant={viewMode === 'graph' ? 'default' : 'ghost'}
-            size="sm"
-            className="rounded-none border-r"
+            size="icon"
             onClick={() => setViewMode('graph')}
             title="Graph view"
           >
             <Network className="h-4 w-4" />
+            <span className="sr-only">Graph view</span>
           </Button>
+          
           <Button
             variant={viewMode === 'table' ? 'default' : 'ghost'}
-            size="sm"
-            className="rounded-l-none"
+            size="icon"
             onClick={() => setViewMode('table')}
             title="Table view"
           >
-            <Table className="h-4 w-4" />
+            <Table2 className="h-4 w-4" />
+            <span className="sr-only">Table view</span>
           </Button>
         </div>
       )}
     </div>
-  )
+  );
 }
 
