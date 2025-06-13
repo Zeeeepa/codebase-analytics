@@ -3,14 +3,12 @@
 > next dev
 
  ⚠ Port 3000 is in use, trying 3001 instead.
- ⚠ Port 3001 is in use, trying 3002 instead.
   ▲ Next.js 14.2.16
-  - Local:        http://localhost:3002
+  - Local:        http://localhost:3001
   - Experiments (use with caution):
     · webpackBuildWorker
     · parallelServerCompiles
     · parallelServerBuildTraces
 
  ✓ Starting...
- ✓ Ready in 1367ms
-[?25h
+ ✓ Ready in 1720ms
