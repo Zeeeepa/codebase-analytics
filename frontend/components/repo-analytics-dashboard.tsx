@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import InteractiveCharts from "./InteractiveCharts"
+import InteractiveStructuralTree from "./InteractiveStructuralTree"
 import { useInteractiveAnalysis } from "@/hooks/useInteractiveAnalysis"
 
 const mockRepoData = {
@@ -90,7 +91,8 @@ export default function RepoAnalyticsDashboard() {
   const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
-  const [viewMode, setViewMode] = useState<'classic' | 'interactive'>('classic')
+  const [viewMode, setViewMode] = useState<'classic' | 'interactive' | 'structural'>('classic')
+  const [structuralData, setStructuralData] = useState<any>(null)
   
   // Interactive analysis hook
   const { state: analysisState, actions: analysisActions } = useInteractiveAnalysis()
@@ -206,6 +208,41 @@ export default function RepoAnalyticsDashboard() {
     // Here you could fetch more detailed data or navigate to a detailed view
   }
 
+  const handleStructuralAnalysis = async () => {
+    if (!repoData) return
+    
+    setIsLoading(true)
+    try {
+      const backendUrl = getBackendUrl()
+      const parsedRepoUrl = parseRepoUrl(repoUrl)
+      
+      console.log("Fetching structural analysis...")
+      const response = await fetch(`${backendUrl}/analyze_structural`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ repo_url: parsedRepoUrl }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setStructuralData(data)
+      setViewMode('structural')
+      
+      console.log("Structural analysis completed:", data)
+    } catch (error) {
+      console.error('Error fetching structural analysis:', error)
+      alert('Error fetching structural analysis. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
 function calculateCodebaseGrade(data: RepoData) {
   const { maintainabilityIndex } = data;
   
@@ -297,6 +334,15 @@ function calculateCodebaseGrade(data: RepoData) {
                       <Zap className="h-4 w-4 mr-1" />
                       Interactive
                     </Button>
+                    <Button
+                      variant={viewMode === 'structural' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={handleStructuralAnalysis}
+                      disabled={isLoading}
+                    >
+                      <Search className="h-4 w-4 mr-1" />
+                      {isLoading && viewMode !== 'structural' ? 'Analyzing...' : 'Structural'}
+                    </Button>
                   </div>
                   <Input
                     type="text"
@@ -352,6 +398,21 @@ function calculateCodebaseGrade(data: RepoData) {
                 repoData={repoData}
                 onDrillDown={handleDrillDown}
               />
+            ) : viewMode === 'structural' ? (
+              structuralData ? (
+                <InteractiveStructuralTree 
+                  analysisData={structuralData}
+                  onNodeClick={(node) => console.log('Node clicked:', node)}
+                  onErrorClick={(error) => console.log('Error clicked:', error)}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <Search className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-muted-foreground">Click "Structural" to analyze codebase structure and errors</p>
+                  </div>
+                </div>
+              )
             ) : (
               /* Classic View */
               <div>

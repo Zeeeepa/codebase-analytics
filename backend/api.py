@@ -1189,6 +1189,38 @@ def hop_through_imports(import_symbol):
 def fastapi_modal_app():
     return fastapi_app
 
+@fastapi_app.post("/analyze_structural")
+async def analyze_structural(request: RepoRequest):
+    """
+    Perform comprehensive structural analysis with interactive visualization.
+    
+    This endpoint provides detailed error detection, structural tree generation,
+    and contextual issue reporting similar to advanced code analysis tools.
+    """
+    try:
+        from .visualization.interactive_structural_analyzer import analyze_repository_structure
+        
+        repo_url = request.repo_url
+        print(f"Starting structural analysis for: {repo_url}")
+        
+        # Clone repository to temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = clone_repo(repo_url, temp_dir)
+            
+            # Load codebase with Codegen SDK
+            codebase = Codebase.from_path(repo_path)
+            
+            # Perform comprehensive structural analysis
+            analysis_result = analyze_repository_structure(repo_path, codebase)
+            
+            print(f"Structural analysis completed. Found {analysis_result['repository_info']['total_errors']} issues.")
+            
+            return analysis_result
+            
+    except Exception as e:
+        print(f"Error in structural analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Structural analysis failed: {str(e)}")
+
 if __name__ == "__main__":
     import uvicorn
     import socket
