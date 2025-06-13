@@ -1,0 +1,114 @@
+🚀 Starting FastAPI server on http://localhost:8001
+📚 API documentation available at http://localhost:8001/docs
+INFO:     Started server process [6266]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8001 (Press CTRL+C to quit)
+INFO:     127.0.0.1:19273 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60065 - "GET /docs HTTP/1.1" 200 OK
+Starting visual exploration for: . in mode: error_focused
+Loading local codebase from: .
+[37m2025-06-13 10:06:19,826 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 20 files in ['backend'] subdirectories with ['.py'] extensions[0m
+[37m2025-06-13 10:06:20,483 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-13 10:06:20,490 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 319 imports[0m
+[37m2025-06-13 10:06:20,594 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-13 10:06:20,607 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2951 nodes[0m
+[37m2025-06-13 10:06:21,470 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 126 nodes[0m
+[37m2025-06-13 10:06:21,472 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 20 files[0m
+[37m2025-06-13 10:06:21,473 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 3077 nodes and 13086 edges[0m
+[37m2025-06-13 10:06:21,473 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 1 second and 654.16 milliseconds to execute.[0m
+Loaded codebase with 20 files
+Performing visual exploration in error_focused mode...
+Visual exploration completed successfully
+Found 144 nodes and 354 issues
+INFO:     127.0.0.1:38197 - "POST /explore_visual HTTP/1.1" 200 OK
+Analyzing blast radius for symbol 'get_codebase_summary' in: .
+Loading local codebase from: .
+[37m2025-06-13 10:06:21,742 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 20 files in ['backend'] subdirectories with ['.py'] extensions[0m
+[37m2025-06-13 10:06:22,478 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-13 10:06:22,498 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 319 imports[0m
+[37m2025-06-13 10:06:22,603 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-13 10:06:22,627 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2951 nodes[0m
+[37m2025-06-13 10:06:23,803 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 126 nodes[0m
+[37m2025-06-13 10:06:23,805 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 20 files[0m
+[37m2025-06-13 10:06:23,806 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 3077 nodes and 13086 edges[0m
+[37m2025-06-13 10:06:23,806 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 2 seconds and 71.04 milliseconds to execute.[0m
+Loaded codebase with 20 files
+Analyzing blast radius for symbol: get_codebase_summary
+Blast radius analysis completed successfully
+Symbol affects 1 nodes
+INFO:     127.0.0.1:51537 - "POST /analyze_blast_radius HTTP/1.1" 200 OK
+Starting visual exploration for: . in mode: error_focused
+Loading local codebase from: .
+[37m2025-06-13 10:06:33,993 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 20 files in ['backend'] subdirectories with ['.py'] extensions[0m
+[37m2025-06-13 10:06:34,551 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-13 10:06:34,585 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 319 imports[0m
+[37m2025-06-13 10:06:35,104 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-13 10:06:35,142 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2951 nodes[0m
+[37m2025-06-13 10:06:36,013 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 126 nodes[0m
+[37m2025-06-13 10:06:36,015 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 20 files[0m
+[37m2025-06-13 10:06:36,016 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 3077 nodes and 13086 edges[0m
+[37m2025-06-13 10:06:36,017 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 2 seconds and 29.86 milliseconds to execute.[0m
+Loaded codebase with 20 files
+Performing visual exploration in error_focused mode...
+Visual exploration completed successfully
+Found 144 nodes and 354 issues
+INFO:     127.0.0.1:26224 - "POST /explore_visual HTTP/1.1" 200 OK
+Starting visual exploration for: /nonexistent in mode: error_focused
+Loading local codebase from: /nonexistent
+Error in visual exploration: Path '/nonexistent' is not in a git repository!
+INFO:     127.0.0.1:45272 - "POST /explore_visual HTTP/1.1" 500 Internal Server Error
+Starting visual exploration for: . in mode: invalid_mode
+Error in visual exploration: 400: Invalid exploration mode: invalid_mode
+INFO:     127.0.0.1:18941 - "POST /explore_visual HTTP/1.1" 500 Internal Server Error
+Starting visual exploration for: . in mode: error_focused
+Loading local codebase from: .
+[37m2025-06-13 10:06:46,835 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 20 files in ['backend'] subdirectories with ['.py'] extensions[0m
+[37m2025-06-13 10:06:47,924 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-13 10:06:47,970 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 319 imports[0m
+[37m2025-06-13 10:06:48,071 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-13 10:06:48,124 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2951 nodes[0m
+[37m2025-06-13 10:06:48,988 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 126 nodes[0m
+[37m2025-06-13 10:06:48,990 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 20 files[0m
+[37m2025-06-13 10:06:48,991 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 3077 nodes and 13086 edges[0m
+[37m2025-06-13 10:06:48,991 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 2 seconds and 162.41 milliseconds to execute.[0m
+Loaded codebase with 20 files
+Performing visual exploration in error_focused mode...
+Visual exploration completed successfully
+Found 144 nodes and 354 issues
+INFO:     127.0.0.1:30612 - "POST /explore_visual HTTP/1.1" 200 OK
+INFO:     127.0.0.1:26939 - "GET /openapi.json HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60458 - "GET /health HTTP/1.1" 200 OK
+Starting visual exploration for: . in mode: error_focused
+Loading local codebase from: .
+[37m2025-06-13 10:07:13,876 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 20 files in ['backend'] subdirectories with ['.py'] extensions[0m
+[37m2025-06-13 10:07:15,068 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-13 10:07:15,129 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 319 imports[0m
+[37m2025-06-13 10:07:15,233 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-13 10:07:15,299 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2951 nodes[0m
+[37m2025-06-13 10:07:16,171 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 126 nodes[0m
+[37m2025-06-13 10:07:16,173 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 20 files[0m
+[37m2025-06-13 10:07:16,174 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 3077 nodes and 13086 edges[0m
+[37m2025-06-13 10:07:16,174 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 2 seconds and 304.73 milliseconds to execute.[0m
+Loaded codebase with 20 files
+Performing visual exploration in error_focused mode...
+Visual exploration completed successfully
+Found 144 nodes and 354 issues
+INFO:     127.0.0.1:47787 - "POST /explore_visual HTTP/1.1" 200 OK
+Analyzing blast radius for symbol 'get_codebase_summary' in: .
+Loading local codebase from: .
+[37m2025-06-13 10:07:16,424 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 20 files in ['backend'] subdirectories with ['.py'] extensions[0m
+[37m2025-06-13 10:07:17,795 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-13 10:07:17,867 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 319 imports[0m
+[37m2025-06-13 10:07:17,967 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-13 10:07:18,044 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2951 nodes[0m
+[37m2025-06-13 10:07:18,910 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 126 nodes[0m
+[37m2025-06-13 10:07:18,912 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 20 files[0m
+[37m2025-06-13 10:07:18,913 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 3077 nodes and 13086 edges[0m
+[37m2025-06-13 10:07:18,913 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 2 seconds and 495.25 milliseconds to execute.[0m
+Loaded codebase with 20 files
+Analyzing blast radius for symbol: get_codebase_summary
+Blast radius analysis completed successfully
+Symbol affects 1 nodes
+INFO:     127.0.0.1:63250 - "POST /analyze_blast_radius HTTP/1.1" 200 OK
+INFO:     127.0.0.1:23116 - "GET /docs HTTP/1.1" 200 OK
