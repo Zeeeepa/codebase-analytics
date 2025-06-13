@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, Zap } from "lucide-react"
+import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, Zap, Search, Eye } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import InteractiveCharts from "./InteractiveCharts"
 import InteractiveStructuralTree from "./InteractiveStructuralTree"
+import VisualCodebaseExplorer from "./VisualCodebaseExplorer"
 import { useInteractiveAnalysis } from "@/hooks/useInteractiveAnalysis"
 
 const mockRepoData = {
@@ -91,8 +92,9 @@ export default function RepoAnalyticsDashboard() {
   const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
-  const [viewMode, setViewMode] = useState<'classic' | 'interactive' | 'structural'>('classic')
+  const [viewMode, setViewMode] = useState<'classic' | 'interactive' | 'structural' | 'visual'>('classic')
   const [structuralData, setStructuralData] = useState<any>(null)
+  const [visualExplorationData, setVisualExplorationData] = useState<any>(null)
   
   // Interactive analysis hook
   const { state: analysisState, actions: analysisActions } = useInteractiveAnalysis()
@@ -243,6 +245,44 @@ export default function RepoAnalyticsDashboard() {
     }
   }
 
+  const handleVisualExploration = async (mode: string = 'structural_overview') => {
+    if (!repoData) return
+    
+    setIsLoading(true)
+    try {
+      const backendUrl = getBackendUrl()
+      const parsedRepoUrl = parseRepoUrl(repoUrl)
+      
+      console.log(`Fetching visual exploration in ${mode} mode...`)
+      const response = await fetch(`${backendUrl}/explore_visual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ 
+          repo_url: parsedRepoUrl,
+          mode: mode
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setVisualExplorationData(data)
+      setViewMode('visual')
+      
+      console.log("Visual exploration completed:", data)
+    } catch (error) {
+      console.error('Error fetching visual exploration:', error)
+      alert('Error fetching visual exploration. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
 function calculateCodebaseGrade(data: RepoData) {
   const { maintainabilityIndex } = data;
   
@@ -343,6 +383,15 @@ function calculateCodebaseGrade(data: RepoData) {
                       <Search className="h-4 w-4 mr-1" />
                       {isLoading && viewMode !== 'structural' ? 'Analyzing...' : 'Structural'}
                     </Button>
+                    <Button
+                      variant={viewMode === 'visual' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleVisualExploration('error_focused')}
+                      disabled={isLoading}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      {isLoading && viewMode !== 'visual' ? 'Exploring...' : 'Visual Explorer'}
+                    </Button>
                   </div>
                   <Input
                     type="text"
@@ -410,6 +459,21 @@ function calculateCodebaseGrade(data: RepoData) {
                   <div className="text-center">
                     <Search className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                     <p className="text-muted-foreground">Click "Structural" to analyze codebase structure and errors</p>
+                  </div>
+                </div>
+              )
+            ) : viewMode === 'visual' ? (
+              visualExplorationData ? (
+                <VisualCodebaseExplorer 
+                  explorationData={visualExplorationData}
+                  onNodeClick={(node) => console.log('Node clicked:', node)}
+                  onModeChange={(mode) => handleVisualExploration(mode)}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <Eye className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-muted-foreground">Click "Visual Explorer" to start interactive codebase exploration</p>
                   </div>
                 </div>
               )

@@ -1199,6 +1199,7 @@ async def analyze_structural(request: RepoRequest):
     """
     try:
         from .visualization.interactive_structural_analyzer import analyze_repository_structure
+        from .visualization.visual_codebase_explorer import create_visual_exploration, analyze_error_blast_radius, ExplorationMode
         
         repo_url = request.repo_url
         print(f"Starting structural analysis for: {repo_url}")
@@ -1220,6 +1221,104 @@ async def analyze_structural(request: RepoRequest):
     except Exception as e:
         print(f"Error in structural analysis: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Structural analysis failed: {str(e)}")
+
+
+class VisualExplorationRequest(BaseModel):
+    repo_url: str
+    mode: str = "structural_overview"  # structural_overview, error_focused, blast_radius, call_trace, dependency_map, critical_paths
+
+
+class BlastRadiusRequest(BaseModel):
+    repo_url: str
+    symbol_name: str
+
+
+@fastapi_app.post("/explore_visual")
+async def explore_visual_codebase(request: VisualExplorationRequest):
+    """
+    Perform visual exploration of codebase structure, errors, and relationships.
+    
+    This endpoint provides comprehensive visual analysis focused on immediate insights
+    rather than trends, including error detection, blast radius analysis, and 
+    interactive structural navigation.
+    """
+    try:
+        from .visualization.visual_codebase_explorer import create_visual_exploration, ExplorationMode
+        
+        repo_url = request.repo_url
+        mode = request.mode
+        print(f"Starting visual exploration for: {repo_url} in mode: {mode}")
+        
+        # Validate exploration mode
+        try:
+            exploration_mode = ExplorationMode(mode)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid exploration mode: {mode}")
+        
+        # Clone repository to temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = clone_repo(repo_url, temp_dir)
+            
+            # Load codebase with Codegen SDK
+            print(f"Loading codebase from: {repo_path}")
+            codebase = Codebase(repo_path)
+            print(f"Loaded codebase with {len(codebase.files)} files")
+            
+            # Perform visual exploration
+            print(f"Performing visual exploration in {mode} mode...")
+            exploration_data = create_visual_exploration(codebase, exploration_mode)
+            
+            print(f"Visual exploration completed successfully")
+            print(f"Found {exploration_data['summary']['total_nodes']} nodes and {exploration_data['summary']['total_issues']} issues")
+            
+            return exploration_data
+            
+    except Exception as e:
+        print(f"Error in visual exploration: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Visual exploration failed: {str(e)}")
+
+
+@fastapi_app.post("/analyze_blast_radius")
+async def analyze_symbol_blast_radius(request: BlastRadiusRequest):
+    """
+    Analyze the blast radius of a specific symbol to understand impact of changes.
+    
+    This endpoint shows how changes to a specific function, class, or symbol would
+    affect other parts of the codebase, providing visual impact analysis.
+    """
+    try:
+        from .visualization.visual_codebase_explorer import analyze_error_blast_radius
+        
+        repo_url = request.repo_url
+        symbol_name = request.symbol_name
+        print(f"Analyzing blast radius for symbol '{symbol_name}' in: {repo_url}")
+        
+        # Clone repository to temporary directory
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_path = clone_repo(repo_url, temp_dir)
+            
+            # Load codebase with Codegen SDK
+            print(f"Loading codebase from: {repo_path}")
+            codebase = Codebase(repo_path)
+            print(f"Loaded codebase with {len(codebase.files)} files")
+            
+            # Analyze blast radius
+            print(f"Analyzing blast radius for symbol: {symbol_name}")
+            blast_radius_data = analyze_error_blast_radius(codebase, symbol_name)
+            
+            if "error" in blast_radius_data:
+                raise HTTPException(status_code=404, detail=blast_radius_data["error"])
+            
+            print(f"Blast radius analysis completed successfully")
+            print(f"Symbol affects {blast_radius_data['blast_radius']['affected_nodes']} nodes")
+            
+            return blast_radius_data
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in blast radius analysis: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Blast radius analysis failed: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
