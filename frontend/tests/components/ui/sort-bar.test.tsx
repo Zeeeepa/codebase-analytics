@@ -6,7 +6,7 @@ import { SortBar } from '@/components/ui/sort-bar';
 const mockSetSortBy = jest.fn();
 const mockSetViewMode = jest.fn();
 
-jest.mock('@/hooks/useSharedAnalysisState', () => ({
+jest.mock('@/hooks/useAnalysisState', () => ({
   useViewOptions: () => ({
     sortBy: 'impact',
     viewMode: 'list',
@@ -105,7 +105,7 @@ describe('SortBar', () => {
 
   test('highlights the active view mode button', () => {
     // Mock the active view mode
-    jest.mock('@/hooks/useSharedAnalysisState', () => ({
+    jest.mock('@/hooks/useAnalysisState', () => ({
       useViewOptions: () => ({
         sortBy: 'impact',
         viewMode: 'list',
@@ -121,4 +121,3 @@ describe('SortBar', () => {
     // However, since we can't easily check the variant prop, we'll skip this assertion for now
   });
 });
-

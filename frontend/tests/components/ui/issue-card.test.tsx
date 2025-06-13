@@ -4,7 +4,7 @@ import { IssueCard } from '@/components/ui/issue-card';
 import { IssueType, IssueSeverity, IssueCategory } from '@/lib/api-types';
 
 // Mock the useIssueSelection hook
-jest.mock('@/hooks/useSharedAnalysisState', () => ({
+jest.mock('@/hooks/useAnalysisState', () => ({
   useIssueSelection: () => ({
     selectedIssue: null,
     setSelectedIssue: jest.fn()
@@ -149,4 +149,3 @@ describe('IssueCard', () => {
     expect(container.firstChild).toHaveClass('custom-class');
   });
 });
-

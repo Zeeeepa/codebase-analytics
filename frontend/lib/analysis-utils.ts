@@ -1,17 +1,15 @@
-// Utility functions for analysis and data processing
-
 import { 
   Issue, 
-  IssueType, 
   IssueSeverity, 
   IssueCategory, 
+  IssueType, 
   VisualNode, 
-  ExplorationData,
+  ExplorationData, 
   BlastRadiusData,
   Insight
 } from './api-types';
 
-// Filter issues based on severity, category, type, and search query
+// Filtering functions
 export function filterIssues(
   issues: Issue[],
   severityFilter: IssueSeverity | 'all' = 'all',
@@ -19,21 +17,38 @@ export function filterIssues(
   typeFilter: IssueType | 'all' = 'all',
   searchQuery: string = ''
 ): Issue[] {
+  if (!issues || issues.length === 0) return [];
+  
   return issues.filter(issue => {
-    const matchesSeverity = severityFilter === 'all' || issue.severity === severityFilter;
-    const matchesCategory = categoryFilter === 'all' || issue.category === categoryFilter;
-    const matchesType = typeFilter === 'all' || issue.type === typeFilter;
+    // Apply severity filter
+    if (severityFilter !== 'all' && issue.severity !== severityFilter) {
+      return false;
+    }
     
-    const matchesSearch = !searchQuery || 
-      issue.message.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      issue.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (issue.location?.file_path?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
+    // Apply category filter
+    if (categoryFilter !== 'all' && issue.category !== categoryFilter) {
+      return false;
+    }
     
-    return matchesSeverity && matchesCategory && matchesType && matchesSearch;
+    // Apply type filter
+    if (typeFilter !== 'all' && issue.type !== typeFilter) {
+      return false;
+    }
+    
+    // Apply search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const messageMatch = issue.message?.toLowerCase().includes(query);
+      const suggestionMatch = issue.suggestion?.toLowerCase().includes(query);
+      const locationMatch = issue.location?.file_path?.toLowerCase().includes(query);
+      
+      return messageMatch || suggestionMatch || locationMatch;
+    }
+    
+    return true;
   });
 }
 
-// Filter nodes based on issues, type, and search query
 export function filterNodes(
   nodes: VisualNode[],
   severityFilter: IssueSeverity | 'all' = 'all',
@@ -41,38 +56,78 @@ export function filterNodes(
   typeFilter: IssueType | 'all' = 'all',
   searchQuery: string = ''
 ): VisualNode[] {
+  if (!nodes || nodes.length === 0) return [];
+  
   return nodes.filter(node => {
-    // Filter out nodes with no issues
-    if (!node.issues || node.issues.length === 0) return false;
+    // If no filters are applied and no search query, return all nodes
+    if (severityFilter === 'all' && categoryFilter === 'all' && typeFilter === 'all' && !searchQuery) {
+      return true;
+    }
     
-    // Filter issues within the node
-    const filteredIssues = filterIssues(
-      node.issues,
-      severityFilter,
-      categoryFilter,
-      typeFilter,
-      searchQuery
-    );
+    // Filter by issues if the node has issues
+    if (node.issues && node.issues.length > 0) {
+      // For severity, category, and type filters, check if any issue matches
+      if (severityFilter !== 'all') {
+        if (!node.issues.some(issue => issue.severity === severityFilter)) {
+          return false;
+        }
+      }
+      
+      if (categoryFilter !== 'all') {
+        if (!node.issues.some(issue => issue.category === categoryFilter)) {
+          return false;
+        }
+      }
+      
+      if (typeFilter !== 'all') {
+        if (!node.issues.some(issue => issue.type === typeFilter)) {
+          return false;
+        }
+      }
+    } else if (severityFilter !== 'all' || categoryFilter !== 'all' || typeFilter !== 'all') {
+      // If the node has no issues and any filter is active, exclude it
+      return false;
+    }
     
-    // Check if node name matches search query
-    const nodeNameMatches = !searchQuery || 
-      node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      node.path.toLowerCase().includes(searchQuery.toLowerCase());
+    // Apply search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const nameMatch = node.name?.toLowerCase().includes(query);
+      const pathMatch = node.path?.toLowerCase().includes(query);
+      const typeMatch = node.type?.toLowerCase().includes(query);
+      
+      // Also check if any issue message matches
+      const issueMatch = node.issues?.some(issue => 
+        issue.message?.toLowerCase().includes(query)
+      );
+      
+      return nameMatch || pathMatch || typeMatch || issueMatch;
+    }
     
-    // Return true if node has matching issues or its name matches
-    return filteredIssues.length > 0 || nodeNameMatches;
+    return true;
   });
 }
 
-// Sort issues by different criteria
+// Sorting functions
 export function sortIssues(
   issues: Issue[],
   sortBy: 'impact' | 'severity' | 'type' | 'name' = 'impact'
 ): Issue[] {
-  return [...issues].sort((a, b) => {
-    if (sortBy === 'impact') {
-      return (b.impact_score || 0) - (a.impact_score || 0);
-    } else if (sortBy === 'severity') {
+  if (!issues || issues.length === 0) return [];
+  
+  const sortedIssues = [...issues];
+  
+  switch (sortBy) {
+    case 'impact':
+      // Sort by impact score (high to low)
+      return sortedIssues.sort((a, b) => {
+        const scoreA = a.impact_score || 0;
+        const scoreB = b.impact_score || 0;
+        return scoreB - scoreA;
+      });
+      
+    case 'severity':
+      // Sort by severity (critical to info)
       const severityOrder = {
         [IssueSeverity.CRITICAL]: 5,
         [IssueSeverity.HIGH]: 4,
@@ -80,86 +135,151 @@ export function sortIssues(
         [IssueSeverity.LOW]: 2,
         [IssueSeverity.INFO]: 1
       };
-      return (severityOrder[b.severity] || 0) - (severityOrder[a.severity] || 0);
-    } else if (sortBy === 'type') {
-      return a.type.localeCompare(b.type);
-    } else {
-      // Sort by message text
-      return a.message.localeCompare(b.message);
-    }
-  });
+      
+      return sortedIssues.sort((a, b) => {
+        const orderA = severityOrder[a.severity] || 0;
+        const orderB = severityOrder[b.severity] || 0;
+        return orderB - orderA;
+      });
+      
+    case 'type':
+      // Sort alphabetically by type
+      return sortedIssues.sort((a, b) => {
+        return a.type.localeCompare(b.type);
+      });
+      
+    case 'name':
+      // Sort alphabetically by message
+      return sortedIssues.sort((a, b) => {
+        return a.message.localeCompare(b.message);
+      });
+      
+    default:
+      return sortedIssues;
+  }
 }
 
-// Sort nodes by different criteria
 export function sortNodes(
   nodes: VisualNode[],
   sortBy: 'impact' | 'severity' | 'type' | 'name' = 'impact'
 ): VisualNode[] {
-  return [...nodes].sort((a, b) => {
-    if (sortBy === 'impact') {
-      // Sort by number of issues as a proxy for impact
-      return (b.issues?.length || 0) - (a.issues?.length || 0);
-    } else if (sortBy === 'severity') {
-      // Sort by highest severity issue in each node
-      const getHighestSeverity = (node: VisualNode): number => {
-        if (!node.issues || node.issues.length === 0) return 0;
+  if (!nodes || nodes.length === 0) return [];
+  
+  const sortedNodes = [...nodes];
+  
+  switch (sortBy) {
+    case 'impact':
+      // Sort by issue count (high to low)
+      return sortedNodes.sort((a, b) => {
+        const countA = a.issues?.length || 0;
+        const countB = b.issues?.length || 0;
         
-        const severityOrder = {
-          [IssueSeverity.CRITICAL]: 5,
-          [IssueSeverity.HIGH]: 4,
-          [IssueSeverity.MEDIUM]: 3,
-          [IssueSeverity.LOW]: 2,
-          [IssueSeverity.INFO]: 1
-        };
+        // If issue counts are equal, sort by blast radius
+        if (countA === countB) {
+          const radiusA = a.blast_radius || 0;
+          const radiusB = b.blast_radius || 0;
+          return radiusB - radiusA;
+        }
         
-        return Math.max(...node.issues.map(issue => severityOrder[issue.severity] || 0));
+        return countB - countA;
+      });
+      
+    case 'severity':
+      // Sort by highest severity issue
+      const severityOrder = {
+        [IssueSeverity.CRITICAL]: 5,
+        [IssueSeverity.HIGH]: 4,
+        [IssueSeverity.MEDIUM]: 3,
+        [IssueSeverity.LOW]: 2,
+        [IssueSeverity.INFO]: 1,
+        'none': 0
       };
       
-      return getHighestSeverity(b) - getHighestSeverity(a);
-    } else if (sortBy === 'type') {
-      // Sort by node type
-      return a.type.localeCompare(b.type);
-    } else {
-      // Sort by name
-      return a.name.localeCompare(b.name);
-    }
-  });
+      return sortedNodes.sort((a, b) => {
+        // Find highest severity for each node
+        const highestSeverityA = a.issues && a.issues.length > 0
+          ? Math.max(...a.issues.map(issue => severityOrder[issue.severity] || 0))
+          : 0;
+          
+        const highestSeverityB = b.issues && b.issues.length > 0
+          ? Math.max(...b.issues.map(issue => severityOrder[issue.severity] || 0))
+          : 0;
+          
+        return highestSeverityB - highestSeverityA;
+      });
+      
+    case 'type':
+      // Sort alphabetically by type
+      return sortedNodes.sort((a, b) => {
+        return a.type.localeCompare(b.type);
+      });
+      
+    case 'name':
+      // Sort alphabetically by name
+      return sortedNodes.sort((a, b) => {
+        return a.name.localeCompare(b.name);
+      });
+      
+    default:
+      return sortedNodes;
+  }
 }
 
-// Calculate summary statistics from exploration data
-export function calculateSummaryStats(data: ExplorationData) {
+// Calculation functions
+export function calculateSummaryStats(data: ExplorationData | null) {
   if (!data) return null;
   
-  const totalIssues = data.summary.total_issues || 0;
-  const issuesBySeverity = data.summary.issues_by_severity || {};
-  const issuesByCategory = data.summary.issues_by_category || {};
-  
   return {
-    totalIssues,
-    issuesBySeverity,
-    issuesByCategory
+    totalIssues: data.summary.total_issues,
+    issuesBySeverity: data.summary.issues_by_severity,
+    issuesByCategory: data.summary.issues_by_category
   };
 }
 
-// Calculate blast radius statistics
-export function calculateBlastRadiusStats(data: BlastRadiusData) {
+export function calculateBlastRadiusStats(data: BlastRadiusData | null) {
   if (!data) return null;
   
-  const { affected_nodes, affected_edges, impact_score } = data.blast_radius;
-  
-  // Calculate percentage of codebase affected (assuming 100 nodes total as a placeholder)
-  // In a real implementation, you would use the total number of nodes from the exploration data
-  const percentageAffected = (affected_nodes / 100) * 100;
+  // Assuming there's a total number of nodes in the codebase
+  // This could be provided in the data or set to a default value
+  const totalNodes = 100; // Default value, should be replaced with actual data
   
   return {
-    affectedNodes: affected_nodes,
-    affectedEdges: affected_edges,
-    impactScore: impact_score,
-    percentageAffected
+    affectedNodes: data.blast_radius.affected_nodes,
+    affectedEdges: data.blast_radius.affected_edges,
+    impactScore: data.blast_radius.impact_score,
+    percentageAffected: (data.blast_radius.affected_nodes / totalNodes) * 100
   };
 }
 
-// Get color for severity level
+export function calculateCodeQualityScore(data: ExplorationData | null): number {
+  if (!data) return 0;
+  
+  // Base score starts at 100
+  let score = 100;
+  
+  // Deduct points based on issue severity
+  const severityWeights = {
+    [IssueSeverity.CRITICAL]: 10,
+    [IssueSeverity.HIGH]: 5,
+    [IssueSeverity.MEDIUM]: 2,
+    [IssueSeverity.LOW]: 1,
+    [IssueSeverity.INFO]: 0.1
+  };
+  
+  // Calculate deductions
+  let deduction = 0;
+  
+  for (const [severity, count] of Object.entries(data.summary.issues_by_severity)) {
+    deduction += (count as number) * (severityWeights[severity as IssueSeverity] || 0);
+  }
+  
+  // Ensure score doesn't go below 0
+  score = Math.max(0, score - deduction);
+  
+  return score;
+}
+
+// Styling and labeling functions
 export function getSeverityColor(severity: IssueSeverity | string): string {
   switch (severity) {
     case IssueSeverity.CRITICAL:
@@ -177,7 +297,6 @@ export function getSeverityColor(severity: IssueSeverity | string): string {
   }
 }
 
-// Get label for severity level
 export function getSeverityLabel(severity: IssueSeverity | string): string {
   switch (severity) {
     case IssueSeverity.CRITICAL:
@@ -191,11 +310,10 @@ export function getSeverityLabel(severity: IssueSeverity | string): string {
     case IssueSeverity.INFO:
       return 'Info';
     default:
-      return severity.toString();
+      return severity;
   }
 }
 
-// Get color for category
 export function getCategoryColor(category: IssueCategory | string): string {
   switch (category) {
     case IssueCategory.FUNCTIONAL:
@@ -213,7 +331,6 @@ export function getCategoryColor(category: IssueCategory | string): string {
   }
 }
 
-// Get label for category
 export function getCategoryLabel(category: IssueCategory | string): string {
   switch (category) {
     case IssueCategory.FUNCTIONAL:
@@ -227,109 +344,72 @@ export function getCategoryLabel(category: IssueCategory | string): string {
     case IssueCategory.PERFORMANCE:
       return 'Performance';
     default:
-      return category.toString();
+      return category;
   }
 }
 
-// Get icon component name for issue type
 export function getIssueTypeIcon(type: IssueType | string): string {
   switch (type) {
     case IssueType.UNUSED_IMPORT:
       return 'Ban';
     case IssueType.UNUSED_VARIABLE:
-    case IssueType.UNUSED_FUNCTION:
-    case IssueType.UNUSED_PARAMETER:
       return 'Code2';
     case IssueType.UNDEFINED_VARIABLE:
-    case IssueType.UNDEFINED_FUNCTION:
       return 'AlertCircle';
     case IssueType.PARAMETER_MISMATCH:
       return 'AlertTriangle';
-    case IssueType.TYPE_ERROR:
-      return 'FileWarning';
     case IssueType.CIRCULAR_DEPENDENCY:
       return 'Repeat';
-    case IssueType.DEAD_CODE:
-      return 'Unlink';
-    case IssueType.COMPLEXITY_ISSUE:
-      return 'FileCode';
-    case IssueType.STYLE_ISSUE:
-      return 'Sparkles';
-    case IssueType.SECURITY_ISSUE:
-      return 'Shield';
     case IssueType.PERFORMANCE_ISSUE:
       return 'Gauge';
+    case IssueType.SECURITY_ISSUE:
+      return 'Shield';
+    case IssueType.SYNTAX_ERROR:
+      return 'FileWarning';
+    case IssueType.STYLE_ISSUE:
+      return 'Sparkles';
     default:
       return 'Bug';
   }
 }
 
-// Get label for issue type
 export function getIssueTypeLabel(type: IssueType | string): string {
-  switch (type) {
-    case IssueType.UNUSED_IMPORT:
-      return 'Unused Import';
-    case IssueType.UNUSED_VARIABLE:
-      return 'Unused Variable';
-    case IssueType.UNUSED_FUNCTION:
-      return 'Unused Function';
-    case IssueType.UNUSED_PARAMETER:
-      return 'Unused Parameter';
-    case IssueType.UNDEFINED_VARIABLE:
-      return 'Undefined Variable';
-    case IssueType.UNDEFINED_FUNCTION:
-      return 'Undefined Function';
-    case IssueType.PARAMETER_MISMATCH:
-      return 'Parameter Mismatch';
-    case IssueType.TYPE_ERROR:
-      return 'Type Error';
-    case IssueType.CIRCULAR_DEPENDENCY:
-      return 'Circular Dependency';
-    case IssueType.DEAD_CODE:
-      return 'Dead Code';
-    case IssueType.COMPLEXITY_ISSUE:
-      return 'Complexity Issue';
-    case IssueType.STYLE_ISSUE:
-      return 'Style Issue';
-    case IssueType.SECURITY_ISSUE:
-      return 'Security Issue';
-    case IssueType.PERFORMANCE_ISSUE:
-      return 'Performance Issue';
-    default:
-      return type.toString().replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  }
+  // Convert snake_case to Title Case
+  return type
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
-// Get impact badge color and label based on score
-export function getImpactBadgeInfo(score: number): { color: string; label: string } {
-  if (score >= 9) {
-    return { color: 'bg-red-600', label: 'Critical' };
-  } else if (score >= 7) {
-    return { color: 'bg-orange-500', label: 'High' };
-  } else if (score >= 5) {
-    return { color: 'bg-yellow-500', label: 'Medium' };
-  } else if (score >= 3) {
-    return { color: 'bg-blue-500', label: 'Low' };
-  } else {
-    return { color: 'bg-gray-500', label: 'Minimal' };
-  }
+export function getImpactBadgeInfo(score: number): { color: string, label: string } {
+  if (score >= 9) return { color: 'bg-red-600', label: 'Critical' };
+  if (score >= 7) return { color: 'bg-orange-500', label: 'High' };
+  if (score >= 5) return { color: 'bg-yellow-500', label: 'Medium' };
+  if (score >= 3) return { color: 'bg-blue-500', label: 'Low' };
+  return { color: 'bg-gray-500', label: 'Minimal' };
 }
 
-// Group issues by file
+// Data processing functions
 export function groupIssuesByFile(issues: Issue[]): Record<string, Issue[]> {
-  return issues.reduce((acc, issue) => {
+  if (!issues || issues.length === 0) return {};
+  
+  const groupedIssues: Record<string, Issue[]> = {};
+  
+  issues.forEach(issue => {
     const filePath = issue.location?.file_path || 'unknown';
-    if (!acc[filePath]) {
-      acc[filePath] = [];
+    
+    if (!groupedIssues[filePath]) {
+      groupedIssues[filePath] = [];
     }
-    acc[filePath].push(issue);
-    return acc;
-  }, {} as Record<string, Issue[]>);
+    
+    groupedIssues[filePath].push(issue);
+  });
+  
+  return groupedIssues;
 }
 
-// Find related issues (issues in the same file or with similar types)
-export function findRelatedIssues(issue: Issue, allIssues: Issue[]): Issue[] {
-  if (!issue) return [];
+export function findRelatedIssues(issue: Issue | null, allIssues: Issue[]): Issue[] {
+  if (!issue || !allIssues || allIssues.length === 0) return [];
   
   return allIssues.filter(otherIssue => {
     // Skip the current issue
@@ -351,42 +431,23 @@ export function findRelatedIssues(issue: Issue, allIssues: Issue[]): Issue[] {
   });
 }
 
-// Extract insights from exploration data
-export function extractInsights(data: ExplorationData): Insight[] {
+// Analysis functions
+export function extractInsights(data: ExplorationData | null): Insight[] {
   if (!data || !data.exploration_insights) return [];
   
   return data.exploration_insights;
 }
 
-// Find hotspots (files with the most issues)
-export function findHotspots(data: ExplorationData, limit: number = 10): VisualNode[] {
+export function findHotspots(data: ExplorationData | null, limit: number = 5): VisualNode[] {
   if (!data || !data.error_hotspots) return [];
   
-  return [...data.error_hotspots]
-    .sort((a, b) => (b.issues?.length || 0) - (a.issues?.length || 0))
-    .slice(0, limit);
+  // Sort hotspots by issue count (descending)
+  const sortedHotspots = [...data.error_hotspots].sort((a, b) => {
+    const countA = a.issues?.length || 0;
+    const countB = b.issues?.length || 0;
+    return countB - countA;
+  });
+  
+  // Return the top N hotspots
+  return sortedHotspots.slice(0, limit);
 }
-
-// Calculate code quality score (0-100) based on issues
-export function calculateCodeQualityScore(data: ExplorationData): number {
-  if (!data) return 0;
-  
-  const { total_issues = 0 } = data.summary;
-  const issuesBySeverity = data.summary.issues_by_severity || {};
-  
-  // Weight issues by severity
-  const weightedIssues = 
-    (issuesBySeverity[IssueSeverity.CRITICAL] || 0) * 10 +
-    (issuesBySeverity[IssueSeverity.HIGH] || 0) * 5 +
-    (issuesBySeverity[IssueSeverity.MEDIUM] || 0) * 2 +
-    (issuesBySeverity[IssueSeverity.LOW] || 0) * 1 +
-    (issuesBySeverity[IssueSeverity.INFO] || 0) * 0.1;
-  
-  // Calculate score (higher is better)
-  // This is a simple formula that can be adjusted based on project size
-  const baseScore = 100;
-  const penalty = Math.min(weightedIssues, 100); // Cap penalty at 100
-  
-  return Math.max(0, baseScore - penalty);
-}
-

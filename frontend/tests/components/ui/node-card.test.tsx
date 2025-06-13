@@ -4,7 +4,7 @@ import { NodeCard } from '@/components/ui/node-card';
 import { IssueType, IssueSeverity, IssueCategory } from '@/lib/api-types';
 
 // Mock the useNodeSelection hook
-jest.mock('@/hooks/useSharedAnalysisState', () => ({
+jest.mock('@/hooks/useAnalysisState', () => ({
   useNodeSelection: () => ({
     selectedNode: null,
     setSelectedNode: jest.fn()
@@ -186,4 +186,3 @@ describe('NodeCard', () => {
     expect(screen.queryByText('complexity:')).not.toBeInTheDocument();
   });
 });
-

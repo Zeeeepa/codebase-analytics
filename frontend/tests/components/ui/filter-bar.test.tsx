@@ -10,7 +10,7 @@ const mockSetTypeFilter = jest.fn();
 const mockSetSearchQuery = jest.fn();
 const mockResetFilters = jest.fn();
 
-jest.mock('@/hooks/useSharedAnalysisState', () => ({
+jest.mock('@/hooks/useAnalysisState', () => ({
   useFilters: () => ({
     severityFilter: 'all',
     categoryFilter: 'all',
@@ -119,7 +119,7 @@ describe('FilterBar', () => {
 
   test('renders reset button when filters are active and showResetButton is true', () => {
     // Mock active filters
-    jest.mock('@/hooks/useSharedAnalysisState', () => ({
+    jest.mock('@/hooks/useAnalysisState', () => ({
       useFilters: () => ({
         severityFilter: IssueSeverity.CRITICAL,
         categoryFilter: 'all',
@@ -153,4 +153,3 @@ describe('FilterBar', () => {
     expect(container.firstChild).toHaveClass('custom-class');
   });
 });
-
