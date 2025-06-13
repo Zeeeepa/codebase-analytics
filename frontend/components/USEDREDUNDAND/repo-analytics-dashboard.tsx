@@ -119,8 +119,8 @@ export default function RepoAnalyticsDashboard() {
     
     // In development, try local backend first
     if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      // Default to 8001 since 8000 is often occupied by Docker
-      return 'http://localhost:8001';
+      // Connect to our deployed backend on port 8000
+      return 'http://localhost:8000';
     }
     
     // Fallback to Modal deployment for production

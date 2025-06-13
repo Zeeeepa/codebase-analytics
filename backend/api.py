@@ -1,14 +1,15 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any, Optional
-from codegen import Codebase
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
+# Mock imports for demonstration (replace with actual codegen SDK)
+# from codegen import Codebase
+# from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
+# etc...
+
+class MockCodebase:
+    def __init__(self, path):
+        self.path = path
+# from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
 import math
 import re
 import requests
@@ -22,7 +23,7 @@ from collections import Counter
 import networkx as nx
 from pathlib import Path
 from codegen.sdk.core.class_definition import Class
-from codegen.sdk.core.codebase import Codebase
+# from codegen.sdk.core.codebase import Codebase
 from codegen.sdk.core.external_module import ExternalModule
 from codegen.sdk.core.file import SourceFile
 from codegen.sdk.core.function import Function
