@@ -214,8 +214,7 @@ class VisualCodebaseExplorer:
                 "is_method": getattr(func, 'is_method', False),
                 "parameters": len(getattr(func, 'parameters', [])),
                 "calls_count": len(getattr(func, 'function_calls', [])),
-                "usages_count": len(getattr(func, 'usages', [])),
-                "complexity": self._calculate_complexity(func)
+                "usages_count": len(getattr(func, 'usages', []))
             }
         )
 
@@ -239,10 +238,10 @@ class VisualCodebaseExplorer:
         )
 
     def _detect_function_issues(self, func: Function) -> List[Dict[str, Any]]:
-        """Detect issues in a function."""
+        """Detect actual functional issues in a function."""
         issues = []
         
-        # Check for unused function
+        # Check for unused function (potential dead code)
         if hasattr(func, 'usages') and not func.usages:
             issues.append({
                 "type": "unused_function",
@@ -251,32 +250,38 @@ class VisualCodebaseExplorer:
                 "suggestion": "Consider removing if truly unused, or check if it should be public API"
             })
         
-        # Check for high complexity
-        complexity = self._calculate_complexity(func)
-        if complexity > 10:
-            issues.append({
-                "type": "high_complexity",
-                "severity": "major" if complexity > 20 else "minor",
-                "message": f"Function has high cyclomatic complexity ({complexity})",
-                "suggestion": "Consider breaking into smaller functions"
-            })
+        # Check for functions with no return statement but non-void signature
+        if hasattr(func, 'code_block'):
+            code = getattr(func, 'code_block', '')
+            if self._has_return_type_annotation(func) and 'return' not in code:
+                issues.append({
+                    "type": "missing_return",
+                    "severity": "major",
+                    "message": "Function has return type annotation but no return statement",
+                    "suggestion": "Add return statement or fix return type annotation"
+                })
         
-        # Check for missing docstring
-        if hasattr(func, 'code_block') and not getattr(func, 'docstring', None):
-            issues.append({
-                "type": "missing_documentation",
-                "severity": "minor",
-                "message": "Function lacks documentation",
-                "suggestion": "Add docstring describing purpose, parameters, and return value"
-            })
+        # Check for potential infinite recursion (function calls itself without base case)
+        if hasattr(func, 'function_calls'):
+            for call in getattr(func, 'function_calls', []):
+                if hasattr(call, 'name') and call.name == func.name:
+                    # Simple heuristic: if function calls itself but has no conditional statements
+                    code = getattr(func, 'code_block', '')
+                    if not any(keyword in code for keyword in ['if', 'while', 'for', 'break', 'return']):
+                        issues.append({
+                            "type": "potential_infinite_recursion",
+                            "severity": "critical",
+                            "message": "Function calls itself without apparent base case",
+                            "suggestion": "Add base case condition to prevent infinite recursion"
+                        })
         
         return issues
 
     def _detect_class_issues(self, cls: Class) -> List[Dict[str, Any]]:
-        """Detect issues in a class."""
+        """Detect actual functional issues in a class."""
         issues = []
         
-        # Check for unused class
+        # Check for unused class (potential dead code)
         if hasattr(cls, 'usages') and not cls.usages:
             issues.append({
                 "type": "unused_class",
@@ -284,6 +289,23 @@ class VisualCodebaseExplorer:
                 "message": "Class is defined but never used",
                 "suggestion": "Consider removing if truly unused"
             })
+        
+        # Check for classes with abstract methods but no ABC inheritance
+        if hasattr(cls, 'methods'):
+            abstract_methods = []
+            for method in getattr(cls, 'methods', []):
+                if hasattr(method, 'code_block'):
+                    code = getattr(method, 'code_block', '')
+                    if 'raise NotImplementedError' in str(code) or '@abstractmethod' in str(code):
+                        abstract_methods.append(method.name)
+            
+            if abstract_methods and not any('ABC' in str(base) for base in getattr(cls, 'base_classes', [])):
+                issues.append({
+                    "type": "missing_abc_inheritance",
+                    "severity": "major",
+                    "message": f"Class has abstract methods {abstract_methods} but doesn't inherit from ABC",
+                    "suggestion": "Inherit from ABC or implement the abstract methods"
+                })
         
         return issues
 
@@ -299,25 +321,17 @@ class VisualCodebaseExplorer:
             return 0
         return len(cls.usages)
 
-    def _calculate_complexity(self, func: Function) -> int:
-        """Calculate cyclomatic complexity of a function."""
-        # Simplified complexity calculation
+    def _has_return_type_annotation(self, func: Function) -> bool:
+        """Check if function has a return type annotation."""
         if not hasattr(func, 'code_block'):
-            return 1
+            return False
         
-        code = func.code_block.source if hasattr(func.code_block, 'source') else ""
-        complexity = 1  # Base complexity
+        code = getattr(func, 'code_block', '')
+        if hasattr(code, 'source'):
+            code = code.source
         
-        # Count decision points
-        complexity += code.count('if ')
-        complexity += code.count('elif ')
-        complexity += code.count('while ')
-        complexity += code.count('for ')
-        complexity += code.count('except ')
-        complexity += code.count('and ')
-        complexity += code.count('or ')
-        
-        return complexity
+        # Look for return type annotations (-> Type)
+        return '->' in str(code) and 'None' not in str(code)
 
     def _analyze_error_patterns(self):
         """Analyze error patterns and hotspots in the codebase."""
@@ -620,19 +634,38 @@ class VisualCodebaseExplorer:
                 "affected_nodes": [node.id for node in unused_functions[:10]]
             })
         
-        # Complexity hotspots
-        complex_functions = [
+        # Critical functional errors
+        critical_errors = [
             node for node in self.nodes.values()
-            if node.type == "function" and node.metadata.get('complexity', 0) > 15
+            if node.issues and any(
+                issue['severity'] == 'critical' for issue in node.issues
+            )
         ]
         
-        if complex_functions:
+        if critical_errors:
             insights.append({
-                "type": "complexity_hotspots",
-                "priority": "medium",
-                "title": f"Found {len(complex_functions)} highly complex functions",
-                "description": "These functions may benefit from refactoring",
-                "affected_nodes": [node.id for node in complex_functions[:5]]
+                "type": "critical_errors",
+                "priority": "critical",
+                "title": f"Found {len(critical_errors)} critical functional errors",
+                "description": "These errors may cause runtime failures and should be fixed immediately",
+                "affected_nodes": [node.id for node in critical_errors[:5]]
+            })
+        
+        # Missing return statements
+        missing_returns = [
+            node for node in self.nodes.values()
+            if node.type == "function" and any(
+                issue['type'] == 'missing_return' for issue in node.issues
+            )
+        ]
+        
+        if missing_returns:
+            insights.append({
+                "type": "missing_returns",
+                "priority": "major",
+                "title": f"Found {len(missing_returns)} functions with missing return statements",
+                "description": "Functions with return type annotations but no return statements may cause runtime errors",
+                "affected_nodes": [node.id for node in missing_returns[:5]]
             })
         
         return insights
@@ -728,4 +761,3 @@ def analyze_error_blast_radius(codebase: Codebase, symbol_name: str) -> Dict[str
             ]
         }
     }
-
