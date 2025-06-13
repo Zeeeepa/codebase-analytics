@@ -1,0 +1,36 @@
+
+> my-v0-project@0.1.0 dev
+> next dev
+
+ ⚠ Port 3000 is in use, trying 3001 instead.
+ ⚠ Port 3001 is in use, trying 3002 instead.
+  ▲ Next.js 14.2.16
+  - Local:        http://localhost:3002
+  - Experiments (use with caution):
+    · webpackBuildWorker
+    · parallelServerCompiles
+    · parallelServerBuildTraces
+
+ ✓ Starting...
+ ✓ Ready in 1356ms
+ ○ Compiling / ...
+ ✓ Compiled / in 4.4s (709 modules)
+ GET / 200 in 4725ms
+ ✓ Compiled in 559ms (355 modules)
+ ✓ Compiled in 244ms (355 modules)
+ ✓ Compiled in 230ms (355 modules)
+ ✓ Compiled in 245ms (355 modules)
+ ✓ Compiled in 233ms (355 modules)
+ ✓ Compiled in 246ms (355 modules)
+ ✓ Compiled in 239ms (355 modules)
+ ✓ Compiled in 248ms (355 modules)
+ ✓ Compiled in 241ms (355 modules)
+ ✓ Compiled in 231ms (355 modules)
+ ✓ Compiled in 239ms (355 modules)
+ ✓ Compiled in 233ms (355 modules)
+ ✓ Compiled in 242ms (355 modules)
+ ✓ Compiled in 269ms (355 modules)
+ ✓ Compiled in 262ms (355 modules)
+ ✓ Compiled in 287ms (355 modules)
+ ✓ Compiled in 309ms (355 modules)
+ ✓ Compiled in 303ms (355 modules)

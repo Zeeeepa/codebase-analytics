@@ -1,12 +1,11 @@
 import type { Metadata } from "next"
-import RepoAnalyticsDashboard from "@/components/repo-analytics-dashboard"
+import InteractiveCodebaseExplorer from "@/components/interactive-codebase-explorer"
 
 export const metadata: Metadata = {
-  title: "Codebase Analytics",
-  description: "Analytics dashboard for public GitHub repositories",
+  title: "Interactive Codebase Analytics",
+  description: "Interactive visual analysis for codebase functional errors and parameter issues",
 }
 
 export default function Page() {
-  return <RepoAnalyticsDashboard />
+  return <InteractiveCodebaseExplorer />
 }
-
