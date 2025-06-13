@@ -40,7 +40,21 @@ image = (
 )
 
 app = modal.App(name="analytics-app", image=image)
-fastapi_app = FastAPI()
+fastapi_app = FastAPI(
+    title="Codebase Analytics API",
+    description="Visual codebase exploration and analysis API",
+    version="1.0.0"
+)
+
+@fastapi_app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "service": "Codebase Analytics API",
+        "version": "1.0.0",
+        "timestamp": datetime.now().isoformat()
+    }
 
 fastapi_app.add_middleware(
     CORSMiddleware,
