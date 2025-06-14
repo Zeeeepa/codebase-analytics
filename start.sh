@@ -40,6 +40,24 @@ is_port_in_use() {
     fi
 }
 
+# Find an available port
+find_available_port() {
+    local start_port=$1
+    local max_port=$2
+    local port=$start_port
+    
+    while [ $port -le $max_port ]; do
+        if ! is_port_in_use $port; then
+            echo $port
+            return 0
+        fi
+        port=$((port + 1))
+    done
+    
+    echo "No available ports found between $start_port and $max_port" >&2
+    return 1
+}
+
 # Kill any processes using our ports
 echo "🧹 Cleaning up existing processes..."
 if is_port_in_use 8000; then
@@ -48,6 +66,9 @@ if is_port_in_use 8000; then
         kill $(lsof -t -i:8000) 2>/dev/null
     fi
 fi
+
+# Create logs directory if it doesn't exist
+mkdir -p logs
 
 # Install backend dependencies if needed
 echo "📦 Installing backend dependencies..."
@@ -64,26 +85,33 @@ if [ ! -d "node_modules" ]; then
 fi
 cd ..
 
-# Create logs directory if it doesn't exist
-mkdir -p logs
+# Find available ports
+BACKEND_PORT=$(find_available_port 8000 8100)
+if [ $? -ne 0 ]; then
+    echo "❌ $BACKEND_PORT"
+    exit 1
+fi
 
 # Start the backend server using the unified entry point
-echo "🔧 Starting backend server..."
+echo "🔧 Starting backend server on port $BACKEND_PORT..."
 cd backend
-python main.py > ../logs/backend.log 2>&1 &
+python main.py --port $BACKEND_PORT > ../logs/backend.log 2>&1 &
 BACKEND_PID=$!
 cd ..
 
 # Wait for backend to start
 echo "   Waiting for backend to initialize..."
-sleep 3
+sleep 5
 
 # Check if backend started successfully
-if ! curl -s http://localhost:8000/health > /dev/null; then
+if ! curl -s http://localhost:$BACKEND_PORT/health > /dev/null; then
     echo "❌ Failed to start backend server. Check logs/backend.log for details."
+    cat logs/backend.log
     kill $BACKEND_PID 2>/dev/null
     exit 1
 fi
+
+echo "✅ Backend server started successfully on port $BACKEND_PORT"
 
 # Start the frontend application
 echo "🎨 Starting frontend application..."
@@ -94,12 +122,13 @@ cd ..
 
 # Wait for frontend to start
 echo "   Waiting for frontend to initialize..."
-sleep 5
+sleep 10
 
 # Determine which port the frontend is using by checking the log
 FRONTEND_PORT=$(grep -o "http://localhost:[0-9]\+" logs/frontend.log | head -1 | cut -d':' -f3)
 if [ -z "$FRONTEND_PORT" ]; then
     echo "❌ Failed to determine frontend port. Check logs/frontend.log for details."
+    cat logs/frontend.log
     kill $BACKEND_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     exit 1
@@ -108,6 +137,7 @@ fi
 # Check if frontend started successfully
 if ! curl -s http://localhost:$FRONTEND_PORT > /dev/null; then
     echo "❌ Failed to start frontend application. Check logs/frontend.log for details."
+    cat logs/frontend.log
     kill $BACKEND_PID 2>/dev/null
     kill $FRONTEND_PID 2>/dev/null
     exit 1
@@ -115,10 +145,10 @@ fi
 
 echo ""
 echo "✅ Codebase Analytics System is running!"
-echo "   Backend API:  http://localhost:8000"
-echo "   API Docs:     http://localhost:8000/docs"
-echo "   Simple API:   http://localhost:8000/simple"
-echo "   Full API:     http://localhost:8000/full"
+echo "   Backend API:  http://localhost:$BACKEND_PORT"
+echo "   API Docs:     http://localhost:$BACKEND_PORT/docs"
+echo "   Simple API:   http://localhost:$BACKEND_PORT/simple"
+echo "   Full API:     http://localhost:$BACKEND_PORT/full"
 echo "   Frontend UI:  http://localhost:$FRONTEND_PORT"
 echo ""
 echo "📊 Open http://localhost:$FRONTEND_PORT in your browser to access the dashboard"
