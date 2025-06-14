@@ -31,7 +31,7 @@ export default function Main() {
           </header>
 
           <Tabs defaultValue="dashboard" value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 w-full max-w-md">
               <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
               <TabsTrigger value="explorer">Explorer</TabsTrigger>
               <TabsTrigger value="analytics">Analytics</TabsTrigger>
@@ -77,4 +77,3 @@ export default function Main() {
     </ThemeProvider>
   )
 }
-

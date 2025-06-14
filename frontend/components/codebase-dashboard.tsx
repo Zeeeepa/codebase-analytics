@@ -9,7 +9,7 @@ import { ExplorerView } from "./analytics-views/explorer-view"
 import { BlastRadiusView } from "./analytics-views/blast-radius-view"
 import { StructureView } from "./analytics-views/structure-view"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, Code2 } from "lucide-react"
 import { useDashboard } from "./dashboard-context"
 import { Separator } from "@/components/ui/separator"
 
@@ -45,7 +45,7 @@ function DashboardContent() {
                 className="text-2xl font-bold flex items-center space-x-3 cursor-pointer"
                 onClick={() => window.location.reload()}
               >
-                <img src="cg.png" alt="CG Logo" className="h-8 w-8" />
+                <Code2 className="h-8 w-8" />
                 <span>Codebase Analytics</span>
               </h1>
             </div>
@@ -68,7 +68,15 @@ function DashboardContent() {
             </Alert>
           )}
           
-          {renderView()}
+          {isLoading ? (
+            <div className="space-y-4 animate-pulse">
+              <div className="h-8 bg-muted rounded-md w-1/3"></div>
+              <div className="h-24 bg-muted rounded-md"></div>
+              <div className="h-32 bg-muted rounded-md"></div>
+            </div>
+          ) : (
+            renderView()
+          )}
         </main>
       </div>
 
@@ -86,4 +94,3 @@ export default function CodebaseDashboard() {
     </DashboardProvider>
   );
 }
-
