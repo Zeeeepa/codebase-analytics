@@ -75,27 +75,41 @@ export function RepositoryInputForm() {
 
   return (
     <div className="flex gap-2 items-center">
-      <Input
-        type="text"
-        placeholder="Enter the GitHub repo link or owner/repo"
-        value={repoUrl}
-        onChange={(e) => setRepoUrl(e.target.value)}
-        onKeyPress={handleKeyPress}
-        className="flex-1"
-        title="Format: https://github.com/owner/repo or owner/repo"
-      />
-      <Select value={analysisMode} onValueChange={setAnalysisMode}>
-        <SelectTrigger className="w-48">
-          <SelectValue />
+      <div className="relative flex-1">
+        <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-muted-foreground">
+          <Search className="h-4 w-4" />
+        </div>
+        <Input
+          type="text"
+          placeholder="Enter GitHub repo (e.g., owner/repo)"
+          value={repoUrl}
+          onChange={(e) => setRepoUrl(e.target.value)}
+          onKeyPress={handleKeyPress}
+          className="pl-10 pr-4 py-2 border-muted-foreground/20 focus:border-primary transition-colors"
+          title="Format: https://github.com/owner/repo or owner/repo"
+        />
+      </div>
+      <Select 
+        value={analysisMode} 
+        onValueChange={setAnalysisMode}
+      >
+        <SelectTrigger className="w-48 border-muted-foreground/20 focus:border-primary transition-colors">
+          <SelectValue placeholder="Analysis Mode" />
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value="error_focused">Error Focused</SelectItem>
-          <SelectItem value="dependency_focused">Dependency Focused</SelectItem>
+          <SelectItem value="error_focused" className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-destructive inline-block"></span>
+            Error Focused
+          </SelectItem>
+          <SelectItem value="dependency_focused" className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-primary inline-block"></span>
+            Dependency Focused
+          </SelectItem>
         </SelectContent>
       </Select>
       <Button 
         onClick={handleFetchRepo} 
-        className="flex items-center gap-2"
+        className="flex items-center gap-2 bg-primary hover:bg-primary/90 transition-colors"
       >
         <Zap className="h-4 w-4" />
         Analyze
@@ -103,4 +117,3 @@ export function RepositoryInputForm() {
     </div>
   );
 }
-
