@@ -12,17 +12,22 @@ import socket
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+# Add the current directory to the Python path to ensure imports work correctly
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 # Import the API modules
 try:
     from api_simple import app as simple_app
-except ImportError:
-    print("Warning: api_simple.py not found or contains errors. Simple API will not be available.")
+except ImportError as e:
+    print(f"Warning: api_simple.py not found or contains errors: {str(e)}")
+    print("Simple API will not be available.")
     simple_app = None
 
 try:
     from api import fastapi_app as full_app
-except ImportError:
-    print("Warning: api.py not found or contains errors. Full API will not be available.")
+except ImportError as e:
+    print(f"Warning: api.py not found or contains errors: {str(e)}")
+    print("Full API will not be available.")
     full_app = None
 
 # Create a unified FastAPI application
