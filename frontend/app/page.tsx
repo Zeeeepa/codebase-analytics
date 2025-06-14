@@ -1,5 +1,5 @@
 import type { Metadata } from "next"
-import CodebaseDashboard from "@/components/codebase-dashboard"
+import Main from "./main"
 
 export const metadata: Metadata = {
   title: "Codebase Analytics",
@@ -7,6 +7,6 @@ export const metadata: Metadata = {
 }
 
 export default function Page() {
-  return <CodebaseDashboard />
+  return <Main />
 }
 
