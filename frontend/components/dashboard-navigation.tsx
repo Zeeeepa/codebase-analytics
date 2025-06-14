@@ -7,8 +7,7 @@ import {
   AlertTriangle, 
   Target, 
   GitBranch, 
-  FileTree, 
-  Search,
+  FolderTree, 
   Settings
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -45,7 +44,7 @@ export function DashboardNavigation() {
     {
       id: 'structure',
       label: 'Structure',
-      icon: <FileTree className="h-5 w-5" />,
+      icon: <FolderTree className="h-5 w-5" />,
       disabled: !repoData,
     },
     {
@@ -87,4 +86,3 @@ export function DashboardNavigation() {
     </div>
   );
 }
-
