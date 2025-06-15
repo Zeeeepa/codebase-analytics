@@ -15,20 +15,13 @@ from fastapi.middleware.cors import CORSMiddleware
 # Add the current directory to the Python path to ensure imports work correctly
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-# Import the API modules
+# Import the API module
 try:
-    from api_simple import app as simple_app
+    from api import fastapi_app as api_app
 except ImportError as e:
-    print(f"Warning: api_simple.py not found or contains errors: {str(e)}")
-    print("Simple API will not be available.")
-    simple_app = None
-
-try:
-    from api import fastapi_app as full_app
-except ImportError as e:
-    print(f"Warning: api.py not found or contains errors: {str(e)}")
-    print("Full API will not be available.")
-    full_app = None
+    print(f"Error: api.py not found or contains errors: {str(e)}")
+    print("API will not be available.")
+    sys.exit(1)
 
 # Create a unified FastAPI application
 app = FastAPI(
@@ -56,15 +49,9 @@ async def health_check():
         "version": "1.0.0"
     }
 
-# Mount the simple API if available
-if simple_app:
-    app.mount("/simple", simple_app)
-    print("✅ Simple API mounted at /simple")
-
-# Mount the full API if available
-if full_app:
-    app.mount("/full", full_app)
-    print("✅ Full API mounted at /full")
+# Mount the API
+app.mount("/api", api_app)
+print("✅ API mounted at /api")
 
 def find_available_port(start_port=8000, max_port=8100):
     """Find an available port starting from start_port"""
@@ -91,11 +78,7 @@ def main():
     print(f"🚀 Starting Codebase Analytics backend server on http://{args.host}:{port}")
     print(f"📚 API documentation available at http://{args.host}:{port}/docs")
     
-    if simple_app:
-        print(f"🔍 Simple API available at http://{args.host}:{port}/simple")
-    
-    if full_app:
-        print(f"🔍 Full API available at http://{args.host}:{port}/full")
+    print(f"🔍 API available at http://{args.host}:{port}/api")
 
     # Start the server
     uvicorn.run(
@@ -107,4 +90,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

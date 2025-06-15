@@ -2,919 +2,891 @@
 """
 Visual Codebase Explorer
 
-A comprehensive visual exploration system for codebases that focuses on:
-- Immediate error detection and visualization
-- Blast radius analysis for understanding impact
-- Interactive structural navigation
-- Real-time context retrieval for issues
-
-Based on graph-sitter principles but focused on visual exploration rather than trends.
+This module provides functionality for visually exploring a codebase,
+including dependency graphs, error visualization, and blast radius analysis.
 """
 
-import json
 import logging
-import networkx as nx
-from collections import defaultdict, Counter
-from dataclasses import dataclass, field, asdict
-from enum import Enum
+import os
+import re
+import json
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Any, Optional, Set, Tuple, Union
+from enum import Enum
 
-try:
-    from codegen.sdk.core.codebase import Codebase
-    from codegen.sdk.core.function import Function
-    from codegen.sdk.core.class_definition import Class
-    from codegen.sdk.core.symbol import Symbol
-    from codegen.sdk.core.file import SourceFile
-    from codegen.sdk.core.import_resolution import Import
-    from codegen.sdk.core.external_module import ExternalModule
-    from codegen.sdk.core.detached_symbols.function_call import FunctionCall
-    from codegen.sdk.core.dataclasses.usage import Usage
-    from codegen.sdk.python.function import PyFunction
-    from codegen.sdk.python.symbol import PySymbol
-    from codegen.sdk.enums import EdgeType, SymbolType
-except ImportError:
-    print("Codegen SDK not found. Please ensure it's installed.")
+from codegen.sdk.core.codebase import Codebase
+from codegen.sdk.core.file import SourceFile
+from codegen.sdk.core.function import Function
+from codegen.sdk.core.class_definition import Class
+from codegen.sdk.core.symbol import Symbol
+from codegen.sdk.enums import EdgeType, SymbolType
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()],
+)
 logger = logging.getLogger(__name__)
 
 
 class ExplorationMode(str, Enum):
-    """Different modes of visual exploration."""
+    """Modes for visual exploration."""
+    
     STRUCTURAL_OVERVIEW = "structural_overview"
-    ERROR_FOCUSED = "error_focused"
+    DEPENDENCY_GRAPH = "dependency_graph"
+    ERROR_VISUALIZATION = "error_visualization"
+    COMPLEXITY_HEATMAP = "complexity_heatmap"
     BLAST_RADIUS = "blast_radius"
-    CALL_TRACE = "call_trace"
-    DEPENDENCY_MAP = "dependency_map"
-    CRITICAL_PATHS = "critical_paths"
 
 
-class IssueImpact(str, Enum):
-    """Impact levels for issues based on blast radius."""
-    ISOLATED = "isolated"      # Affects only the current function/class
-    LOCAL = "local"           # Affects current module/file
-    MODULE = "module"         # Affects multiple modules
-    SYSTEM = "system"         # Affects core system functionality
-
-
-@dataclass
-class VisualNode:
-    """Represents a node in the visual exploration graph."""
-    id: str
-    name: str
-    type: str  # function, class, file, module, error
-    path: str
-    issues: List[Dict[str, Any]] = field(default_factory=list)
-    blast_radius: int = 0
-    impact_level: IssueImpact = IssueImpact.ISOLATED
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    visual_properties: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-@dataclass
-class VisualEdge:
-    """Represents an edge in the visual exploration graph."""
-    source: str
-    target: str
-    relationship: str  # calls, uses, depends_on, affects, inherits
-    weight: float = 1.0
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    visual_properties: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
-
-
-class VisualCodebaseExplorer:
-    """
-    Visual codebase explorer that provides immediate insights into code structure,
-    errors, and impact analysis without focusing on trends.
-    """
-
-    def __init__(self, codebase: Codebase):
-        self.codebase = codebase
-        self.graph = nx.DiGraph()
-        self.nodes: Dict[str, VisualNode] = {}
-        self.edges: List[VisualEdge] = []
-        self.error_hotspots: List[Dict[str, Any]] = []
-        self.critical_paths: List[List[str]] = []
-        
-        # Visual configuration
-        self.color_palette = {
-            "function": "#3b82f6",      # Blue
-            "class": "#8b5cf6",         # Purple  
-            "file": "#64748b",          # Gray
-            "module": "#06b6d4",        # Cyan
-            "error_critical": "#ef4444", # Red
-            "error_major": "#f59e0b",    # Orange
-            "error_minor": "#eab308",    # Yellow
-            "healthy": "#22c55e",        # Green
-            "entry_point": "#9cdcfe",    # Light blue
-            "high_impact": "#dc2626",    # Dark red
-            "medium_impact": "#ea580c",  # Dark orange
-            "low_impact": "#65a30d"      # Dark green
-        }
-
-    def explore_codebase(self, mode: ExplorationMode = ExplorationMode.STRUCTURAL_OVERVIEW) -> Dict[str, Any]:
-        """
-        Perform visual exploration of the codebase based on the specified mode.
-        """
-        logger.info(f"Starting visual exploration in {mode.value} mode")
-        
-        # Build the base graph structure
-        self._build_base_graph()
-        
-        # Apply mode-specific analysis
-        if mode == ExplorationMode.ERROR_FOCUSED:
-            self._analyze_error_patterns()
-        elif mode == ExplorationMode.BLAST_RADIUS:
-            self._analyze_blast_radius()
-        elif mode == ExplorationMode.CALL_TRACE:
-            self._analyze_call_traces()
-        elif mode == ExplorationMode.DEPENDENCY_MAP:
-            self._analyze_dependencies()
-        elif mode == ExplorationMode.CRITICAL_PATHS:
-            self._analyze_critical_paths()
-        
-        # Calculate visual properties
-        self._calculate_visual_properties()
-        
-        # Generate exploration report
-        return self._generate_exploration_report(mode)
-
-    def _build_base_graph(self):
-        """Build the base graph structure from the codebase."""
-        logger.info("Building base graph structure")
-        
-        # Add file nodes
-        for file in self.codebase.files:
-            file_node = VisualNode(
-                id=f"file_{hash(file.filepath)}",
-                name=Path(file.filepath).name,
-                type="file",
-                path=file.filepath,
-                metadata={
-                    "full_path": file.filepath,
-                    "size": len(file.source) if hasattr(file, 'source') else 0,
-                    "functions_count": len(file.functions) if hasattr(file, 'functions') else 0,
-                    "classes_count": len(file.classes) if hasattr(file, 'classes') else 0
-                }
-            )
-            self.nodes[file_node.id] = file_node
-            self.graph.add_node(file_node.id, **file_node.to_dict())
-            
-            # Add function nodes
-            if hasattr(file, 'functions'):
-                for func in file.functions:
-                    func_node = self._create_function_node(func, file)
-                    self.nodes[func_node.id] = func_node
-                    self.graph.add_node(func_node.id, **func_node.to_dict())
-                    
-                    # Add edge from file to function
-                    edge = VisualEdge(
-                        source=file_node.id,
-                        target=func_node.id,
-                        relationship="contains"
-                    )
-                    self.edges.append(edge)
-                    self.graph.add_edge(edge.source, edge.target, **edge.to_dict())
-            
-            # Add class nodes
-            if hasattr(file, 'classes'):
-                for cls in file.classes:
-                    class_node = self._create_class_node(cls, file)
-                    self.nodes[class_node.id] = class_node
-                    self.graph.add_node(class_node.id, **class_node.to_dict())
-                    
-                    # Add edge from file to class
-                    edge = VisualEdge(
-                        source=file_node.id,
-                        target=class_node.id,
-                        relationship="contains"
-                    )
-                    self.edges.append(edge)
-                    self.graph.add_edge(edge.source, edge.target, **edge.to_dict())
-
-    def _create_function_node(self, func: Function, file: SourceFile) -> VisualNode:
-        """Create a visual node for a function."""
-        issues = self._detect_function_issues(func)
-        
-        return VisualNode(
-            id=f"func_{hash(func.name + file.filepath)}",
-            name=func.name,
-            type="function",
-            path=f"{file.filepath}:{getattr(func, 'start_point', [0])[0]}",
-            issues=issues,
-            blast_radius=self._calculate_function_blast_radius(func),
-            metadata={
-                "file": file.filepath,
-                "is_method": getattr(func, 'is_method', False),
-                "parameters": len(getattr(func, 'parameters', [])),
-                "calls_count": len(getattr(func, 'function_calls', [])),
-                "usages_count": len(getattr(func, 'usages', []))
-            }
-        )
-
-    def _create_class_node(self, cls: Class, file: SourceFile) -> VisualNode:
-        """Create a visual node for a class."""
-        issues = self._detect_class_issues(cls)
-        
-        return VisualNode(
-            id=f"class_{hash(cls.name + file.filepath)}",
-            name=cls.name,
-            type="class",
-            path=f"{file.filepath}:{getattr(cls, 'start_point', [0])[0]}",
-            issues=issues,
-            blast_radius=self._calculate_class_blast_radius(cls),
-            metadata={
-                "file": file.filepath,
-                "methods_count": len(getattr(cls, 'methods', [])),
-                "base_classes": [base.name for base in getattr(cls, 'base_classes', [])],
-                "usages_count": len(getattr(cls, 'usages', []))
-            }
-        )
-
-    def _detect_function_issues(self, func: Function) -> List[Dict[str, Any]]:
-        """Detect actual functional issues in a function."""
-        issues = []
-        
-        # Check for unused function (potential dead code)
-        if hasattr(func, 'usages') and not func.usages:
-            issues.append({
-                "type": "unused_function",
-                "severity": "minor",
-                "message": "Function is defined but never used",
-                "suggestion": "Consider removing if truly unused, or check if it should be public API"
-            })
-        
-        # Check for functions with no return statement but non-void signature
-        if hasattr(func, 'code_block'):
-            code = getattr(func, 'code_block', '')
-            if self._has_return_type_annotation(func) and 'return' not in code:
-                issues.append({
-                    "type": "missing_return",
-                    "severity": "major",
-                    "message": "Function has return type annotation but no return statement",
-                    "suggestion": "Add return statement or fix return type annotation"
-                })
-        
-        # Check for potential infinite recursion (function calls itself without base case)
-        if hasattr(func, 'function_calls'):
-            for call in getattr(func, 'function_calls', []):
-                if hasattr(call, 'name') and call.name == func.name:
-                    # Simple heuristic: if function calls itself but has no conditional statements
-                    code = getattr(func, 'code_block', '')
-                    if not any(keyword in code for keyword in ['if', 'while', 'for', 'break', 'return']):
-                        issues.append({
-                            "type": "potential_infinite_recursion",
-                            "severity": "critical",
-                            "message": "Function calls itself without apparent base case",
-                            "suggestion": "Add base case condition to prevent infinite recursion"
-                        })
-        
-        # Check for parameter-related issues
-        parameter_issues = self._detect_parameter_issues(func)
-        issues.extend(parameter_issues)
-        
-        # Check for function call parameter mismatches
-        call_issues = self._detect_function_call_issues(func)
-        issues.extend(call_issues)
-        
-        return issues
-
-    def _detect_class_issues(self, cls: Class) -> List[Dict[str, Any]]:
-        """Detect actual functional issues in a class."""
-        issues = []
-        
-        # Check for unused class (potential dead code)
-        if hasattr(cls, 'usages') and not cls.usages:
-            issues.append({
-                "type": "unused_class",
-                "severity": "minor",
-                "message": "Class is defined but never used",
-                "suggestion": "Consider removing if truly unused"
-            })
-        
-        # Check for classes with abstract methods but no ABC inheritance
-        if hasattr(cls, 'methods'):
-            abstract_methods = []
-            for method in getattr(cls, 'methods', []):
-                if hasattr(method, 'code_block'):
-                    code = getattr(method, 'code_block', '')
-                    if 'raise NotImplementedError' in str(code) or '@abstractmethod' in str(code):
-                        abstract_methods.append(method.name)
-            
-            if abstract_methods and not any('ABC' in str(base) for base in getattr(cls, 'base_classes', [])):
-                issues.append({
-                    "type": "missing_abc_inheritance",
-                    "severity": "major",
-                    "message": f"Class has abstract methods {abstract_methods} but doesn't inherit from ABC",
-                    "suggestion": "Inherit from ABC or implement the abstract methods"
-                })
-        
-        return issues
-
-    def _calculate_function_blast_radius(self, func: Function) -> int:
-        """Calculate the blast radius of a function (how many things it affects)."""
-        if not hasattr(func, 'usages'):
-            return 0
-        return len(func.usages)
-
-    def _calculate_class_blast_radius(self, cls: Class) -> int:
-        """Calculate the blast radius of a class."""
-        if not hasattr(cls, 'usages'):
-            return 0
-        return len(cls.usages)
-
-    def _has_return_type_annotation(self, func: Function) -> bool:
-        """Check if function has a return type annotation."""
-        if not hasattr(func, 'code_block'):
-            return False
-        
-        code = getattr(func, 'code_block', '')
-        if hasattr(code, 'source'):
-            code = code.source
-        
-        # Look for return type annotations (-> Type)
-        return '->' in str(code) and 'None' not in str(code)
-    
-    def _detect_parameter_issues(self, func: Function) -> List[Dict[str, Any]]:
-        """Detect parameter-related functional issues."""
-        issues = []
-        
-        if not hasattr(func, 'parameters') or not hasattr(func, 'code_block'):
-            return issues
-        
-        try:
-            parameters = getattr(func, 'parameters', [])
-            code = getattr(func, 'code_block', '')
-            if hasattr(code, 'source'):
-                code = code.source
-            code_str = str(code)
-        except Exception as e:
-            # Skip parameter analysis if there are parsing issues
-            return issues
-        
-        for param in parameters:
-            param_name = getattr(param, 'name', '')
-            if not param_name or param_name in ['self', 'cls']:
-                continue
-            
-            # Check for unused parameters
-            if param_name not in code_str:
-                issues.append({
-                    "type": "unused_parameter",
-                    "severity": "minor",
-                    "message": f"Parameter '{param_name}' is defined but never used",
-                    "suggestion": f"Remove unused parameter '{param_name}' or use it in the function body"
-                })
-            
-            # Check for parameters with default values that are mutable
-            if hasattr(param, 'default_value'):
-                default_val = str(getattr(param, 'default_value', ''))
-                if any(mutable in default_val for mutable in ['[]', '{}', 'list()', 'dict()', 'set()']):
-                    issues.append({
-                        "type": "mutable_default_parameter",
-                        "severity": "major",
-                        "message": f"Parameter '{param_name}' has mutable default value",
-                        "suggestion": f"Use None as default and create mutable object inside function"
-                    })
-        
-        # Check for missing required parameters in function signature
-        if hasattr(func, 'function_calls'):
-            try:
-                for call in getattr(func, 'function_calls', []):
-                    if hasattr(call, 'function_definition') and call.function_definition:
-                        target_func = call.function_definition
-                        if hasattr(target_func, 'parameters'):
-                            required_params = [
-                                p for p in getattr(target_func, 'parameters', [])
-                                if not hasattr(p, 'default_value') and getattr(p, 'name', '') not in ['self', 'cls']
-                            ]
-                            
-                            if hasattr(call, 'arguments'):
-                                provided_args = len(getattr(call, 'arguments', []))
-                                if provided_args < len(required_params):
-                                    issues.append({
-                                        "type": "missing_required_arguments",
-                                        "severity": "critical",
-                                        "message": f"Function call to '{getattr(target_func, 'name', 'unknown')}' missing required arguments",
-                                        "suggestion": f"Provide all {len(required_params)} required arguments"
-                                    })
-            except Exception as e:
-                # Skip function call parameter analysis if there are parsing issues
-                pass
-        
-        return issues
-    
-    def _detect_function_call_issues(self, func: Function) -> List[Dict[str, Any]]:
-        """Detect issues with function calls and their parameters."""
-        issues = []
-        
-        if not hasattr(func, 'function_calls'):
-            return issues
-        
-        code = getattr(func, 'code_block', '')
-        if hasattr(code, 'source'):
-            code = code.source
-        code_str = str(code)
-        
-        # Check for common parameter passing errors
-        function_calls = getattr(func, 'function_calls', [])
-        
-        for call in function_calls:
-            call_name = getattr(call, 'name', '')
-            
-            # Check for calls with wrong parameter types (basic heuristics)
-            if 'str(' in code_str and 'int(' in code_str:
-                # Look for potential type conversion issues
-                if any(pattern in code_str for pattern in ['str(int(', 'int(str(']):
-                    issues.append({
-                        "type": "redundant_type_conversion",
-                        "severity": "minor",
-                        "message": "Redundant type conversions detected",
-                        "suggestion": "Review type conversion logic for efficiency"
-                    })
-            
-            # Check for calls to undefined functions (basic check)
-            if call_name and call_name not in ['print', 'len', 'str', 'int', 'float', 'bool', 'list', 'dict', 'set', 'tuple']:
-                # This is a simplified check - in a real implementation, you'd check against imports and defined functions
-                if not hasattr(call, 'function_definition') or not call.function_definition:
-                    # Only flag if it's not a built-in or method call
-                    if '.' not in call_name and not call_name.startswith('_'):
-                        issues.append({
-                            "type": "undefined_function_call",
-                            "severity": "major",
-                            "message": f"Call to potentially undefined function '{call_name}'",
-                            "suggestion": f"Ensure function '{call_name}' is defined or imported"
-                        })
-        
-        return issues
-
-    def _analyze_error_patterns(self):
-        """Analyze error patterns and hotspots in the codebase."""
-        logger.info("Analyzing error patterns")
-        
-        error_counts = defaultdict(int)
-        
-        for node in self.nodes.values():
-            if node.issues:
-                for issue in node.issues:
-                    error_counts[issue['severity']] += 1
-                    
-                    # Mark high-impact errors
-                    if issue['severity'] == 'critical' or node.blast_radius > 10:
-                        node.impact_level = IssueImpact.SYSTEM
-                    elif issue['severity'] == 'major' or node.blast_radius > 5:
-                        node.impact_level = IssueImpact.MODULE
-                    elif node.blast_radius > 1:
-                        node.impact_level = IssueImpact.LOCAL
-                    else:
-                        node.impact_level = IssueImpact.ISOLATED
-        
-        # Identify error hotspots
-        self.error_hotspots = [
-            {
-                "node_id": node.id,
-                "name": node.name,
-                "type": node.type,
-                "issue_count": len(node.issues),
-                "blast_radius": node.blast_radius,
-                "impact_level": node.impact_level.value
-            }
-            for node in self.nodes.values()
-            if node.issues and len(node.issues) > 1
-        ]
-        
-        # Sort by impact
-        self.error_hotspots.sort(key=lambda x: (x['blast_radius'], x['issue_count']), reverse=True)
-
-    def _analyze_blast_radius(self):
-        """Analyze blast radius for all symbols in the codebase."""
-        logger.info("Analyzing blast radius")
-        
-        # Build usage relationships
-        for file in self.codebase.files:
-            if hasattr(file, 'functions'):
-                for func in file.functions:
-                    if hasattr(func, 'usages'):
-                        func_node_id = f"func_{hash(func.name + file.filepath)}"
-                        
-                        for usage in func.usages:
-                            if hasattr(usage, 'usage_symbol'):
-                                target_symbol = usage.usage_symbol
-                                target_id = self._get_symbol_node_id(target_symbol)
-                                
-                                if target_id and target_id in self.nodes:
-                                    edge = VisualEdge(
-                                        source=func_node_id,
-                                        target=target_id,
-                                        relationship="affects",
-                                        metadata={
-                                            "usage_type": "function_usage",
-                                            "file": getattr(usage.match, 'filepath', '') if hasattr(usage, 'match') else ''
-                                        }
-                                    )
-                                    self.edges.append(edge)
-                                    self.graph.add_edge(edge.source, edge.target, **edge.to_dict())
-
-    def _analyze_call_traces(self):
-        """Analyze call traces to understand execution flows."""
-        logger.info("Analyzing call traces")
-        
-        # Build call relationships
-        for file in self.codebase.files:
-            if hasattr(file, 'functions'):
-                for func in file.functions:
-                    if hasattr(func, 'function_calls'):
-                        func_node_id = f"func_{hash(func.name + file.filepath)}"
-                        
-                        for call in func.function_calls:
-                            if hasattr(call, 'function_definition') and call.function_definition:
-                                target_func = call.function_definition
-                                target_id = self._get_symbol_node_id(target_func)
-                                
-                                if target_id and target_id in self.nodes:
-                                    edge = VisualEdge(
-                                        source=func_node_id,
-                                        target=target_id,
-                                        relationship="calls",
-                                        metadata={
-                                            "call_name": call.name,
-                                            "file": getattr(call, 'filepath', ''),
-                                            "line": getattr(call, 'start_point', [0])[0] if hasattr(call, 'start_point') else 0
-                                        }
-                                    )
-                                    self.edges.append(edge)
-                                    self.graph.add_edge(edge.source, edge.target, **edge.to_dict())
-
-    def _analyze_dependencies(self):
-        """Analyze dependency relationships."""
-        logger.info("Analyzing dependencies")
-        
-        # Build import/dependency relationships
-        for file in self.codebase.files:
-            file_node_id = f"file_{hash(file.filepath)}"
-            
-            if hasattr(file, 'imports'):
-                for import_stmt in file.imports:
-                    if hasattr(import_stmt, 'resolved_symbol') and import_stmt.resolved_symbol:
-                        target_symbol = import_stmt.resolved_symbol
-                        target_id = self._get_symbol_node_id(target_symbol)
-                        
-                        if target_id and target_id in self.nodes:
-                            edge = VisualEdge(
-                                source=file_node_id,
-                                target=target_id,
-                                relationship="depends_on",
-                                metadata={
-                                    "import_type": getattr(import_stmt, 'import_type', 'unknown'),
-                                    "module_name": getattr(import_stmt, 'module_name', '')
-                                }
-                            )
-                            self.edges.append(edge)
-                            self.graph.add_edge(edge.source, edge.target, **edge.to_dict())
-
-    def _analyze_critical_paths(self):
-        """Identify critical paths in the codebase."""
-        logger.info("Analyzing critical paths")
-        
-        # Find entry points (functions with high usage but low dependencies)
-        entry_points = []
-        for node in self.nodes.values():
-            if node.type == "function" and node.blast_radius > 5:
-                # Check if it's likely an entry point
-                incoming_edges = [e for e in self.edges if e.target == node.id and e.relationship == "calls"]
-                if len(incoming_edges) < 3:  # Few callers but high impact
-                    entry_points.append(node.id)
-        
-        # Find critical paths from entry points
-        for entry_point in entry_points:
-            try:
-                # Find paths to high-impact nodes
-                for target_node in self.nodes.values():
-                    if target_node.blast_radius > 3 and target_node.id != entry_point:
-                        try:
-                            path = nx.shortest_path(self.graph, entry_point, target_node.id)
-                            if len(path) > 2:  # Meaningful path
-                                self.critical_paths.append(path)
-                        except nx.NetworkXNoPath:
-                            continue
-            except Exception as e:
-                logger.warning(f"Error finding paths from {entry_point}: {e}")
-
-    def _calculate_visual_properties(self):
-        """Calculate visual properties for nodes and edges."""
-        logger.info("Calculating visual properties")
-        
-        for node in self.nodes.values():
-            # Determine node color based on issues and impact
-            if node.issues:
-                critical_issues = [i for i in node.issues if i['severity'] == 'critical']
-                major_issues = [i for i in node.issues if i['severity'] == 'major']
-                
-                if critical_issues:
-                    color = self.color_palette["error_critical"]
-                elif major_issues:
-                    color = self.color_palette["error_major"]
-                else:
-                    color = self.color_palette["error_minor"]
-            else:
-                color = self.color_palette.get(node.type, self.color_palette["healthy"])
-            
-            # Determine node size based on blast radius
-            size = max(10, min(50, 10 + node.blast_radius * 2))
-            
-            node.visual_properties = {
-                "color": color,
-                "size": size,
-                "border_width": 2 if node.issues else 1,
-                "opacity": 0.9 if node.blast_radius > 5 else 0.7
-            }
-        
-        for edge in self.edges:
-            # Determine edge properties based on relationship
-            if edge.relationship == "affects":
-                color = self.color_palette["high_impact"]
-                width = 3
-            elif edge.relationship == "calls":
-                color = self.color_palette["medium_impact"]
-                width = 2
-            else:
-                color = self.color_palette["low_impact"]
-                width = 1
-            
-            edge.visual_properties = {
-                "color": color,
-                "width": width,
-                "style": "solid" if edge.relationship in ["calls", "affects"] else "dashed"
-            }
-
-    def _get_symbol_node_id(self, symbol) -> Optional[str]:
-        """Get the node ID for a symbol."""
-        if isinstance(symbol, Function):
-            return f"func_{hash(symbol.name + getattr(symbol, 'filepath', ''))}"
-        elif isinstance(symbol, Class):
-            return f"class_{hash(symbol.name + getattr(symbol, 'filepath', ''))}"
-        elif hasattr(symbol, 'filepath'):
-            return f"file_{hash(symbol.filepath)}"
-        return None
-
-    def _generate_exploration_report(self, mode: ExplorationMode) -> Dict[str, Any]:
-        """Generate a comprehensive exploration report."""
-        total_nodes = len(self.nodes)
-        total_issues = sum(len(node.issues) for node in self.nodes.values())
-        
-        # Calculate issue distribution
-        issue_distribution = defaultdict(int)
-        for node in self.nodes.values():
-            for issue in node.issues:
-                issue_distribution[issue['severity']] += 1
-        
-        # Find most critical nodes
-        critical_nodes = sorted(
-            [node for node in self.nodes.values() if node.issues],
-            key=lambda x: (len([i for i in x.issues if i['severity'] == 'critical']), x.blast_radius),
-            reverse=True
-        )[:10]
-        
-        return {
-            "exploration_mode": mode.value,
-            "summary": {
-                "total_nodes": total_nodes,
-                "total_issues": total_issues,
-                "error_hotspots_count": len(self.error_hotspots),
-                "critical_paths_count": len(self.critical_paths),
-                "issue_distribution": dict(issue_distribution)
-            },
-            "visual_graph": {
-                "nodes": [node.to_dict() for node in self.nodes.values()],
-                "edges": [edge.to_dict() for edge in self.edges]
-            },
-            "error_hotspots": self.error_hotspots[:20],  # Top 20 hotspots
-            "critical_paths": self.critical_paths[:10],   # Top 10 critical paths
-            "critical_nodes": [
-                {
-                    "id": node.id,
-                    "name": node.name,
-                    "type": node.type,
-                    "path": node.path,
-                    "issues": node.issues,
-                    "blast_radius": node.blast_radius,
-                    "impact_level": node.impact_level.value
-                }
-                for node in critical_nodes
-            ],
-            "visualization_config": {
-                "color_palette": self.color_palette,
-                "layout_algorithm": "force_directed",
-                "interactive_features": [
-                    "zoom", "pan", "node_selection", "edge_filtering",
-                    "issue_highlighting", "blast_radius_visualization"
-                ]
-            },
-            "exploration_insights": self._generate_insights(mode)
-        }
-
-    def _generate_insights(self, mode: ExplorationMode) -> List[Dict[str, Any]]:
-        """Generate actionable insights based on the exploration."""
-        insights = []
-        
-        # High-impact error insight
-        high_impact_errors = [
-            node for node in self.nodes.values()
-            if node.issues and node.blast_radius > 5
-        ]
-        
-        if high_impact_errors:
-            insights.append({
-                "type": "high_impact_errors",
-                "priority": "critical",
-                "title": f"Found {len(high_impact_errors)} high-impact errors",
-                "description": "These errors affect multiple parts of the codebase and should be prioritized",
-                "affected_nodes": [node.id for node in high_impact_errors[:5]]
-            })
-        
-        # Unused code insight
-        unused_functions = [
-            node for node in self.nodes.values()
-            if node.type == "function" and any(
-                issue['type'] == 'unused_function' for issue in node.issues
-            )
-        ]
-        
-        if unused_functions:
-            insights.append({
-                "type": "unused_code",
-                "priority": "medium",
-                "title": f"Found {len(unused_functions)} unused functions",
-                "description": "Consider removing unused code to improve maintainability",
-                "affected_nodes": [node.id for node in unused_functions[:10]]
-            })
-        
-        # Critical functional errors
-        critical_errors = [
-            node for node in self.nodes.values()
-            if node.issues and any(
-                issue['severity'] == 'critical' for issue in node.issues
-            )
-        ]
-        
-        if critical_errors:
-            insights.append({
-                "type": "critical_errors",
-                "priority": "critical",
-                "title": f"Found {len(critical_errors)} critical functional errors",
-                "description": "These errors may cause runtime failures and should be fixed immediately",
-                "affected_nodes": [node.id for node in critical_errors[:5]]
-            })
-        
-        # Missing return statements
-        missing_returns = [
-            node for node in self.nodes.values()
-            if node.type == "function" and any(
-                issue['type'] == 'missing_return' for issue in node.issues
-            )
-        ]
-        
-        if missing_returns:
-            insights.append({
-                "type": "missing_returns",
-                "priority": "major",
-                "title": f"Found {len(missing_returns)} functions with missing return statements",
-                "description": "Functions with return type annotations but no return statements may cause runtime errors",
-                "affected_nodes": [node.id for node in missing_returns[:5]]
-            })
-        
-        # Parameter-related issues
-        parameter_issues = [
-            node for node in self.nodes.values()
-            if node.type == "function" and any(
-                issue['type'] in ['unused_parameter', 'mutable_default_parameter', 'missing_required_arguments'] 
-                for issue in node.issues
-            )
-        ]
-        
-        if parameter_issues:
-            insights.append({
-                "type": "parameter_issues",
-                "priority": "medium",
-                "title": f"Found {len(parameter_issues)} functions with parameter issues",
-                "description": "Parameter problems including unused parameters, mutable defaults, and missing arguments",
-                "affected_nodes": [node.id for node in parameter_issues[:5]]
-            })
-        
-        # Function call issues
-        call_issues = [
-            node for node in self.nodes.values()
-            if node.type == "function" and any(
-                issue['type'] in ['undefined_function_call', 'redundant_type_conversion'] 
-                for issue in node.issues
-            )
-        ]
-        
-        if call_issues:
-            insights.append({
-                "type": "function_call_issues",
-                "priority": "major",
-                "title": f"Found {len(call_issues)} functions with call issues",
-                "description": "Problems with function calls including undefined functions and type conversion issues",
-                "affected_nodes": [node.id for node in call_issues[:5]]
-            })
-        
-        return insights
-
-
-def create_visual_exploration(codebase: Codebase, mode: ExplorationMode = ExplorationMode.STRUCTURAL_OVERVIEW) -> Dict[str, Any]:
+def create_visual_exploration(
+    codebase: Codebase,
+    mode: ExplorationMode = ExplorationMode.STRUCTURAL_OVERVIEW,
+    symbol_name: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Create a visual exploration of the codebase.
     
     Args:
-        codebase: The codebase to explore
-        mode: The exploration mode to use
+        codebase: Codebase object
+        mode: Exploration mode
+        symbol_name: Optional symbol name for blast radius analysis
         
     Returns:
-        Comprehensive exploration data for visualization
+        Dictionary containing the exploration data
     """
-    explorer = VisualCodebaseExplorer(codebase)
-    return explorer.explore_codebase(mode)
+    logger.info(f"Creating visual exploration in {mode} mode")
+    
+    if mode == ExplorationMode.STRUCTURAL_OVERVIEW:
+        return create_structural_overview(codebase)
+    elif mode == ExplorationMode.DEPENDENCY_GRAPH:
+        return create_dependency_graph(codebase)
+    elif mode == ExplorationMode.ERROR_VISUALIZATION:
+        return create_error_visualization(codebase)
+    elif mode == ExplorationMode.COMPLEXITY_HEATMAP:
+        return create_complexity_heatmap(codebase)
+    elif mode == ExplorationMode.BLAST_RADIUS:
+        if not symbol_name:
+            raise ValueError("Symbol name is required for blast radius analysis")
+        return analyze_error_blast_radius(codebase, symbol_name)
+    else:
+        raise ValueError(f"Unsupported exploration mode: {mode}")
 
 
-def analyze_error_blast_radius(codebase: Codebase, symbol_name: str) -> Dict[str, Any]:
+def create_structural_overview(codebase: Codebase) -> Dict[str, Any]:
     """
-    Analyze the blast radius of a specific symbol to understand impact of changes.
+    Create a structural overview of the codebase.
     
     Args:
-        codebase: The codebase to analyze
+        codebase: Codebase object
+        
+    Returns:
+        Dictionary containing the structural overview
+    """
+    # Create nodes for files, classes, and functions
+    nodes = []
+    edges = []
+    
+    # Add root node
+    root_node = {
+        "id": "root",
+        "label": "Codebase",
+        "type": "root",
+        "size": 30,
+        "color": "#64748b",
+    }
+    nodes.append(root_node)
+    
+    # Add file nodes
+    for file in codebase.files:
+        file_node = {
+            "id": file.filepath,
+            "label": Path(file.filepath).name,
+            "type": "file",
+            "size": 20,
+            "color": "#3b82f6",  # Blue
+            "metadata": {
+                "file": file.filepath,
+                "functions": len(file.functions),
+                "classes": len(file.classes),
+            }
+        }
+        nodes.append(file_node)
+        
+        # Add edge from root to file
+        edges.append({
+            "source": "root",
+            "target": file.filepath,
+            "type": "contains",
+        })
+        
+        # Add class nodes
+        for cls in file.classes:
+            class_node = {
+                "id": f"{file.filepath}:{cls.name}",
+                "label": cls.name,
+                "type": "class",
+                "size": 15,
+                "color": "#8b5cf6",  # Purple
+                "metadata": {
+                    "file": file.filepath,
+                    "methods": len(cls.methods) if hasattr(cls, "methods") else 0,
+                }
+            }
+            nodes.append(class_node)
+            
+            # Add edge from file to class
+            edges.append({
+                "source": file.filepath,
+                "target": f"{file.filepath}:{cls.name}",
+                "type": "contains",
+            })
+            
+            # Add method nodes
+            if hasattr(cls, "methods"):
+                for method in cls.methods:
+                    method_node = {
+                        "id": f"{file.filepath}:{cls.name}.{method.name}",
+                        "label": method.name,
+                        "type": "method",
+                        "size": 10,
+                        "color": "#ec4899",  # Pink
+                        "metadata": {
+                            "file": file.filepath,
+                            "class": cls.name,
+                        }
+                    }
+                    nodes.append(method_node)
+                    
+                    # Add edge from class to method
+                    edges.append({
+                        "source": f"{file.filepath}:{cls.name}",
+                        "target": f"{file.filepath}:{cls.name}.{method.name}",
+                        "type": "contains",
+                    })
+        
+        # Add function nodes (excluding methods)
+        for func in file.functions:
+            # Skip methods (already added above)
+            if hasattr(func, "parent") and func.parent:
+                continue
+            
+            func_node = {
+                "id": f"{file.filepath}:{func.name}",
+                "label": func.name,
+                "type": "function",
+                "size": 10,
+                "color": "#22c55e",  # Green
+                "metadata": {
+                    "file": file.filepath,
+                }
+            }
+            nodes.append(func_node)
+            
+            # Add edge from file to function
+            edges.append({
+                "source": file.filepath,
+                "target": f"{file.filepath}:{func.name}",
+                "type": "contains",
+            })
+    
+    # Add function call edges
+    for file in codebase.files:
+        for func in file.functions:
+            if hasattr(func, "calls"):
+                for call in func.calls:
+                    if hasattr(call, "resolved_symbol") and call.resolved_symbol:
+                        # Get source node ID
+                        source_id = f"{file.filepath}:{func.name}"
+                        if hasattr(func, "parent") and func.parent:
+                            source_id = f"{file.filepath}:{func.parent.name}.{func.name}"
+                        
+                        # Get target node ID
+                        target_symbol = call.resolved_symbol
+                        target_file = getattr(target_symbol, "file", None)
+                        target_name = getattr(target_symbol, "name", None)
+                        target_parent = getattr(target_symbol, "parent", None)
+                        
+                        if target_file and target_name:
+                            target_id = f"{target_file.filepath}:{target_name}"
+                            if target_parent:
+                                target_id = f"{target_file.filepath}:{target_parent.name}.{target_name}"
+                            
+                            # Add edge from function to called function
+                            edges.append({
+                                "source": source_id,
+                                "target": target_id,
+                                "type": "calls",
+                            })
+    
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "summary": {
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+            "total_files": len([n for n in nodes if n["type"] == "file"]),
+            "total_classes": len([n for n in nodes if n["type"] == "class"]),
+            "total_functions": len([n for n in nodes if n["type"] in ["function", "method"]]),
+            "total_issues": 0,
+        }
+    }
+
+
+def create_dependency_graph(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Create a dependency graph of the codebase.
+    
+    Args:
+        codebase: Codebase object
+        
+    Returns:
+        Dictionary containing the dependency graph
+    """
+    nodes = []
+    edges = []
+    
+    # Create nodes for each file
+    for file in codebase.files:
+        nodes.append({
+            "id": file.filepath,
+            "label": Path(file.filepath).name,
+            "type": "file",
+            "size": 20,
+            "color": "#3b82f6",  # Blue
+            "metadata": {
+                "file": file.filepath,
+                "functions": len(file.functions),
+                "classes": len(file.classes),
+            }
+        })
+    
+    # Create edges for imports
+    for file in codebase.files:
+        for imp in getattr(file, "imports", []):
+            if hasattr(imp, "resolved_path") and imp.resolved_path:
+                edges.append({
+                    "source": file.filepath,
+                    "target": imp.resolved_path,
+                    "type": "import",
+                    "color": "#64748b",  # Gray
+                })
+    
+    # Detect circular dependencies
+    circular_deps = detect_circular_dependencies(nodes, edges)
+    
+    # Add circular dependency edges
+    for cycle in circular_deps:
+        for i in range(len(cycle)):
+            source = cycle[i]
+            target = cycle[(i + 1) % len(cycle)]
+            
+            edges.append({
+                "source": source,
+                "target": target,
+                "type": "circular",
+                "color": "#ef4444",  # Red
+                "weight": 2.0,
+                "metadata": {
+                    "cycle": cycle,
+                }
+            })
+    
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "circular_dependencies": circular_deps,
+        "summary": {
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+            "total_circular_dependencies": len(circular_deps),
+            "total_issues": len(circular_deps),
+        }
+    }
+
+
+def detect_circular_dependencies(nodes, edges) -> List[List[str]]:
+    """
+    Detect circular dependencies in the dependency graph.
+    
+    Args:
+        nodes: List of nodes
+        edges: List of edges
+        
+    Returns:
+        List of cycles, where each cycle is a list of node IDs
+    """
+    # Build adjacency list
+    graph = {}
+    for node in nodes:
+        graph[node["id"]] = []
+    
+    for edge in edges:
+        if edge["source"] in graph and edge["target"] in graph:
+            graph[edge["source"]].append(edge["target"])
+    
+    # Find cycles using DFS
+    def find_cycles(node, visited, path):
+        if node in path:
+            # Found a cycle
+            cycle_start = path.index(node)
+            return [path[cycle_start:]]
+        
+        if node in visited:
+            return []
+        
+        visited.add(node)
+        path.append(node)
+        
+        cycles = []
+        for neighbor in graph.get(node, []):
+            cycles.extend(find_cycles(neighbor, visited.copy(), path.copy()))
+        
+        return cycles
+    
+    all_cycles = []
+    for node in graph:
+        cycles = find_cycles(node, set(), [])
+        for cycle in cycles:
+            if cycle not in all_cycles:
+                all_cycles.append(cycle)
+    
+    return all_cycles
+
+
+def create_error_visualization(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Create a visualization of errors in the codebase.
+    
+    Args:
+        codebase: Codebase object
+        
+    Returns:
+        Dictionary containing the error visualization
+    """
+    nodes = []
+    edges = []
+    errors = []
+    
+    # Create nodes for each file
+    for file in codebase.files:
+        nodes.append({
+            "id": file.filepath,
+            "label": Path(file.filepath).name,
+            "type": "file",
+            "size": 20,
+            "color": "#3b82f6",  # Blue
+            "metadata": {
+                "file": file.filepath,
+                "functions": len(file.functions),
+                "classes": len(file.classes),
+            }
+        })
+    
+    # Check for import errors
+    for file in codebase.files:
+        for imp in getattr(file, "imports", []):
+            if hasattr(imp, "resolved_path") and imp.resolved_path:
+                # Add edge for resolved import
+                edges.append({
+                    "source": file.filepath,
+                    "target": imp.resolved_path,
+                    "type": "import",
+                    "color": "#64748b",  # Gray
+                })
+            else:
+                # Add error for unresolved import
+                error = {
+                    "id": f"error_{len(errors)}",
+                    "type": "import_error",
+                    "severity": "error",
+                    "message": f"Unresolved import: {imp.name}",
+                    "location": {
+                        "file": file.filepath,
+                        "line": getattr(imp, "line", None),
+                    }
+                }
+                errors.append(error)
+                
+                # Add error node
+                error_node = {
+                    "id": error["id"],
+                    "label": f"Import Error: {imp.name}",
+                    "type": "error",
+                    "size": 15,
+                    "color": "#ef4444",  # Red
+                    "metadata": {
+                        "error": error,
+                    }
+                }
+                nodes.append(error_node)
+                
+                # Add edge from file to error
+                edges.append({
+                    "source": file.filepath,
+                    "target": error["id"],
+                    "type": "has_error",
+                    "color": "#ef4444",  # Red
+                })
+    
+    # Check for undefined symbols
+    for file in codebase.files:
+        for func in file.functions:
+            if hasattr(func, "calls"):
+                for call in func.calls:
+                    if not call.resolved:
+                        # Add error for unresolved call
+                        error = {
+                            "id": f"error_{len(errors)}",
+                            "type": "undefined_symbol",
+                            "severity": "warning",
+                            "message": f"Undefined function call: {call.name}",
+                            "location": {
+                                "file": file.filepath,
+                                "line": getattr(call, "line", None),
+                            }
+                        }
+                        errors.append(error)
+                        
+                        # Add error node
+                        error_node = {
+                            "id": error["id"],
+                            "label": f"Undefined: {call.name}",
+                            "type": "error",
+                            "size": 15,
+                            "color": "#f97316",  # Orange
+                            "metadata": {
+                                "error": error,
+                            }
+                        }
+                        nodes.append(error_node)
+                        
+                        # Get source node ID
+                        source_id = f"{file.filepath}:{func.name}"
+                        if hasattr(func, "parent") and func.parent:
+                            source_id = f"{file.filepath}:{func.parent.name}.{func.name}"
+                        
+                        # Add function node if it doesn't exist
+                        if not any(n["id"] == source_id for n in nodes):
+                            func_node = {
+                                "id": source_id,
+                                "label": func.name,
+                                "type": "function",
+                                "size": 10,
+                                "color": "#22c55e",  # Green
+                                "metadata": {
+                                    "file": file.filepath,
+                                }
+                            }
+                            nodes.append(func_node)
+                            
+                            # Add edge from file to function
+                            edges.append({
+                                "source": file.filepath,
+                                "target": source_id,
+                                "type": "contains",
+                                "color": "#64748b",  # Gray
+                            })
+                        
+                        # Add edge from function to error
+                        edges.append({
+                            "source": source_id,
+                            "target": error["id"],
+                            "type": "has_error",
+                            "color": "#f97316",  # Orange
+                        })
+    
+    # Check for circular dependencies
+    dependency_graph = create_dependency_graph(codebase)
+    for cycle in dependency_graph["circular_dependencies"]:
+        # Add error for circular dependency
+        cycle_str = " -> ".join([Path(file).name for file in cycle])
+        error = {
+            "id": f"error_{len(errors)}",
+            "type": "circular_dependency",
+            "severity": "warning",
+            "message": f"Circular dependency: {cycle_str}",
+            "location": {
+                "file": cycle[0],
+            }
+        }
+        errors.append(error)
+        
+        # Add error node
+        error_node = {
+            "id": error["id"],
+            "label": f"Circular Dependency",
+            "type": "error",
+            "size": 15,
+            "color": "#eab308",  # Yellow
+            "metadata": {
+                "error": error,
+                "cycle": cycle,
+            }
+        }
+        nodes.append(error_node)
+        
+        # Add edges from files in cycle to error
+        for file in cycle:
+            edges.append({
+                "source": file,
+                "target": error["id"],
+                "type": "has_error",
+                "color": "#eab308",  # Yellow
+            })
+    
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "errors": errors,
+        "summary": {
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+            "total_issues": len(errors),
+            "issues_by_type": {
+                "import_error": len([e for e in errors if e["type"] == "import_error"]),
+                "undefined_symbol": len([e for e in errors if e["type"] == "undefined_symbol"]),
+                "circular_dependency": len([e for e in errors if e["type"] == "circular_dependency"]),
+            }
+        }
+    }
+
+
+def create_complexity_heatmap(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Create a complexity heatmap of the codebase.
+    
+    Args:
+        codebase: Codebase object
+        
+    Returns:
+        Dictionary containing the complexity heatmap
+    """
+    nodes = []
+    
+    # Calculate complexity for each file and function
+    file_complexity = {}
+    function_complexity = []
+    
+    for file in codebase.files:
+        file_metrics = {
+            "file": file.filepath,
+            "lines": len(file.source.split("\n")) if hasattr(file, "source") else 0,
+            "functions": len(file.functions),
+            "classes": len(file.classes),
+            "complexity": 0,
+        }
+        
+        # Calculate complexity for each function
+        for func in file.functions:
+            func_complexity = calculate_function_complexity(func)
+            file_metrics["complexity"] += func_complexity
+            
+            function_complexity.append({
+                "file": file.filepath,
+                "function": func.name,
+                "complexity": func_complexity,
+                "lines": len(func.source.split("\n")) if hasattr(func, "source") else 0,
+            })
+        
+        file_complexity[file.filepath] = file_metrics
+    
+    # Create nodes for each file
+    for file_path, metrics in file_complexity.items():
+        # Determine color based on complexity
+        complexity = metrics["complexity"]
+        color = "#22c55e"  # Green (low complexity)
+        if complexity > 50:
+            color = "#ef4444"  # Red (high complexity)
+        elif complexity > 20:
+            color = "#f97316"  # Orange (medium-high complexity)
+        elif complexity > 10:
+            color = "#eab308"  # Yellow (medium complexity)
+        
+        nodes.append({
+            "id": file_path,
+            "label": Path(file_path).name,
+            "type": "file",
+            "size": min(30, 10 + metrics["complexity"] / 5),  # Size based on complexity
+            "color": color,
+            "metadata": {
+                "file": file_path,
+                "complexity": metrics["complexity"],
+                "functions": metrics["functions"],
+                "classes": metrics["classes"],
+                "lines": metrics["lines"],
+            }
+        })
+    
+    # Create nodes for complex functions
+    for func in sorted(function_complexity, key=lambda f: f["complexity"], reverse=True)[:20]:
+        # Determine color based on complexity
+        complexity = func["complexity"]
+        color = "#22c55e"  # Green (low complexity)
+        if complexity > 15:
+            color = "#ef4444"  # Red (high complexity)
+        elif complexity > 10:
+            color = "#f97316"  # Orange (medium-high complexity)
+        elif complexity > 5:
+            color = "#eab308"  # Yellow (medium complexity)
+        
+        nodes.append({
+            "id": f"{func['file']}:{func['function']}",
+            "label": func["function"],
+            "type": "function",
+            "size": min(20, 5 + func["complexity"]),  # Size based on complexity
+            "color": color,
+            "metadata": {
+                "file": func["file"],
+                "complexity": func["complexity"],
+                "lines": func["lines"],
+            }
+        })
+    
+    return {
+        "nodes": nodes,
+        "complexity": {
+            "file_complexity": file_complexity,
+            "function_complexity": sorted(function_complexity, key=lambda f: f["complexity"], reverse=True)[:50],
+            "summary": {
+                "total_files": len(file_complexity),
+                "total_functions": len(function_complexity),
+                "avg_file_complexity": sum(f["complexity"] for f in file_complexity.values()) / len(file_complexity) if file_complexity else 0,
+                "avg_function_complexity": sum(f["complexity"] for f in function_complexity) / len(function_complexity) if function_complexity else 0,
+                "max_file_complexity": max(f["complexity"] for f in file_complexity.values()) if file_complexity else 0,
+                "max_function_complexity": max(f["complexity"] for f in function_complexity) if function_complexity else 0,
+            }
+        },
+        "summary": {
+            "total_nodes": len(nodes),
+            "total_issues": len([n for n in nodes if n["metadata"].get("complexity", 0) > 10]),
+        }
+    }
+
+
+def calculate_function_complexity(func: Function) -> int:
+    """
+    Calculate cyclomatic complexity for a function.
+    
+    Args:
+        func: Function object
+        
+    Returns:
+        Complexity score
+    """
+    # This is a simplified calculation
+    complexity = 1  # Base complexity
+    
+    # Count control flow statements
+    if hasattr(func, "source"):
+        source = func.source
+        
+        # Count if statements
+        complexity += source.count("if ")
+        
+        # Count else if statements
+        complexity += source.count("elif ")
+        
+        # Count for loops
+        complexity += source.count("for ")
+        
+        # Count while loops
+        complexity += source.count("while ")
+        
+        # Count and/or operators (each adds a path)
+        complexity += source.count(" and ")
+        complexity += source.count(" or ")
+        
+        # Count exception handlers
+        complexity += source.count("except ")
+    
+    return complexity
+
+
+def analyze_error_blast_radius(
+    codebase: Codebase,
+    symbol_name: str,
+) -> Dict[str, Any]:
+    """
+    Analyze the blast radius of a symbol.
+    
+    Args:
+        codebase: Codebase object
         symbol_name: Name of the symbol to analyze
         
     Returns:
-        Blast radius analysis data
+        Dictionary containing the blast radius analysis
     """
-    explorer = VisualCodebaseExplorer(codebase)
-    explorer._build_base_graph()
+    logger.info(f"Analyzing blast radius for symbol: {symbol_name}")
     
-    # Find the target symbol
-    target_node = None
-    for node in explorer.nodes.values():
-        if node.name == symbol_name:
-            target_node = node
-            break
-    
-    if not target_node:
-        return {"error": f"Symbol '{symbol_name}' not found"}
-    
-    # Build blast radius graph
-    blast_radius_graph = nx.DiGraph()
-    visited = set()
-    
-    def build_blast_radius(node_id: str, depth: int = 0, max_depth: int = 5):
-        if depth >= max_depth or node_id in visited:
-            return
+    # Find the symbol
+    target_symbol = None
+    for file in codebase.files:
+        # Check functions
+        for func in file.functions:
+            if func.name == symbol_name:
+                target_symbol = func
+                break
         
-        visited.add(node_id)
-        node = explorer.nodes.get(node_id)
-        if not node:
-            return
-        
-        blast_radius_graph.add_node(node_id, **node.to_dict())
-        
-        # Find all nodes that use this symbol
-        for edge in explorer.edges:
-            if edge.source == node_id and edge.relationship in ["affects", "calls"]:
-                blast_radius_graph.add_edge(edge.source, edge.target, **edge.to_dict())
-                build_blast_radius(edge.target, depth + 1)
+        # Check classes
+        if not target_symbol:
+            for cls in file.classes:
+                if cls.name == symbol_name:
+                    target_symbol = cls
+                    break
+                
+                # Check methods
+                if hasattr(cls, "methods"):
+                    for method in cls.methods:
+                        if method.name == symbol_name or f"{cls.name}.{method.name}" == symbol_name:
+                            target_symbol = method
+                            break
     
-    build_blast_radius(target_node.id)
+    if not target_symbol:
+        return {
+            "error": f"Symbol '{symbol_name}' not found in the codebase",
+        }
     
-    return {
-        "target_symbol": {
-            "name": target_node.name,
-            "type": target_node.type,
-            "path": target_node.path,
-            "issues": target_node.issues
-        },
-        "blast_radius": {
-            "affected_nodes": len(blast_radius_graph.nodes),
-            "affected_edges": len(blast_radius_graph.edges),
-            "max_depth": max([
-                nx.shortest_path_length(blast_radius_graph, target_node.id, node)
-                for node in blast_radius_graph.nodes
-                if node != target_node.id and nx.has_path(blast_radius_graph, target_node.id, node)
-            ]) if len(blast_radius_graph.nodes) > 1 else 0
-        },
-        "visual_graph": {
-            "nodes": [
-                {**explorer.nodes[node_id].to_dict(), "distance": nx.shortest_path_length(blast_radius_graph, target_node.id, node_id) if nx.has_path(blast_radius_graph, target_node.id, node_id) else 0}
-                for node_id in blast_radius_graph.nodes
-            ],
-            "edges": [
-                {**edge.to_dict()}
-                for edge in explorer.edges
-                if edge.source in blast_radius_graph.nodes and edge.target in blast_radius_graph.nodes
-            ]
+    # Get symbol info
+    symbol_info = {
+        "name": target_symbol.name,
+        "type": target_symbol.__class__.__name__,
+        "file": getattr(target_symbol, "file", None).filepath if hasattr(target_symbol, "file") else None,
+    }
+    
+    # Find affected symbols
+    affected_symbols = find_affected_symbols(codebase, target_symbol)
+    
+    # Create nodes and edges
+    nodes = []
+    edges = []
+    
+    # Add target symbol node
+    target_node = {
+        "id": f"{symbol_info['file']}:{symbol_info['name']}",
+        "label": symbol_info["name"],
+        "type": symbol_info["type"].lower(),
+        "size": 30,
+        "color": "#ef4444",  # Red
+        "metadata": {
+            "file": symbol_info["file"],
+            "type": symbol_info["type"],
         }
     }
+    nodes.append(target_node)
+    
+    # Add affected symbol nodes
+    for symbol in affected_symbols:
+        symbol_type = symbol["type"].lower()
+        
+        # Determine color based on type
+        color = "#3b82f6"  # Blue (default)
+        if symbol_type == "function":
+            color = "#22c55e"  # Green
+        elif symbol_type == "class":
+            color = "#8b5cf6"  # Purple
+        elif symbol_type == "method":
+            color = "#ec4899"  # Pink
+        
+        node = {
+            "id": f"{symbol['file']}:{symbol['name']}",
+            "label": symbol["name"],
+            "type": symbol_type,
+            "size": 20,
+            "color": color,
+            "metadata": {
+                "file": symbol["file"],
+                "type": symbol["type"],
+                "distance": symbol["distance"],
+            }
+        }
+        nodes.append(node)
+        
+        # Add edge
+        if symbol["caller"]:
+            edges.append({
+                "source": f"{symbol['caller']['file']}:{symbol['caller']['name']}",
+                "target": f"{symbol['file']}:{symbol['name']}",
+                "type": "calls",
+                "color": "#64748b",  # Gray
+            })
+        else:
+            # Direct dependency on target
+            edges.append({
+                "source": f"{symbol_info['file']}:{symbol_info['name']}",
+                "target": f"{symbol['file']}:{symbol['name']}",
+                "type": "affects",
+                "color": "#ef4444",  # Red
+            })
+    
+    return {
+        "symbol": symbol_info,
+        "blast_radius": {
+            "affected_symbols": affected_symbols,
+            "affected_files": list(set(symbol["file"] for symbol in affected_symbols)),
+            "affected_nodes": len(affected_symbols),
+        },
+        "nodes": nodes,
+        "edges": edges,
+        "summary": {
+            "total_nodes": len(nodes),
+            "total_edges": len(edges),
+            "total_issues": 0,
+        }
+    }
+
+
+def find_affected_symbols(codebase: Codebase, target_symbol: Symbol) -> List[Dict[str, Any]]:
+    """
+    Find symbols affected by a target symbol.
+    
+    Args:
+        codebase: Codebase object
+        target_symbol: Target symbol
+        
+    Returns:
+        List of affected symbols
+    """
+    affected_symbols = []
+    visited = set()
+    
+    def traverse_callers(symbol, distance=1, caller=None):
+        # Get symbol ID
+        symbol_id = f"{symbol.file.filepath}:{symbol.name}" if hasattr(symbol, "file") else f"{symbol.name}"
+        
+        # Skip if already visited
+        if symbol_id in visited:
+            return
+        
+        visited.add(symbol_id)
+        
+        # Add to affected symbols
+        affected_symbols.append({
+            "name": symbol.name,
+            "type": symbol.__class__.__name__,
+            "file": symbol.file.filepath if hasattr(symbol, "file") else None,
+            "distance": distance,
+            "caller": caller,
+        })
+        
+        # Find callers
+        for file in codebase.files:
+            for func in file.functions:
+                if hasattr(func, "calls"):
+                    for call in func.calls:
+                        if hasattr(call, "resolved_symbol") and call.resolved_symbol == symbol:
+                            # Found a caller
+                            caller_info = {
+                                "name": func.name,
+                                "type": func.__class__.__name__,
+                                "file": file.filepath,
+                            }
+                            
+                            # Recursively traverse callers
+                            traverse_callers(func, distance + 1, caller_info)
+    
+    # Start traversal from target symbol
+    traverse_callers(target_symbol)
+    
+    return affected_symbols
