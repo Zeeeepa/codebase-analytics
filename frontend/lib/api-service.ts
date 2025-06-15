@@ -26,8 +26,8 @@ const getBackendUrl = () => {
     return 'http://localhost:8000';
   }
   
-  // Fallback to Modal deployment for production
-  return 'https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run';
+  // Fallback to production URL
+  return 'https://codebase-analytics-api.zeeeepa.com';
 };
 
 // Parse repo URL to get owner/repo format

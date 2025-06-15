@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from 'react';
 import { useDashboard } from '@/components/dashboard-context';
 import { 
   BarChart3, 
@@ -32,6 +33,8 @@ export function MetricsView() {
   function calculateCodebaseGrade(data: any) {
     const { maintainabilityIndex } = data;
     
+    if (!maintainabilityIndex || isNaN(maintainabilityIndex)) return 'N/A';
+    
     if (maintainabilityIndex >= 90) return 'A+';
     if (maintainabilityIndex >= 85) return 'A';
     if (maintainabilityIndex >= 80) return 'A-';
@@ -54,6 +57,11 @@ export function MetricsView() {
     );
   }
 
+  // Ensure commitData is valid for the chart
+  const validCommitData = Array.isArray(commitData) && commitData.length > 0 
+    ? commitData 
+    : [{ month: 'No Data', commits: 0 }];
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -63,20 +71,20 @@ export function MetricsView() {
             <GitBranch className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.name}</div>
-            <p className="text-xs text-muted-foreground mt-1">{repoData.description}</p>
+            <div className="text-2xl font-bold">{repoData.name || 'Unknown Repository'}</div>
+            <p className="text-xs text-muted-foreground mt-1">{repoData.description || 'No description available'}</p>
             <div className="grid grid-cols-3 gap-4 mt-4">
               <div className="flex items-center">
                 <FileCode2 className="h-4 w-4 text-muted-foreground mr-2" />
-                <span className="text-sm font-medium">{repoData.numberOfFiles.toLocaleString()} Files</span>
+                <span className="text-sm font-medium">{(repoData.numberOfFiles || 0).toLocaleString()} Files</span>
               </div>
               <div className="flex items-center">
                 <Code className="h-4 w-4 text-muted-foreground mr-2" />
-                <span className="text-sm font-medium">{repoData.numberOfFunctions.toLocaleString()} Functions</span>
+                <span className="text-sm font-medium">{(repoData.numberOfFunctions || 0).toLocaleString()} Functions</span>
               </div>
               <div className="flex items-center">
                 <BarChart3 className="h-4 w-4 text-muted-foreground mr-2" />
-                <span className="text-sm font-medium">{repoData.numberOfClasses.toLocaleString()} Classes</span>
+                <span className="text-sm font-medium">{(repoData.numberOfClasses || 0).toLocaleString()} Classes</span>
               </div>
             </div>
           </CardContent>
@@ -89,7 +97,7 @@ export function MetricsView() {
             <Settings className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.maintainabilityIndex}</div>
+            <div className="text-2xl font-bold">{repoData.maintainabilityIndex?.toFixed(1) || 'N/A'}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {hoveredCard === 'Maintainability Index' ? 'This evaluates how easy it is to understand, modify, and maintain a codebase (ranging from 0 to 100).' : 'Code maintainability score (0-100)'}
             </p>
@@ -101,7 +109,7 @@ export function MetricsView() {
             <RefreshCcw className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.cyclomaticComplexity.toFixed(1)}</div>
+            <div className="text-2xl font-bold">{repoData.cyclomaticComplexity?.toFixed(1) || 'N/A'}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {hoveredCard === 'Cyclomatic Complexity' ? 'This measures the number of independent paths through a program\'s source code' : 'Average complexity score'}
             </p>
@@ -113,7 +121,7 @@ export function MetricsView() {
             <PaintBucket className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.halsteadVolume.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{(repoData.halsteadVolume || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {hoveredCard === 'Halstead Volume' ? 'This quantifies the amount of information in a program by measuring the size and complexity of its code using operators and operands.' : 'Code volume metric'}
             </p>
@@ -125,7 +133,7 @@ export function MetricsView() {
             <GitBranch className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.depthOfInheritance.toFixed(1)}</div>
+            <div className="text-2xl font-bold">{repoData.depthOfInheritance?.toFixed(1) || 'N/A'}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {hoveredCard === 'Depth of Inheritance' ? 'This is the average measure of the number of classes that a class inherits from.' : 'Average inheritance depth'}
             </p>
@@ -137,7 +145,7 @@ export function MetricsView() {
             <Code2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.linesOfCode.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{(repoData.linesOfCode || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {hoveredCard === 'Lines of Code' ? 'This is the total number of lines of code within this codebase.' : 'Total lines in the repository'}
             </p>
@@ -149,7 +157,7 @@ export function MetricsView() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.sloc.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{(repoData.sloc || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {hoveredCard === 'SLOC' ? 'This is the number of textual lines of code within the codebase, ignoring whitespace and comments.' : 'Source Lines of Code'}
             </p>
@@ -161,7 +169,7 @@ export function MetricsView() {
             <Brain className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.lloc.toLocaleString()}</div>
+            <div className="text-2xl font-bold">{(repoData.lloc || 0).toLocaleString()}</div>
             <p className="text-xs text-muted-foreground mt-1">
               {hoveredCard === 'LLOC' ? 'This is the number of lines of code that contribute to executable statements in the codebase.' : 'Logical Lines of Code'}
             </p>
@@ -173,7 +181,7 @@ export function MetricsView() {
             <MessageSquare className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{repoData.commentDensity.toFixed(1)}%</div>
+            <div className="text-2xl font-bold">{(repoData.commentDensity || 0).toFixed(1)}%</div>
             <p className="text-xs text-muted-foreground mt-1">
               {hoveredCard === 'Comment Density' ? 'This is the percentage of the lines in the codebase that are comments.' : 'Percentage of comments in code'}
             </p>
@@ -187,7 +195,7 @@ export function MetricsView() {
         </CardHeader>
         <CardContent className="pt-4">
           <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={commitData}>
+          <BarChart data={validCommitData}>
               <XAxis dataKey="month" stroke="#888888" />
               <YAxis stroke="#888888" />
               <Bar dataKey="commits" fill="#2563eb" />
@@ -214,7 +222,7 @@ export function MetricsView() {
               <CardDescription>Judgment based on size and complexity</CardDescription>
             </div>
             <div className="text-2xl font-bold text-right">
-            {repoData.numberOfFiles > 1000 ? "Large" : "Moderate"}
+            {(repoData.numberOfFiles || 0) > 1000 ? "Large" : (repoData.numberOfFiles || 0) > 100 ? "Moderate" : "Small"}
             </div>
           </CardContent>
         </Card>
@@ -222,6 +230,4 @@ export function MetricsView() {
     </div>
   );
 }
-
-import { useState } from 'react';
 

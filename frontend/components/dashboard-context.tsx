@@ -132,7 +132,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     // Collect issues from error hotspots
     if (explorationData.error_hotspots) {
       explorationData.error_hotspots.forEach(hotspot => {
-        if (hotspot.issues && hotspot.issues.length > 0) {
+        if (hotspot.issues && Array.isArray(hotspot.issues) && hotspot.issues.length > 0) {
           allIssues.push(...hotspot.issues);
         }
       });
@@ -145,12 +145,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const nodes: VisualNode[] = [];
     
     // Collect nodes from exploration data
-    if (explorationData?.error_hotspots) {
+    if (explorationData?.error_hotspots && Array.isArray(explorationData.error_hotspots)) {
       nodes.push(...explorationData.error_hotspots);
     }
     
     // Collect nodes from blast radius data
-    if (blastRadiusData?.affected_nodes) {
+    if (blastRadiusData?.affected_nodes && Array.isArray(blastRadiusData.affected_nodes)) {
       // Avoid duplicates by checking if node already exists
       blastRadiusData.affected_nodes.forEach(node => {
         if (!nodes.some(n => n.id === node.id)) {
@@ -353,4 +353,3 @@ export function useDashboard() {
   }
   return context;
 }
-

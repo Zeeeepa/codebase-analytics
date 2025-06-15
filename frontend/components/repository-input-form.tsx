@@ -33,23 +33,27 @@ export function RepositoryInputForm() {
     try {
       const data = await apiService.analyzeRepo(repoUrl);
       
+      if (!data) {
+        throw new Error('No data returned from API');
+      }
+      
       setRepoData({
         name: repoUrl,
-        description: data.description,
-        linesOfCode: data.line_metrics.total.loc,
-        cyclomaticComplexity: data.cyclomatic_complexity.average,
-        depthOfInheritance: data.depth_of_inheritance.average,
-        halsteadVolume: data.halstead_metrics.total_volume,
-        maintainabilityIndex: data.maintainability_index.average,
-        commentDensity: data.line_metrics.total.comment_density,
-        sloc: data.line_metrics.total.sloc,
-        lloc: data.line_metrics.total.lloc,
-        numberOfFiles: data.num_files,
-        numberOfFunctions: data.num_functions,
-        numberOfClasses: data.num_classes,
+        description: data.description || 'No description available',
+        linesOfCode: data.line_metrics?.total?.loc || 0,
+        cyclomaticComplexity: data.cyclomatic_complexity?.average || 0,
+        depthOfInheritance: data.depth_of_inheritance?.average || 0,
+        halsteadVolume: data.halstead_metrics?.total_volume || 0,
+        maintainabilityIndex: data.maintainability_index?.average || 0,
+        commentDensity: data.line_metrics?.total?.comment_density || 0,
+        sloc: data.line_metrics?.total?.sloc || 0,
+        lloc: data.line_metrics?.total?.lloc || 0,
+        numberOfFiles: data.num_files || 0,
+        numberOfFunctions: data.num_functions || 0,
+        numberOfClasses: data.num_classes || 0,
       });
 
-      const transformedCommitData = Object.entries(data.monthly_commits)
+      const transformedCommitData = Object.entries(data.monthly_commits || {})
         .map(([date, commits]) => ({
           month: new Date(date).toLocaleString('default', { month: 'long' }),
           commits: commits as number,
@@ -61,7 +65,11 @@ export function RepositoryInputForm() {
       setActiveView('metrics');
     } catch (error) {
       console.error('Error fetching repo data:', error);
-      setError('Error fetching repository data. Please check the URL and try again.');
+      setError('Error fetching repository data. Please check the URL and try again. If the problem persists, the analytics server might be unavailable.');
+      
+      // Set empty data to prevent UI errors
+      setRepoData(null);
+      setCommitData([]);
     } finally {
       setIsLoading(false);
     }
