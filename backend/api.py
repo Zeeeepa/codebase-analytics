@@ -531,10 +531,14 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
         most_called = None
         max_call_count = 0
         for func in codebase.functions:
-            call_count = len(func.usages) if hasattr(func, 'usages') else 0
-            if call_count > max_call_count:
-                max_call_count = call_count
-                most_called = func
+            try:
+                call_count = len(func.usages) if hasattr(func, 'usages') and func.usages else 0
+                if call_count > max_call_count:
+                    max_call_count = call_count
+                    most_called = func
+            except Exception as e:
+                print(f"Error processing function {getattr(func, 'name', 'unknown')}: {e}")
+                continue
         
         most_called_detail = None
         if most_called:
@@ -550,10 +554,14 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
         most_calling = None
         max_calls_made = 0
         for func in codebase.functions:
-            calls_made = len(func.function_calls)
-            if calls_made > max_calls_made:
-                max_calls_made = calls_made
-                most_calling = func
+            try:
+                calls_made = len(func.function_calls) if hasattr(func, 'function_calls') and func.function_calls else 0
+                if calls_made > max_calls_made:
+                    max_calls_made = calls_made
+                    most_calling = func
+            except Exception as e:
+                print(f"Error processing function calls for {getattr(func, 'name', 'unknown')}: {e}")
+                continue
         
         most_calling_detail = None
         if most_calling:
@@ -568,11 +576,15 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
         # Find dead functions (functions with no callers)
         dead_functions = []
         for func in codebase.functions:
-            call_count = len(func.usages) if hasattr(func, 'usages') else 0
-            if call_count == 0:
-                dead_functions.append(func.name)
-                if len(dead_functions) >= 10:  # Limit to first 10
-                    break
+            try:
+                call_count = len(func.usages) if hasattr(func, 'usages') and func.usages else 0
+                if call_count == 0:
+                    dead_functions.append(func.name)
+                    if len(dead_functions) >= 10:  # Limit to first 10
+                        break
+            except Exception as e:
+                print(f"Error checking dead function {getattr(func, 'name', 'unknown')}: {e}")
+                continue
         
         # Sample functions (first 5)
         sample_functions = []
