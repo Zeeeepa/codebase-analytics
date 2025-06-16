@@ -128,6 +128,17 @@ class FileNode(BaseModel):
     symbols: Optional[List[Symbol]] = None
     children: Optional[Dict[str, 'FileNode']] = None
 
+class InheritanceAnalysis(BaseModel):
+    """Analysis of class inheritance patterns."""
+    deepest_class_name: Optional[str] = None
+    deepest_class_depth: int = 0
+    inheritance_chain: List[str] = []
+
+class RecursionAnalysis(BaseModel):
+    """Analysis of recursive functions."""
+    recursive_functions: List[str] = []
+    total_recursive_count: int = 0
+
 class AnalysisResponse(BaseModel):
     # Basic stats
     repo_url: str
@@ -147,6 +158,10 @@ class AnalysisResponse(BaseModel):
     
     # Git metrics
     monthly_commits: Dict[str, int]
+    
+    # New analysis features
+    inheritance_analysis: InheritanceAnalysis
+    recursion_analysis: RecursionAnalysis
     
     # Repository structure with symbols
     repo_structure: FileNode
@@ -433,6 +448,47 @@ def get_github_repo_description(repo_url):
     except Exception as e:
         print(f"Error fetching repo description: {e}")
         return "No description available"
+
+def analyze_inheritance_patterns(codebase) -> InheritanceAnalysis:
+    """Analyze class inheritance patterns to find the deepest inheritance chain."""
+    if not codebase.classes:
+        return InheritanceAnalysis()
+    
+    try:
+        # Find class with most inheritance
+        deepest_class = max(codebase.classes, key=lambda x: len(x.superclasses))
+        
+        return InheritanceAnalysis(
+            deepest_class_name=deepest_class.name,
+            deepest_class_depth=len(deepest_class.superclasses),
+            inheritance_chain=[s.name for s in deepest_class.superclasses]
+        )
+    except Exception as e:
+        print(f"Error analyzing inheritance patterns: {e}")
+        return InheritanceAnalysis()
+
+def analyze_recursive_functions(codebase) -> RecursionAnalysis:
+    """Analyze functions to identify recursive patterns."""
+    if not codebase.functions:
+        return RecursionAnalysis()
+    
+    try:
+        # Find recursive functions (functions that call themselves)
+        recursive_functions = []
+        for func in codebase.functions:
+            # Check if function calls itself directly
+            if any(call.name == func.name for call in func.function_calls):
+                recursive_functions.append(func.name)
+                if len(recursive_functions) >= 5:  # Limit to first 5
+                    break
+        
+        return RecursionAnalysis(
+            recursive_functions=recursive_functions,
+            total_recursive_count=len(recursive_functions)
+        )
+    except Exception as e:
+        print(f"Error analyzing recursive functions: {e}")
+        return RecursionAnalysis()
 
 def find_dead_code(codebase) -> List:
     """Find functions that are never called."""
@@ -1109,6 +1165,10 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
 
     desc = get_github_repo_description(repo_url)
 
+    # Perform new analysis features
+    inheritance_analysis = analyze_inheritance_patterns(codebase)
+    recursion_analysis = analyze_recursive_functions(codebase)
+
     return AnalysisResponse(
         repo_url=repo_url,
         description=desc,
@@ -1142,6 +1202,8 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
             "average": int(total_mi / num_callables) if num_callables > 0 else 0,
         },
         monthly_commits=monthly_commits,
+        inheritance_analysis=inheritance_analysis,
+        recursion_analysis=recursion_analysis,
         repo_structure=repo_structure
     )
 
