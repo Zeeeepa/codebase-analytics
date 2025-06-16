@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain } from "lucide-react"
+import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, TreePine, RotateCcw } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
@@ -39,6 +39,17 @@ const mockCommitData = [
   { month: "November", commits: 220 },
 ];
 
+interface InheritanceAnalysis {
+  deepest_class_name: string | null;
+  deepest_class_depth: number;
+  inheritance_chain: string[];
+}
+
+interface RecursionAnalysis {
+  recursive_functions: string[];
+  total_recursive_count: number;
+}
+
 interface RepoAnalyticsResponse {
   repo_url: string;
   line_metrics: {
@@ -62,6 +73,8 @@ interface RepoAnalyticsResponse {
   num_functions: number;
   num_classes: number;
   monthly_commits: Record<string, number>;
+  inheritance_analysis: InheritanceAnalysis;
+  recursion_analysis: RecursionAnalysis;
 }
 
 interface RepoData {
@@ -78,6 +91,8 @@ interface RepoData {
   numberOfFiles: number;
   numberOfFunctions: number;
   numberOfClasses: number;
+  inheritance_analysis?: InheritanceAnalysis;
+  recursion_analysis?: RecursionAnalysis;
 }
 
 export default function RepoAnalyticsDashboard() {
@@ -159,6 +174,8 @@ export default function RepoAnalyticsDashboard() {
         numberOfFiles: data.num_files,
         numberOfFunctions: data.num_functions,
         numberOfClasses: data.num_classes,
+        inheritance_analysis: data.inheritance_analysis,
+        recursion_analysis: data.recursion_analysis,
       });
 
       const transformedCommitData = Object.entries(data.monthly_commits)
@@ -411,6 +428,51 @@ function calculateCodebaseGrade(data: RepoData) {
                 </CardContent>
               </Card>
             </div>
+            
+            {/* New Analysis Features */}
+            <div className="grid gap-6 md:grid-cols-2 mt-6">
+              <Card onMouseEnter={() => handleMouseEnter('Deepest Inheritance')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Deepest Inheritance</CardTitle>
+                  <TreePine className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  {repoData.inheritance_analysis?.deepest_class_name ? (
+                    <>
+                      <div className="text-2xl font-bold">{repoData.inheritance_analysis.deepest_class_name}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {hoveredCard === 'Deepest Inheritance' 
+                          ? `Inheritance chain: ${repoData.inheritance_analysis.inheritance_chain.join(' → ')}` 
+                          : `Depth: ${repoData.inheritance_analysis.deepest_class_depth} levels`}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold text-muted-foreground">None</div>
+                      <p className="text-xs text-muted-foreground mt-1">No class inheritance found</p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card onMouseEnter={() => handleMouseEnter('Recursive Functions')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Recursive Functions</CardTitle>
+                  <RotateCcw className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{repoData.recursion_analysis?.total_recursive_count || 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {hoveredCard === 'Recursive Functions' 
+                      ? (repoData.recursion_analysis?.recursive_functions?.length > 0 
+                          ? `Functions: ${repoData.recursion_analysis.recursive_functions.join(', ')}` 
+                          : 'No recursive functions found')
+                      : 'Functions that call themselves'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+            
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle>Monthly Commits</CardTitle>
