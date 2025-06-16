@@ -546,11 +546,11 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
                 print(f"DEBUG: File attributes: {dir(first_file)}")
                 if hasattr(first_file, 'imports'):
                     print(f"DEBUG: File imports: {len(first_file.imports) if first_file.imports else 0}")
-        # Find most called function
+        # Find most called function (function with most usages)
         most_called = None
         max_call_count = 0
         for func in codebase.functions:
-            call_count = len(func.call_sites) if hasattr(func, 'call_sites') else 0
+            call_count = len(func.usages) if hasattr(func, 'usages') else 0
             if call_count > max_call_count:
                 max_call_count = call_count
                 most_called = func
@@ -580,14 +580,14 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
                 name=most_calling.name,
                 parameters=[p.name for p in most_calling.parameters] if hasattr(most_calling, 'parameters') else [],
                 return_type=getattr(most_calling, 'return_type', None),
-                call_count=len(most_calling.call_sites) if hasattr(most_calling, 'call_sites') else 0,
+                call_count=len(most_calling.usages) if hasattr(most_calling, 'usages') else 0,
                 calls_made=max_calls_made
             )
         
         # Find dead functions (functions with no callers)
         dead_functions = []
         for func in codebase.functions:
-            call_count = len(func.call_sites) if hasattr(func, 'call_sites') else 0
+            call_count = len(func.usages) if hasattr(func, 'usages') else 0
             if call_count == 0:
                 dead_functions.append(func.name)
                 if len(dead_functions) >= 10:  # Limit to first 10
@@ -600,7 +600,7 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
                 name=func.name,
                 parameters=[p.name for p in func.parameters] if hasattr(func, 'parameters') else [],
                 return_type=getattr(func, 'return_type', None),
-                call_count=len(func.call_sites) if hasattr(func, 'call_sites') else 0,
+                call_count=len(func.usages) if hasattr(func, 'usages') else 0,
                 calls_made=len(func.function_calls)
             ))
         
@@ -619,9 +619,19 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
         for file in codebase.files[:5]:  # Check first 5 files for imports
             if hasattr(file, 'imports') and file.imports:
                 for imp in file.imports[:2]:  # Max 2 imports per file
+                    # Try to get module name and imported symbols
+                    module_name = getattr(imp, 'module', 'unknown')
+                    if hasattr(imp, 'imported_symbol') and imp.imported_symbol:
+                        if hasattr(imp.imported_symbol, 'name'):
+                            imported_symbols = [imp.imported_symbol.name]
+                        else:
+                            imported_symbols = [str(imp.imported_symbol)]
+                    else:
+                        imported_symbols = [getattr(imp, 'source', str(imp))]
+                    
                     sample_imports.append(ImportDetail(
-                        module=getattr(imp, 'module', 'unknown'),
-                        imported_symbols=[s.name for s in imp.imported_symbol] if hasattr(imp, 'imported_symbol') else []
+                        module=module_name,
+                        imported_symbols=imported_symbols
                     ))
                     if len(sample_imports) >= 5:
                         break
