@@ -14,7 +14,7 @@ import {
   FaYarn,
   FaMarkdown,
   FaDatabase,
-  FaGears,
+  FaCog,
   FaFileCode,
   FaFileAlt
 } from 'react-icons/fa';
@@ -87,7 +87,7 @@ const getFileIcon = (fileType: string) => {
     case 'sql':
       return <FaDatabase className="text-green-500" />;
     case 'config':
-      return <FaGears className="text-gray-500" />;
+      return <FaCog className="text-gray-500" />;
     case 'text':
       return <FaFileAlt className="text-gray-400" />;
     default:
@@ -336,4 +336,3 @@ export const RepoStructure: React.FC<RepoStructureProps> = ({
 };
 
 export default RepoStructure;
-
