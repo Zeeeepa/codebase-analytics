@@ -422,13 +422,17 @@ def get_maintainability_rank(mi_score: float) -> str:
 def get_github_repo_description(repo_url):
     api_url = f"https://api.github.com/repos/{repo_url}"
 
-    response = requests.get(api_url)
-
-    if response.status_code == 200:
-        repo_data = response.json()
-        return repo_data.get("description", "No description available")
-    else:
-        return ""
+    try:
+        response = requests.get(api_url)
+        if response.status_code == 200:
+            repo_data = response.json()
+            description = repo_data.get("description")
+            return description if description else "No description available"
+        else:
+            return "No description available"
+    except Exception as e:
+        print(f"Error fetching repo description: {e}")
+        return "No description available"
 
 def find_dead_code(codebase) -> List:
     """Find functions that are never called."""
@@ -972,7 +976,28 @@ async def get_function_call_chain(function_id: str) -> List[str]:
 async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
     """Single entry point for repository analysis."""
     repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
+    
+    # Validate repo URL format
+    if not repo_url or '/' not in repo_url:
+        raise HTTPException(status_code=400, detail="Repository URL must be in format 'owner/repo'")
+    
+    # Remove any GitHub URL prefix if present
+    if repo_url.startswith('https://github.com/'):
+        repo_url = repo_url.replace('https://github.com/', '')
+    if repo_url.endswith('.git'):
+        repo_url = repo_url[:-4]
+    
+    # Ensure it's in owner/repo format
+    parts = repo_url.split('/')
+    if len(parts) < 2:
+        raise HTTPException(status_code=400, detail="Repository URL must be in format 'owner/repo'")
+    
+    repo_url = f"{parts[0]}/{parts[1]}"  # Take only owner/repo part
+    
+    try:
+        codebase = Codebase.from_repo(repo_url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
 
     # Original analysis
     num_files = len(codebase.files(extensions="*"))
