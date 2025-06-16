@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any, Optional, Union
 from codegen import Codebase
 from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
 from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
@@ -29,6 +29,11 @@ from codegen.sdk.core.function import Function
 from codegen.sdk.core.import_resolution import Import
 from codegen.sdk.core.symbol import Symbol
 from codegen.sdk.enums import EdgeType, SymbolType
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 image = (
     modal.Image.debian_slim()
@@ -110,6 +115,7 @@ class ExtendedAnalysis(BaseModel):
 
 class RepoRequest(BaseModel):
     repo_url: str
+    comprehensive: bool = False  # New parameter to enable comprehensive analysis
 
 class Symbol(BaseModel):
     id: str
@@ -127,6 +133,14 @@ class FileNode(BaseModel):
     issues: Optional[Dict[str, int]] = None
     symbols: Optional[List[Symbol]] = None
     children: Optional[Dict[str, 'FileNode']] = None
+
+class ComprehensiveAnalysisResult(BaseModel):
+    """Additional results from comprehensive analysis"""
+    dead_code: Dict[str, List[Dict[str, Any]]] = {}
+    parameter_issues: Dict[str, List[Dict[str, Any]]] = {}
+    type_annotation_issues: Dict[str, List[Dict[str, Any]]] = {}
+    circular_dependencies: List[List[str]] = []
+    implementation_issues: Dict[str, List[Dict[str, Any]]] = {}
 
 class AnalysisResponse(BaseModel):
     # Basic stats
@@ -150,6 +164,179 @@ class AnalysisResponse(BaseModel):
     
     # Repository structure with symbols
     repo_structure: FileNode
+    
+    # Comprehensive analysis results (optional)
+    comprehensive_results: Optional[ComprehensiveAnalysisResult] = None
+
+# ... existing code ...
+
+def _analyze_dead_code(codebase):
+    """Analyze the codebase for dead code (unused functions, classes, imports)."""
+    results = {}
+    
+    # Check for unused functions
+    unused_functions = []
+    for func in codebase.functions:
+        if not any(func.name in str(usage) for usage in func.usages):
+            unused_functions.append({
+                "name": func.name,
+                "filepath": func.filepath,
+                "line": func.start_point[0] if hasattr(func, "start_point") else 0
+            })
+    
+    if unused_functions:
+        results["unused_functions"] = unused_functions
+    
+    # Check for unused classes
+    unused_classes = []
+    for cls in codebase.classes:
+        if not any(cls.name in str(usage) for usage in cls.usages):
+            unused_classes.append({
+                "name": cls.name,
+                "filepath": cls.filepath,
+                "line": cls.start_point[0] if hasattr(cls, "start_point") else 0
+            })
+    
+    if unused_classes:
+        results["unused_classes"] = unused_classes
+    
+    # Check for unused imports
+    unused_imports = []
+    for file in codebase.files:
+        if hasattr(file, "imports"):
+            for imp in file.imports:
+                if not any(imp.name in str(usage) for usage in imp.usages):
+                    unused_imports.append({
+                        "name": imp.name,
+                        "filepath": file.filepath,
+                        "line": imp.start_point[0] if hasattr(imp, "start_point") else 0
+                    })
+    
+    if unused_imports:
+        results["unused_imports"] = unused_imports
+    
+    return results
+
+def _analyze_parameter_issues(codebase):
+    """Analyze the codebase for parameter issues (unused, mismatches)."""
+    results = {}
+    
+    # Check for unused parameters
+    unused_parameters = []
+    for func in codebase.functions:
+        if hasattr(func, "parameters"):
+            for param in func.parameters:
+                if not any(param.name in str(usage) for usage in func.usages):
+                    unused_parameters.append({
+                        "function": func.name,
+                        "parameter": param.name,
+                        "filepath": func.filepath,
+                        "line": func.start_point[0] if hasattr(func, "start_point") else 0
+                    })
+    
+    if unused_parameters:
+        results["unused_parameters"] = unused_parameters
+    
+    # Check for parameter type mismatches
+    type_mismatches = []
+    for func in codebase.functions:
+        if hasattr(func, "call_sites") and hasattr(func, "parameters"):
+            for call in func.call_sites:
+                if hasattr(call, "arguments") and len(call.arguments) != len(func.parameters):
+                    type_mismatches.append({
+                        "function": func.name,
+                        "expected": len(func.parameters),
+                        "received": len(call.arguments),
+                        "filepath": call.filepath,
+                        "line": call.start_point[0] if hasattr(call, "start_point") else 0
+                    })
+    
+    if type_mismatches:
+        results["parameter_mismatches"] = type_mismatches
+    
+    return results
+
+def _analyze_type_annotations(codebase):
+    """Analyze the codebase for type annotation issues."""
+    results = {}
+    
+    # Check for missing type annotations
+    missing_annotations = []
+    for func in codebase.functions:
+        if hasattr(func, "parameters"):
+            for param in func.parameters:
+                if not hasattr(param, "type") or not param.type:
+                    missing_annotations.append({
+                        "function": func.name,
+                        "parameter": param.name,
+                        "filepath": func.filepath,
+                        "line": func.start_point[0] if hasattr(func, "start_point") else 0
+                    })
+    
+    if missing_annotations:
+        results["missing_annotations"] = missing_annotations
+    
+    return results
+
+def _analyze_circular_dependencies(codebase):
+    """Analyze the codebase for circular dependencies."""
+    # Build dependency graph
+    G = nx.DiGraph()
+    
+    # Add nodes for all files
+    for file in codebase.files:
+        G.add_node(file.filepath)
+    
+    # Add edges for imports
+    for file in codebase.files:
+        if hasattr(file, "imports"):
+            for imp in file.imports:
+                if hasattr(imp, "resolved_filepath") and imp.resolved_filepath:
+                    G.add_edge(file.filepath, imp.resolved_filepath)
+    
+    # Find cycles
+    try:
+        cycles = list(nx.simple_cycles(G))
+        return cycles
+    except nx.NetworkXNoCycle:
+        return []
+
+def _analyze_implementation_issues(codebase):
+    """Analyze the codebase for implementation issues."""
+    results = {}
+    
+    # Check for TODO/FIXME comments
+    todos = []
+    for file in codebase.files:
+        if hasattr(file, "source"):
+            lines = file.source.splitlines()
+            for i, line in enumerate(lines):
+                if "TODO" in line or "FIXME" in line:
+                    todos.append({
+                        "filepath": file.filepath,
+                        "line": i + 1,
+                        "content": line.strip()
+                    })
+    
+    if todos:
+        results["todos"] = todos
+    
+    # Check for potential null references
+    null_refs = []
+    for func in codebase.functions:
+        if hasattr(func, "code_block") and hasattr(func.code_block, "source"):
+            code = func.code_block.source
+            if "None" in code and not any(s in code for s in ["is None", "== None", "!= None"]):
+                null_refs.append({
+                    "function": func.name,
+                    "filepath": func.filepath,
+                    "line": func.start_point[0] if hasattr(func, "start_point") else 0
+                })
+    
+    if null_refs:
+        results["null_references"] = null_refs
+    
+    return results
 
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
     """
@@ -972,153 +1159,176 @@ async def get_function_call_chain(function_id: str) -> List[str]:
 async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
     """Single entry point for repository analysis."""
     repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
-
-    # Original analysis
-    num_files = len(codebase.files(extensions="*"))
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
-
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
-
-    monthly_commits = get_monthly_commits(repo_url)
-
-    # Analyze files and collect symbols
-    file_issues = {}
-    file_symbols = {}
+    comprehensive = request.comprehensive
     
-    for file in codebase.files:
-        # Line metrics
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-        # Analyze issues
-        issues = analyze_file_issues(file)
-        if any(len(v) > 0 for v in issues.values()):
-            file_issues[file.filepath] = issues
-
-        # Collect symbols
-        symbols = []
+    logger.info(f"Analyzing repository: {repo_url} (comprehensive={comprehensive})")
+    
+    try:
+        codebase = Codebase.from_repo(repo_url)
         
-        # Add functions as symbols
-        for func in file.functions:
-            issues = []
+        # Original analysis
+        num_files = len(codebase.files(extensions="*"))
+        num_functions = len(codebase.functions)
+        num_classes = len(codebase.classes)
+        
+        total_loc = total_lloc = total_sloc = total_comments = 0
+        total_complexity = 0
+        total_volume = 0
+        total_mi = 0
+        total_doi = 0
+        
+        monthly_commits = get_monthly_commits(repo_url)
+        
+        # Analyze files and collect symbols
+        file_issues = {}
+        file_symbols = {}
+        
+        for file in codebase.files:
+            # Line metrics
+            loc, lloc, sloc, comments = count_lines(file.source)
+            total_loc += loc
+            total_lloc += lloc
+            total_sloc += sloc
+            total_comments += comments
             
-            # Check for issues
-            if not any(func.name in str(usage) for usage in func.usages):
-                issues.append({
-                    'type': 'minor',
-                    'message': f'Unused function'
-                })
+            # Analyze issues
+            issues = analyze_file_issues(file)
+            if any(len(v) > 0 for v in issues.values()):
+                file_issues[file.filepath] = issues
             
-            if hasattr(func, 'code_block'):
-                code = func.code_block.source
-                if 'None' in code and not any(s in code for s in ['is None', '== None', '!= None']):
+            # Collect symbols
+            symbols = []
+            
+            # Add functions as symbols
+            for func in file.functions:
+                issues = []
+                
+                # Check for issues
+                if not any(func.name in str(usage) for usage in func.usages):
                     issues.append({
-                        'type': 'critical',
-                        'message': f'Potential unsafe null reference'
+                        'type': 'minor',
+                        'message': f'Unused function'
                     })
                 
-                if 'TODO' in code or 'FIXME' in code:
-                    issues.append({
-                        'type': 'major',
-                        'message': f'Incomplete implementation'
-                    })
-
-            symbols.append(Symbol(
-                id=str(hash(func.name + file.filepath)),
-                name=func.name,
-                type='function',
-                filepath=file.filepath,
-                start_line=func.start_point[0] if hasattr(func, 'start_point') else 0,
-                end_line=func.end_point[0] if hasattr(func, 'end_point') else 0,
-                issues=issues if issues else None
-            ))
+                if hasattr(func, 'code_block'):
+                    code = func.code_block.source
+                    if 'None' in code and not any(s in code for s in ['is None', '== None', '!= None']):
+                        issues.append({
+                            'type': 'critical',
+                            'message': f'Potential unsafe null reference'
+                        })
+                    
+                    if 'TODO' in code or 'FIXME' in code:
+                        issues.append({
+                            'type': 'major',
+                            'message': f'Incomplete implementation'
+                        })
+                
+                symbols.append(Symbol(
+                    id=str(hash(func.name + file.filepath)),
+                    name=func.name,
+                    type='function',
+                    filepath=file.filepath,
+                    start_line=func.start_point[0] if hasattr(func, 'start_point') else 0,
+                    end_line=func.end_point[0] if hasattr(func, 'end_point') else 0,
+                    issues=issues if issues else None
+                ))
+            
+            # Add classes as symbols
+            for cls in file.classes:
+                symbols.append(Symbol(
+                    id=str(hash(cls.name + file.filepath)),
+                    name=cls.name,
+                    type='class',
+                    filepath=file.filepath,
+                    start_line=cls.start_point[0] if hasattr(cls, 'start_point') else 0,
+                    end_line=cls.end_point[0] if hasattr(cls, 'end_point') else 0
+                ))
+            
+            if symbols:
+                file_symbols[file.filepath] = symbols
         
-        # Add classes as symbols
-        for cls in file.classes:
-            symbols.append(Symbol(
-                id=str(hash(cls.name + file.filepath)),
-                name=cls.name,
-                type='class',
-                filepath=file.filepath,
-                start_line=cls.start_point[0] if hasattr(cls, 'start_point') else 0,
-                end_line=cls.end_point[0] if hasattr(cls, 'end_point') else 0
-            ))
+        # Build repository structure with symbols
+        repo_structure = build_repo_structure(codebase.files, file_issues, file_symbols)
         
-        if symbols:
-            file_symbols[file.filepath] = symbols
-
-    # Build repository structure with symbols
-    repo_structure = build_repo_structure(codebase.files, file_issues, file_symbols)
-
-    # Calculate metrics
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-    num_callables = 0
-    
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
-
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, N1, N2, n1, n2 = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
-
-    return AnalysisResponse(
-        repo_url=repo_url,
-        description=desc,
-        num_files=num_files,
-        num_functions=num_functions,
-        num_classes=num_classes,
-        line_metrics={
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100)
-                if total_loc > 0
+        # Calculate metrics
+        callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
+        num_callables = 0
+        
+        for func in callables:
+            if not hasattr(func, "code_block"):
+                continue
+            
+            complexity = calculate_cyclomatic_complexity(func)
+            operators, operands = get_operators_and_operands(func)
+            volume, N1, N2, n1, n2 = calculate_halstead_volume(operators, operands)
+            loc = len(func.code_block.source.splitlines())
+            mi_score = calculate_maintainability_index(volume, complexity, loc)
+            
+            total_complexity += complexity
+            total_volume += volume
+            total_mi += mi_score
+            num_callables += 1
+        
+        for cls in codebase.classes:
+            doi = calculate_doi(cls)
+            total_doi += doi
+        
+        desc = get_github_repo_description(repo_url)
+        
+        # Create the response
+        response = AnalysisResponse(
+            repo_url=repo_url,
+            description=desc,
+            num_files=num_files,
+            num_functions=num_functions,
+            num_classes=num_classes,
+            line_metrics={
+                "total": {
+                    "loc": total_loc,
+                    "lloc": total_lloc,
+                    "sloc": total_sloc,
+                    "comments": total_comments,
+                    "comment_density": (total_comments / total_loc * 100)
+                    if total_loc > 0
+                    else 0,
+                },
+            },
+            cyclomatic_complexity={
+                "average": total_complexity / num_callables if num_callables > 0 else 0,
+            },
+            depth_of_inheritance={
+                "average": total_doi / len(codebase.classes) if codebase.classes else 0,
+            },
+            halstead_metrics={
+                "total_volume": int(total_volume),
+                "average_volume": int(total_volume / num_callables)
+                if num_callables > 0
                 else 0,
             },
-        },
-        cyclomatic_complexity={
-            "average": total_complexity / num_callables if num_callables > 0 else 0,
-        },
-        depth_of_inheritance={
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        halstead_metrics={
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables)
-            if num_callables > 0
-            else 0,
-        },
-        maintainability_index={
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        monthly_commits=monthly_commits,
-        repo_structure=repo_structure
-    )
+            maintainability_index={
+                "average": int(total_mi / num_callables) if num_callables > 0 else 0,
+            },
+            monthly_commits=monthly_commits,
+            repo_structure=repo_structure
+        )
+        
+        # Add comprehensive analysis if requested
+        if comprehensive:
+            logger.info("Performing comprehensive analysis...")
+            comprehensive_results = ComprehensiveAnalysisResult(
+                dead_code=_analyze_dead_code(codebase),
+                parameter_issues=_analyze_parameter_issues(codebase),
+                type_annotation_issues=_analyze_type_annotations(codebase),
+                circular_dependencies=_analyze_circular_dependencies(codebase),
+                implementation_issues=_analyze_implementation_issues(codebase)
+            )
+            response.comprehensive_results = comprehensive_results
+        
+        return response
+    except Exception as e:
+        logger.error(f"Error analyzing repository: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error analyzing repository: {str(e)}")
 
 @fastapi_app.get("/function/{function_id}/call-chain")
 async def get_function_call_chain(function_id: str) -> List[str]:
