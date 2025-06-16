@@ -7,6 +7,8 @@ import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import RepoStructure from "@/components/RepoStructure"
+import SymbolContext from "@/components/SymbolContext"
 
 const mockRepoData = {
   name: "vercel/next.js",
@@ -75,6 +77,7 @@ interface RepoAnalyticsResponse {
   monthly_commits: Record<string, number>;
   inheritance_analysis: InheritanceAnalysis;
   recursion_analysis: RecursionAnalysis;
+  repo_structure: any; // Repository structure data
 }
 
 interface RepoData {
@@ -102,6 +105,9 @@ export default function RepoAnalyticsDashboard() {
   const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
+  const [repoStructure, setRepoStructure] = useState<any>(null)
+  const [selectedSymbol, setSelectedSymbol] = useState<any>(null)
+  const [showSymbolContext, setShowSymbolContext] = useState(false)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -178,6 +184,9 @@ export default function RepoAnalyticsDashboard() {
         recursion_analysis: data.recursion_analysis,
       });
 
+      // Store repository structure
+      setRepoStructure(data.repo_structure);
+
       const transformedCommitData = Object.entries(data.monthly_commits)
         .map(([date, commits]) => ({
           month: new Date(date).toLocaleString('default', { month: 'long' }),
@@ -209,6 +218,56 @@ export default function RepoAnalyticsDashboard() {
       handleFetchRepo(); 
     }
   }
+
+  // Repository structure interaction handlers
+  const handleFileClick = (path: string) => {
+    console.log('File clicked:', path);
+    // Could expand to show file details
+  };
+
+  const handleFolderClick = (path: string) => {
+    console.log('Folder clicked:', path);
+    // Could expand to show folder contents
+  };
+
+  const handleSymbolClick = (symbol: any) => {
+    console.log('Symbol clicked:', symbol);
+    setSelectedSymbol(symbol);
+    setShowSymbolContext(true);
+  };
+
+  const handleViewCallChain = async (symbolId: string) => {
+    console.log('View call chain for symbol:', symbolId);
+    // Could fetch call chain data from API
+    try {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/function/${symbolId}/call-chain`);
+      if (response.ok) {
+        const callChain = await response.json();
+        console.log('Call chain:', callChain);
+        // Could show call chain in a modal or side panel
+      }
+    } catch (error) {
+      console.error('Error fetching call chain:', error);
+    }
+  };
+
+  const handleViewContext = async (symbolId: string) => {
+    console.log('View context for symbol:', symbolId);
+    // Could fetch symbol context from API
+    try {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/symbol/${symbolId}/context`);
+      if (response.ok) {
+        const context = await response.json();
+        console.log('Symbol context:', context);
+        setSelectedSymbol(context);
+        setShowSymbolContext(true);
+      }
+    } catch (error) {
+      console.error('Error fetching symbol context:', error);
+    }
+  };
 
 function calculateCodebaseGrade(data: RepoData) {
   const { maintainabilityIndex } = data;
@@ -473,6 +532,26 @@ function calculateCodebaseGrade(data: RepoData) {
               </Card>
             </div>
             
+            {/* Repository Structure */}
+            {repoStructure && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>📂 Repository Structure</CardTitle>
+                  <CardDescription>Interactive file tree with issue counts and symbol information</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <RepoStructure
+                    data={repoStructure}
+                    onFileClick={handleFileClick}
+                    onFolderClick={handleFolderClick}
+                    onSymbolClick={handleSymbolClick}
+                    onViewCallChain={handleViewCallChain}
+                    onViewContext={handleViewContext}
+                  />
+                </CardContent>
+              </Card>
+            )}
+            
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle>Monthly Commits</CardTitle>
@@ -513,6 +592,25 @@ function calculateCodebaseGrade(data: RepoData) {
               </Card>
             </div>
           </main>
+          
+          {/* Symbol Context Modal */}
+          {showSymbolContext && selectedSymbol && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-background rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">Symbol Details</h2>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowSymbolContext(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+                <SymbolContext symbol={selectedSymbol} />
+              </div>
+            </div>
+          )}
+          
           <footer className="w-full text-center text-xs text-muted-foreground py-4">
           built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
           </footer>
