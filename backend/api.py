@@ -139,6 +139,36 @@ class RecursionAnalysis(BaseModel):
     recursive_functions: List[str] = []
     total_recursive_count: int = 0
 
+class FunctionDetail(BaseModel):
+    """Detailed information about a function."""
+    name: str
+    parameters: List[str] = []
+    return_type: Optional[str] = None
+    call_count: int = 0
+    calls_made: int = 0
+
+class ClassDetail(BaseModel):
+    """Detailed information about a class."""
+    name: str
+    methods: List[str] = []
+    attributes: List[str] = []
+
+class ImportDetail(BaseModel):
+    """Detailed information about imports."""
+    module: str
+    imported_symbols: List[str] = []
+
+class FunctionAnalysis(BaseModel):
+    """Comprehensive function analysis."""
+    total_functions: int = 0
+    most_called_function: Optional[FunctionDetail] = None
+    most_calling_function: Optional[FunctionDetail] = None
+    dead_functions: List[str] = []
+    dead_functions_count: int = 0
+    sample_functions: List[FunctionDetail] = []
+    sample_classes: List[ClassDetail] = []
+    sample_imports: List[ImportDetail] = []
+
 class AnalysisResponse(BaseModel):
     # Basic stats
     repo_url: str
@@ -162,6 +192,7 @@ class AnalysisResponse(BaseModel):
     # New analysis features
     inheritance_analysis: InheritanceAnalysis
     recursion_analysis: RecursionAnalysis
+    function_analysis: FunctionAnalysis
     
     # Repository structure with symbols
     repo_structure: FileNode
@@ -489,6 +520,109 @@ def analyze_recursive_functions(codebase) -> RecursionAnalysis:
     except Exception as e:
         print(f"Error analyzing recursive functions: {e}")
         return RecursionAnalysis()
+
+def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
+    """Perform comprehensive function analysis."""
+    if not codebase.functions:
+        return FunctionAnalysis()
+    
+    try:
+        # Find most called function
+        most_called = None
+        max_call_count = 0
+        for func in codebase.functions:
+            call_count = len(func.call_sites) if hasattr(func, 'call_sites') else 0
+            if call_count > max_call_count:
+                max_call_count = call_count
+                most_called = func
+        
+        most_called_detail = None
+        if most_called:
+            most_called_detail = FunctionDetail(
+                name=most_called.name,
+                parameters=[p.name for p in most_called.parameters] if hasattr(most_called, 'parameters') else [],
+                return_type=getattr(most_called, 'return_type', None),
+                call_count=max_call_count,
+                calls_made=len(most_called.function_calls)
+            )
+        
+        # Find function that makes the most calls
+        most_calling = None
+        max_calls_made = 0
+        for func in codebase.functions:
+            calls_made = len(func.function_calls)
+            if calls_made > max_calls_made:
+                max_calls_made = calls_made
+                most_calling = func
+        
+        most_calling_detail = None
+        if most_calling:
+            most_calling_detail = FunctionDetail(
+                name=most_calling.name,
+                parameters=[p.name for p in most_calling.parameters] if hasattr(most_calling, 'parameters') else [],
+                return_type=getattr(most_calling, 'return_type', None),
+                call_count=len(most_calling.call_sites) if hasattr(most_calling, 'call_sites') else 0,
+                calls_made=max_calls_made
+            )
+        
+        # Find dead functions (functions with no callers)
+        dead_functions = []
+        for func in codebase.functions:
+            call_count = len(func.call_sites) if hasattr(func, 'call_sites') else 0
+            if call_count == 0:
+                dead_functions.append(func.name)
+                if len(dead_functions) >= 10:  # Limit to first 10
+                    break
+        
+        # Sample functions (first 5)
+        sample_functions = []
+        for func in codebase.functions[:5]:
+            sample_functions.append(FunctionDetail(
+                name=func.name,
+                parameters=[p.name for p in func.parameters] if hasattr(func, 'parameters') else [],
+                return_type=getattr(func, 'return_type', None),
+                call_count=len(func.call_sites) if hasattr(func, 'call_sites') else 0,
+                calls_made=len(func.function_calls)
+            ))
+        
+        # Sample classes (first 5)
+        sample_classes = []
+        if hasattr(codebase, 'classes') and codebase.classes:
+            for cls in codebase.classes[:5]:
+                sample_classes.append(ClassDetail(
+                    name=cls.name,
+                    methods=[m.name for m in cls.methods] if hasattr(cls, 'methods') else [],
+                    attributes=[a.name for a in cls.attributes] if hasattr(cls, 'attributes') else []
+                ))
+        
+        # Sample imports (first 5)
+        sample_imports = []
+        for file in codebase.files[:5]:  # Check first 5 files for imports
+            if hasattr(file, 'imports') and file.imports:
+                for imp in file.imports[:2]:  # Max 2 imports per file
+                    sample_imports.append(ImportDetail(
+                        module=getattr(imp, 'module', 'unknown'),
+                        imported_symbols=[s.name for s in imp.imported_symbol] if hasattr(imp, 'imported_symbol') else []
+                    ))
+                    if len(sample_imports) >= 5:
+                        break
+            if len(sample_imports) >= 5:
+                break
+        
+        return FunctionAnalysis(
+            total_functions=len(codebase.functions),
+            most_called_function=most_called_detail,
+            most_calling_function=most_calling_detail,
+            dead_functions=dead_functions,
+            dead_functions_count=len(dead_functions),
+            sample_functions=sample_functions,
+            sample_classes=sample_classes,
+            sample_imports=sample_imports
+        )
+    
+    except Exception as e:
+        print(f"Error analyzing functions comprehensively: {e}")
+        return FunctionAnalysis(total_functions=len(codebase.functions) if codebase.functions else 0)
 
 def find_dead_code(codebase) -> List:
     """Find functions that are never called."""
@@ -1168,6 +1302,7 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
     # Perform new analysis features
     inheritance_analysis = analyze_inheritance_patterns(codebase)
     recursion_analysis = analyze_recursive_functions(codebase)
+    function_analysis = analyze_functions_comprehensive(codebase)
 
     return AnalysisResponse(
         repo_url=repo_url,
@@ -1204,6 +1339,7 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
         monthly_commits=monthly_commits,
         inheritance_analysis=inheritance_analysis,
         recursion_analysis=recursion_analysis,
+        function_analysis=function_analysis,
         repo_structure=repo_structure
     )
 
