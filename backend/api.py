@@ -527,25 +527,6 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
         return FunctionAnalysis()
     
     try:
-        # Debug: Print available attributes on first function
-        if codebase.functions:
-            first_func = codebase.functions[0]
-            print(f"DEBUG: Function attributes: {dir(first_func)}")
-            print(f"DEBUG: Function name: {first_func.name}")
-            print(f"DEBUG: Function calls: {len(first_func.function_calls) if hasattr(first_func, 'function_calls') else 'No function_calls attr'}")
-            
-        # Debug: Print available attributes on codebase
-        print(f"DEBUG: Codebase attributes: {dir(codebase)}")
-        print(f"DEBUG: Total functions: {len(codebase.functions)}")
-        if hasattr(codebase, 'classes'):
-            print(f"DEBUG: Total classes: {len(codebase.classes)}")
-        if hasattr(codebase, 'files'):
-            print(f"DEBUG: Total files: {len(codebase.files)}")
-            if codebase.files:
-                first_file = codebase.files[0]
-                print(f"DEBUG: File attributes: {dir(first_file)}")
-                if hasattr(first_file, 'imports'):
-                    print(f"DEBUG: File imports: {len(first_file.imports) if first_file.imports else 0}")
         # Find most called function (function with most usages)
         most_called = None
         max_call_count = 0
