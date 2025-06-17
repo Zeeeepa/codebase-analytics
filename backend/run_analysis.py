@@ -47,7 +47,10 @@ def main():
         
         # Create codebase object
         print("Creating codebase object...")
-        codebase = Codebase.from_directory(temp_dir)
+        
+        # Use the correct method to create a Codebase object
+        # Since from_directory is not available, we'll use the constructor directly
+        codebase = Codebase(temp_dir)
         
         # Analyze codebase
         print("Analyzing codebase...")
