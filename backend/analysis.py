@@ -584,6 +584,501 @@ class CodebaseAnalyzer:
         # This is a placeholder implementation
         return DependencyResult()
 
+    def _analyze_import_dependencies(self) -> Dict[str, Any]:
+        """
+        Analyze import dependencies between files.
+
+        Returns:
+            Dictionary containing import dependency analysis results
+        """
+        print("Analyzing import dependencies")
+
+        # Generate dependency graph
+        dependency_graph = self._get_dependency_graph()
+
+        # Count dependencies per file
+        dependency_counts = {
+            file_path: len(deps) for file_path, deps in dependency_graph.items()
+        }
+
+        # Find files with high number of dependencies
+        high_dependency_files = [
+            {"file": file_path, "dependency_count": count}
+            for file_path, count in dependency_counts.items()
+            if count > 10  # Threshold for high dependency count
+        ]
+
+        # Sort by dependency count (descending)
+        high_dependency_files.sort(key=lambda x: x["dependency_count"], reverse=True)
+
+        # Generate import dependency analysis results
+        import_dependencies = {
+            "dependency_graph": dependency_graph,
+            "high_dependency_files": high_dependency_files[:10],  # Top 10
+            "summary": {
+                "total_files": len(dependency_graph),
+                "avg_dependencies": sum(dependency_counts.values()) / len(dependency_counts) if dependency_counts else 0,
+                "max_dependencies": max(dependency_counts.values()) if dependency_counts else 0,
+            },
+        }
+
+        return import_dependencies
+
+    def _get_dependency_graph(self) -> Dict[str, List[str]]:
+        """
+        Generate a dependency graph for the codebase.
+
+        Returns:
+            Dictionary mapping file paths to lists of imported file paths
+        """
+        dependency_graph = {}
+
+        # Build dependency graph
+        for file in self.codebase.files:
+            file_path = file.path
+            dependency_graph[file_path] = []
+
+            # Add imported files to dependencies
+            if hasattr(file, "imports"):
+                for imp in file.imports:
+                    # Skip standard library imports
+                    if not hasattr(imp, "file") or not imp.file:
+                        continue
+
+                    # Add imported file to dependencies
+                    imported_file_path = imp.file.path
+                    if imported_file_path != file_path:  # Skip self-imports
+                        dependency_graph[file_path].append(imported_file_path)
+
+        return dependency_graph
+
+    def _find_circular_dependencies(self) -> Dict[str, Any]:
+        """
+        Find circular dependencies in the codebase.
+
+        Returns:
+            Dictionary containing circular dependency analysis results
+        """
+        print("Analyzing circular dependencies")
+
+        # Get dependency graph
+        dependency_graph = self._get_dependency_graph()
+        
+        # Find circular dependencies
+        circular_deps = []
+        visited = set()
+        
+        def detect_cycles(node, path):
+            if node in path:
+                # Found a cycle
+                cycle_start = path.index(node)
+                cycle = path[cycle_start:] + [node]
+                
+                # Add to circular dependencies if not already found
+                cycle_str = " -> ".join(cycle)
+                if not any(cycle_str in cd["cycle_str"] for cd in circular_deps):
+                    circular_deps.append({
+                        "cycle": cycle,
+                        "cycle_str": cycle_str,
+                        "length": len(cycle),
+                    })
+                return
+            
+            if node in visited:
+                return
+                
+            visited.add(node)
+            new_path = path + [node]
+            
+            # Check dependencies
+            if node in dependency_graph:
+                for dep in dependency_graph[node]:
+                    detect_cycles(dep, new_path)
+            
+            visited.remove(node)
+        
+        # Check each file for cycles
+        for file_path in dependency_graph:
+            detect_cycles(file_path, [])
+        
+        # Sort by cycle length
+        circular_deps.sort(key=lambda x: x["length"])
+        
+        # Generate circular dependency analysis results
+        circular_dependencies = {
+            "circular_dependencies": circular_deps,
+            "summary": {
+                "total_cycles": len(circular_deps),
+                "max_cycle_length": max([cd["length"] for cd in circular_deps]) if circular_deps else 0,
+            },
+        }
+        
+        return circular_dependencies
+
+    def _generate_html_report(self, output_file: Optional[str] = None):
+        """
+        Generate an HTML report of the analysis results.
+        
+        Args:
+            output_file: Path to save the report to
+        """
+        if not hasattr(self, "analysis_result") or not self.analysis_result:
+            raise ValueError("No analysis results to save")
+            
+        if not output_file:
+            output_file = "codebase_analysis_report.html"
+        
+        # Simple HTML template
+        repo_name = self.repo_url.split("/")[-1] if self.repo_url else (self.repo_path or "Unknown")
+        analysis_time = self.analysis_result.summary.analysis_time
+        
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Codebase Analysis Report: {repo_name}</title>
+            <style>
+                body {{
+                    font-family: Arial, sans-serif;
+                    line-height: 1.6;
+                    margin: 0;
+                    padding: 20px;
+                    color: #333;
+                }}
+                h1, h2, h3 {{
+                    color: #2c3e50;
+                }}
+                .container {{
+                    max-width: 1200px;
+                    margin: 0 auto;
+                }}
+                .summary {{
+                    background-color: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 5px;
+                    margin-bottom: 20px;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-bottom: 20px;
+                }}
+                th, td {{
+                    padding: 12px 15px;
+                    border-bottom: 1px solid #ddd;
+                    text-align: left;
+                }}
+                th {{
+                    background-color: #f2f2f2;
+                }}
+                tr:hover {{
+                    background-color: #f5f5f5;
+                }}
+                .severity-high {{
+                    color: #e74c3c;
+                }}
+                .severity-medium {{
+                    color: #f39c12;
+                }}
+                .severity-low {{
+                    color: #3498db;
+                }}
+                .severity-info {{
+                    color: #2ecc71;
+                }}
+                .footer {{
+                    margin-top: 30px;
+                    text-align: center;
+                    font-size: 0.8em;
+                    color: #7f8c8d;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Codebase Analysis Report: {repo_name}</h1>
+                <div class="summary">
+                    <h2>Summary</h2>
+                    <p><strong>Analysis Time:</strong> {analysis_time}</p>
+                    <p><strong>Language:</strong> {self.language or 'Auto-detected'}</p>
+                    <p><strong>Total Files:</strong> {self.analysis_result.summary.total_files}</p>
+                    <p><strong>Total Classes:</strong> {self.analysis_result.summary.total_classes}</p>
+                    <p><strong>Total Functions:</strong> {self.analysis_result.summary.total_functions}</p>
+                </div>
+        """
+        
+        # Add code quality section if available
+        if hasattr(self.analysis_result, "code_quality"):
+            html += self._generate_code_quality_html()
+            
+        # Add dependency section if available
+        if hasattr(self.analysis_result, "dependencies"):
+            html += self._generate_dependencies_html()
+            
+        # Add performance section if available
+        if hasattr(self.analysis_result, "performance"):
+            html += self._generate_performance_html()
+            
+        # Add footer
+        html += f"""
+                <div class="footer">
+                    <p>Generated by Codebase Analyzer on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Save to file
+        with open(output_file, "w") as f:
+            f.write(html)
+            
+        print(f"HTML report saved to: {output_file}")
+        
+    def _generate_code_quality_html(self) -> str:
+        """Generate HTML for code quality section."""
+        html = """
+                <h2>Code Quality Analysis</h2>
+        """
+        
+        # Add dead code section
+        if hasattr(self.analysis_result.code_quality, "dead_code"):
+            dead_code = self.analysis_result.code_quality.dead_code
+            html += f"""
+                <h3>Dead Code</h3>
+                <p>Found {dead_code['summary']['unused_functions_count']} unused functions, 
+                   {dead_code['summary']['unused_classes_count']} unused classes, and 
+                   {dead_code['summary']['unused_imports_count']} unused imports.</p>
+            """
+            
+            if dead_code["unused_functions"]:
+                html += """
+                <h4>Unused Functions</h4>
+                <table>
+                    <tr>
+                        <th>Function</th>
+                        <th>File</th>
+                        <th>Line</th>
+                    </tr>
+                """
+                
+                for func in dead_code["unused_functions"][:10]:  # Show top 10
+                    html += f"""
+                    <tr>
+                        <td>{func['name']}</td>
+                        <td>{func['file']}</td>
+                        <td>{func['line'] or 'N/A'}</td>
+                    </tr>
+                    """
+                    
+                html += "</table>"
+                
+                if len(dead_code["unused_functions"]) > 10:
+                    html += f"<p>And {len(dead_code['unused_functions']) - 10} more...</p>"
+        
+        # Add parameter issues section
+        if hasattr(self.analysis_result.code_quality, "parameter_issues"):
+            param_issues = self.analysis_result.code_quality.parameter_issues
+            html += f"""
+                <h3>Parameter Issues</h3>
+                <p>Found {param_issues['summary']['unused_parameters_count']} unused parameters, 
+                   {param_issues['summary']['missing_types_count']} parameters missing type annotations, and 
+                   {param_issues['summary']['incorrect_usage_count']} incorrect usages.</p>
+            """
+        
+        # Add implementation issues section
+        if hasattr(self.analysis_result.code_quality, "implementation_issues"):
+            impl_issues = self.analysis_result.code_quality.implementation_issues
+            html += f"""
+                <h3>Implementation Issues</h3>
+                <p>Found {impl_issues['summary']['empty_functions_count']} empty functions and 
+                   {impl_issues['summary']['abstract_methods_without_implementation_count']} unimplemented abstract methods.</p>
+            """
+            
+        return html
+        
+    def _generate_dependencies_html(self) -> str:
+        """Generate HTML for dependencies section."""
+        html = """
+                <h2>Dependency Analysis</h2>
+        """
+        
+        # Add import dependencies section
+        if hasattr(self.analysis_result.dependencies, "import_dependencies"):
+            import_deps = self.analysis_result.dependencies.import_dependencies
+            html += f"""
+                <h3>Import Dependencies</h3>
+                <p>Analyzed {import_deps['summary']['total_files']} files with an average of 
+                   {import_deps['summary']['avg_dependencies']:.2f} dependencies per file.</p>
+            """
+            
+            if import_deps["high_dependency_files"]:
+                html += """
+                <h4>Files with High Dependencies</h4>
+                <table>
+                    <tr>
+                        <th>File</th>
+                        <th>Dependency Count</th>
+                    </tr>
+                """
+                
+                for file in import_deps["high_dependency_files"]:
+                    html += f"""
+                    <tr>
+                        <td>{file['file']}</td>
+                        <td>{file['dependency_count']}</td>
+                    </tr>
+                    """
+                    
+                html += "</table>"
+        
+        # Add circular dependencies section
+        if hasattr(self.analysis_result.dependencies, "circular_dependencies"):
+            circular_deps = self.analysis_result.dependencies.circular_dependencies
+            html += f"""
+                <h3>Circular Dependencies</h3>
+                <p>Found {circular_deps['summary']['total_cycles']} cycles.</p>
+            """
+            
+            if circular_deps["circular_dependencies"]:
+                html += """
+                <h4>Circular Dependency Cycles</h4>
+                <table>
+                    <tr>
+                        <th>Cycle</th>
+                        <th>Length</th>
+                    </tr>
+                """
+                
+                for cycle in circular_deps["circular_dependencies"]:
+                    html += f"""
+                    <tr>
+                        <td>{cycle['cycle_str']}</td>
+                        <td>{cycle['length']}</td>
+                    </tr>
+                    """
+                    
+                html += "</table>"
+            
+        return html
+        
+    def _generate_performance_html(self) -> str:
+        """Generate HTML for performance section."""
+        html = """
+                <h2>Performance Analysis</h2>
+        """
+        
+        # Add complexity section
+        if hasattr(self.analysis_result.performance, "complexity"):
+            complexity = self.analysis_result.performance.complexity
+            html += f"""
+                <h3>Code Complexity</h3>
+                <p>Average cyclomatic complexity: {complexity['summary']['avg_complexity']:.2f}</p>
+            """
+            
+            if complexity.get("high_complexity_functions"):
+                html += """
+                <h4>High Complexity Functions</h4>
+                <table>
+                    <tr>
+                        <th>Function</th>
+                        <th>File</th>
+                        <th>Complexity</th>
+                    </tr>
+                """
+                
+                for func in complexity["high_complexity_functions"]:
+                    html += f"""
+                    <tr>
+                        <td>{func['name']}</td>
+                        <td>{func['file']}</td>
+                        <td>{func['complexity']}</td>
+                    </tr>
+                    """
+                    
+                html += "</table>"
+            
+        return html
+        
+    def _print_console_report(self):
+        """Print a summary report to the console."""
+        if not hasattr(self, "analysis_result") or not self.analysis_result:
+            raise ValueError("No analysis results to print")
+            
+        repo_name = self.repo_url.split("/")[-1] if self.repo_url else (self.repo_path or "Unknown")
+        
+        print(f"\n{'=' * 80}")
+        print(f"CODEBASE ANALYSIS REPORT: {repo_name}")
+        print(f"{'=' * 80}")
+        print(f"Analysis Time: {self.analysis_result.summary.analysis_time}")
+        print(f"Language: {self.language or 'Auto-detected'}")
+        
+        # Print summary
+        print(f"\n{'-' * 40}")
+        print("SUMMARY:")
+        print(f"{'-' * 40}")
+        print(f"Total Files: {self.analysis_result.summary.total_files}")
+        print(f"Total Classes: {self.analysis_result.summary.total_classes}")
+        print(f"Total Functions: {self.analysis_result.summary.total_functions}")
+        print(f"Total Issues: {self.analysis_result.summary.total_issues}")
+        
+        # Print code quality summary
+        if hasattr(self.analysis_result, "code_quality"):
+            print(f"\n{'-' * 40}")
+            print("CODE QUALITY:")
+            print(f"{'-' * 40}")
+            
+            # Print dead code summary
+            if hasattr(self.analysis_result.code_quality, "dead_code"):
+                dead_code = self.analysis_result.code_quality.dead_code
+                print(f"Dead Code: {dead_code['summary']['unused_functions_count']} unused functions, "
+                      f"{dead_code['summary']['unused_classes_count']} unused classes, "
+                      f"{dead_code['summary']['unused_imports_count']} unused imports")
+            
+            # Print parameter issues summary
+            if hasattr(self.analysis_result.code_quality, "parameter_issues"):
+                param_issues = self.analysis_result.code_quality.parameter_issues
+                print(f"Parameter Issues: {param_issues['summary']['unused_parameters_count']} unused parameters, "
+                      f"{param_issues['summary']['missing_types_count']} missing type annotations, "
+                      f"{param_issues['summary']['incorrect_usage_count']} incorrect usages")
+            
+            # Print implementation issues summary
+            if hasattr(self.analysis_result.code_quality, "implementation_issues"):
+                impl_issues = self.analysis_result.code_quality.implementation_issues
+                print(f"Implementation Issues: {impl_issues['summary']['empty_functions_count']} empty functions, "
+                      f"{impl_issues['summary']['abstract_methods_without_implementation_count']} unimplemented abstract methods")
+        
+        # Print dependency summary
+        if hasattr(self.analysis_result, "dependencies"):
+            print(f"\n{'-' * 40}")
+            print("DEPENDENCIES:")
+            print(f"{'-' * 40}")
+            
+            # Print import dependencies summary
+            if hasattr(self.analysis_result.dependencies, "import_dependencies"):
+                import_deps = self.analysis_result.dependencies.import_dependencies
+                print(f"Import Dependencies: {import_deps['summary']['total_files']} files, "
+                      f"{import_deps['summary']['avg_dependencies']:.2f} avg dependencies per file")
+            
+            # Print circular dependencies summary
+            if hasattr(self.analysis_result.dependencies, "circular_dependencies"):
+                circular_deps = self.analysis_result.dependencies.circular_dependencies
+                print(f"Circular Dependencies: {circular_deps['summary']['total_cycles']} cycles found")
+        
+        # Print performance summary
+        if hasattr(self.analysis_result, "performance"):
+            print(f"\n{'-' * 40}")
+            print("PERFORMANCE:")
+            print(f"{'-' * 40}")
+            
+            # Print complexity summary
+            if hasattr(self.analysis_result.performance, "complexity"):
+                complexity = self.analysis_result.performance.complexity
+                print(f"Code Complexity: {complexity['summary']['avg_complexity']:.2f} avg cyclomatic complexity")
+                print(f"High Complexity Functions: {len(complexity.get('high_complexity_functions', []))}")
+        
+        print(f"\n{'=' * 80}")
+
 # ============================================================================
 # SECTION 2: CORE COMPLEXITY AND METRICS FUNCTIONS
 # ============================================================================
@@ -997,60 +1492,162 @@ class ComprehensiveAnalyzer:
     
     def _analyze_dead_code(self):
         """Find and log unused code (functions, classes, imports)."""
+        print("Analyzing dead code")
+
+        dead_code = {
+            "unused_functions": [],
+            "unused_classes": [],
+            "unused_variables": [],
+            "unused_imports": [],
+        }
+
         # Find unused functions
-        for func in self.codebase.functions:
-            if not func.usages:
-                self.issues.append(Issue(
-                    func, 
-                    IssueType.UNUSED_FUNCTION,
-                    f"Unused function: {func.name}",
-                    IssueSeverity.WARNING,
-                    suggestion="Consider removing this unused function or documenting why it's needed"
-                ))
-        
+        for function in self.codebase.functions:
+            # Skip decorated functions (as they might be used indirectly)
+            if hasattr(function, "decorators") and function.decorators:
+                continue
+
+            # Check if function has no call sites or usages
+            has_call_sites = (
+                hasattr(function, "call_sites") and len(function.call_sites) > 0
+            )
+            has_usages = hasattr(function, "usages") and len(function.usages) > 0
+
+            if not has_call_sites and not has_usages:
+                # Skip magic methods and main functions
+                if (hasattr(function, "is_magic") and function.is_magic) or (
+                    hasattr(function, "name") and function.name in ["main", "__main__"]
+                ):
+                    continue
+
+                # Get file path and name safely
+                file_path = (
+                    function.file.path
+                    if hasattr(function, "file") and hasattr(function.file, "path")
+                    else "unknown"
+                )
+                func_name = (
+                    function.name if hasattr(function, "name") else str(function)
+                )
+
+                # Add to dead code list
+                dead_code["unused_functions"].append({
+                    "name": func_name,
+                    "file": file_path,
+                    "line": function.line if hasattr(function, "line") else None,
+                })
+
         # Find unused classes
         for cls in self.codebase.classes:
-            if not cls.usages:
-                self.issues.append(Issue(
-                    cls,
-                    IssueType.UNUSED_CLASS,
-                    f"Unused class: {cls.name}",
-                    IssueSeverity.WARNING,
-                    suggestion="Consider removing this unused class or documenting why it's needed"
-                ))
-        
+            # Check if class has no usages
+            has_usages = hasattr(cls, "usages") and len(cls.usages) > 0
+
+            if not has_usages:
+                # Skip base classes and abstract classes
+                if (hasattr(cls, "is_abstract") and cls.is_abstract):
+                    continue
+
+                # Get file path and name safely
+                file_path = (
+                    cls.file.path
+                    if hasattr(cls, "file") and hasattr(cls.file, "path")
+                    else "unknown"
+                )
+                cls_name = cls.name if hasattr(cls, "name") else str(cls)
+
+                # Add to dead code list
+                dead_code["unused_classes"].append({
+                    "name": cls_name,
+                    "file": file_path,
+                    "line": cls.line if hasattr(cls, "line") else None,
+                })
+
         # Find unused imports
         for file in self.codebase.files:
-            for imp in file.imports:
-                if not imp.usages:
-                    self.issues.append(Issue(
-                        imp,
-                        IssueType.UNUSED_IMPORT,
-                        f"Unused import: {imp.name} in {file.path}",
-                        IssueSeverity.INFO,
-                        suggestion="Remove the unused import to clean up the code"
-                    ))
-    
+            if hasattr(file, "imports"):
+                for imp in file.imports:
+                    # Check if import has no usages
+                    has_usages = hasattr(imp, "usages") and len(imp.usages) > 0
+
+                    if not has_usages:
+                        # Get import name safely
+                        imp_name = imp.name if hasattr(imp, "name") else str(imp)
+
+                        # Add to dead code list
+                        dead_code["unused_imports"].append({
+                            "name": imp_name,
+                            "file": file.path,
+                            "line": imp.line if hasattr(imp, "line") else None,
+                        })
+
+        # Add summary counts
+        dead_code["summary"] = {
+            "unused_functions_count": len(dead_code["unused_functions"]),
+            "unused_classes_count": len(dead_code["unused_classes"]),
+            "unused_variables_count": len(dead_code["unused_variables"]),
+            "unused_imports_count": len(dead_code["unused_imports"]),
+        }
+
+        return dead_code
+
     def _analyze_parameter_issues(self):
         """Find and log parameter issues (unused, mismatches)."""
+        parameter_issues = {
+            "missing_types": [],
+            "unused_parameters": [],
+            "incorrect_usage": [],
+        }
+
         for func in self.codebase.functions:
-            # Check for unused parameters
-            for param in func.parameters:
-                # Skip 'self' in methods
-                if param.name == 'self' and func.is_method:
-                    continue
-                    
-                # Check if parameter is used in function body
-                param_dependencies = [dep.name for dep in func.dependencies if hasattr(dep, 'name')]
-                if param.name not in param_dependencies:
-                    self.issues.append(Issue(
-                        func,
-                        IssueType.UNUSED_PARAMETER,
-                        f"Function '{func.name}' has unused parameter: {param.name}",
-                        IssueSeverity.INFO,
-                        suggestion=f"Consider removing the unused parameter '{param.name}' if it's not needed"
-                    ))
-            
+            # Skip if no parameters
+            if not hasattr(func, "parameters"):
+                continue
+
+            file_path = (
+                func.file.path
+                if hasattr(func, "file") and hasattr(func.file, "path")
+                else "unknown"
+            )
+            func_name = func.name if hasattr(func, "name") else str(func)
+
+            # Check for parameters without type annotations
+            if hasattr(func, "parameters"):
+                for param in func.parameters:
+                    # Skip self parameter in methods
+                    if param.name == "self" and hasattr(func, "is_method") and func.is_method:
+                        continue
+
+                    # Check for missing type annotations
+                    if not hasattr(param, "type") or not param.type:
+                        parameter_issues["missing_types"].append({
+                            "function": func_name,
+                            "parameter": param.name,
+                            "file": file_path,
+                            "line": func.line if hasattr(func, "line") else None,
+                        })
+
+                    # Check for unused parameters
+                    param_dependencies = [dep.name for dep in func.dependencies if hasattr(dep, "name")]
+                    if param.name not in param_dependencies:
+                        # Skip 'self' in methods
+                        if param.name == 'self' and func.is_method:
+                            continue
+                            
+                        self.issues.append(Issue(
+                            func,
+                            IssueType.UNUSED_PARAMETER,
+                            f"Function '{func.name}' has unused parameter: {param.name}",
+                            IssueSeverity.INFO,
+                            suggestion=f"Consider removing the unused parameter '{param.name}' if it's not needed"
+                        ))
+                        
+                        parameter_issues["unused_parameters"].append({
+                            "function": func_name,
+                            "parameter": param.name,
+                            "file": file_path,
+                            "line": func.line if hasattr(func, "line") else None,
+                        })
+
             # Check call sites for parameter mismatches
             for call in func.call_sites:
                 if hasattr(call, 'args') and hasattr(func, 'parameters'):
@@ -1073,7 +1670,31 @@ class ComprehensiveAnalyzer:
                             IssueSeverity.ERROR,
                             suggestion=f"Add the missing parameters to the function call"
                         ))
-    
+                        
+                        # Get call location
+                        call_file = (
+                            call.file.path
+                            if hasattr(call, "file") and hasattr(call.file, "path")
+                            else "unknown"
+                        )
+                        call_line = call.line if hasattr(call, "line") else None
+
+                        parameter_issues["incorrect_usage"].append({
+                            "function": func_name,
+                            "call_file": call_file,
+                            "call_line": call_line,
+                            "missing_parameters": list(missing_params),
+                        })
+
+        # Add summary counts
+        parameter_issues["summary"] = {
+            "missing_types_count": len(parameter_issues["missing_types"]),
+            "unused_parameters_count": len(parameter_issues["unused_parameters"]),
+            "incorrect_usage_count": len(parameter_issues["incorrect_usage"]),
+        }
+
+        return parameter_issues
+
     def _analyze_type_annotations(self):
         """Find and log missing type annotations."""
         for func in self.codebase.functions:
@@ -1151,6 +1772,16 @@ class ComprehensiveAnalyzer:
     
     def _analyze_implementation_issues(self):
         """Find and log implementation issues (empty functions, etc.)."""
+        implementation_issues = {
+            "empty_functions": [],
+            "abstract_methods_without_implementation": [],
+            "summary": {
+                "empty_functions_count": 0,
+                "abstract_methods_without_implementation_count": 0,
+            },
+        }
+
+        # Check for empty functions
         for func in self.codebase.functions:
             # Skip dunder methods and abstract methods
             if func.name.startswith('__') and func.name.endswith('__'):
@@ -1174,7 +1805,58 @@ class ComprehensiveAnalyzer:
                         IssueSeverity.WARNING,
                         suggestion="Implement the function or remove it if it's not needed"
                     ))
-    
+                    
+                    # Get file path
+                    file_path = (
+                        func.file.path
+                        if hasattr(func, "file") and hasattr(func.file, "path")
+                        else "unknown"
+                    )
+                    
+                    # Add to implementation issues
+                    implementation_issues["empty_functions"].append({
+                        "name": func.name,
+                        "file": file_path,
+                        "line": func.line if hasattr(func, "line") else None,
+                    })
+                    implementation_issues["summary"]["empty_functions_count"] += 1
+
+        # Check for abstract methods without implementation
+        for cls in self.codebase.classes:
+            if not hasattr(cls, "methods") or not hasattr(cls, "parents"):
+                continue
+                
+            # Get abstract methods from parent classes
+            abstract_methods = set()
+            for parent in cls.parents:
+                if hasattr(parent, "methods"):
+                    for method in parent.methods:
+                        if hasattr(method, "is_abstract") and method.is_abstract:
+                            abstract_methods.add(method.name)
+            
+            # Check if abstract methods are implemented
+            implemented_methods = {method.name for method in cls.methods}
+            missing_implementations = abstract_methods - implemented_methods
+            
+            if missing_implementations:
+                # Get file path
+                file_path = (
+                    cls.file.path
+                    if hasattr(cls, "file") and hasattr(cls.file, "path")
+                    else "unknown"
+                )
+                
+                for method_name in missing_implementations:
+                    implementation_issues["abstract_methods_without_implementation"].append({
+                        "class": cls.name,
+                        "method": method_name,
+                        "file": file_path,
+                        "line": cls.line if hasattr(cls, "line") else None,
+                    })
+                    implementation_issues["summary"]["abstract_methods_without_implementation_count"] += 1
+
+        return implementation_issues
+
     def _generate_report(self) -> Dict[str, Any]:
         """
         Generate a comprehensive report of the analysis results.
