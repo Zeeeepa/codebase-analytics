@@ -48,10 +48,11 @@ def main():
         print("Running comprehensive analysis...")
         
         # Use codegen SDK to analyze the codebase
-        from codegen.sdk.core import CodegenSDK
+        # Corrected import
+        from codegen.sdk.core import CodegenApp
         
         # Initialize the SDK
-        sdk = CodegenSDK()
+        sdk = CodegenApp()
         
         # Start analysis
         print("Starting analysis...")
@@ -514,4 +515,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
