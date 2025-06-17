@@ -1,7 +1,10 @@
 fastapi>=0.115.2
-uvicorn==0.27.1
+uvicorn[standard]>=0.30.0
 requests>=2.32.3
 networkx>=3.4.1
 pydantic>=2.10.0
+matplotlib>=3.8.0
+plotly>=5.17.0
+gitpython>=3.1.40
 modal
 codegen

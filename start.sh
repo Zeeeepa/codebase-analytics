@@ -129,8 +129,12 @@ print_success "Backend dependencies installed!"
 print_step "Setting up frontend..."
 cd ../frontend
 
+print_status "Cleaning npm cache and node_modules..."
+rm -rf node_modules package-lock.json
+npm cache clean --force
+
 print_status "Installing Node.js dependencies..."
-npm install --silent
+npm install
 if [ $? -ne 0 ]; then
     print_error "Failed to install frontend dependencies"
     exit 1
