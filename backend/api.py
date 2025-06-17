@@ -151,6 +151,17 @@ class Symbol(BaseModel):
     end_line: int
     issues: Optional[List[Dict[str, str]]] = None
 
+class InheritanceAnalysisPydantic(BaseModel):
+    """Pydantic version of InheritanceAnalysis for serialization."""
+    deepest_class_name: Optional[str] = None
+    deepest_class_depth: int = 0
+    inheritance_chain: List[str] = []
+
+class RecursionAnalysisPydantic(BaseModel):
+    """Pydantic version of RecursionAnalysis for serialization."""
+    recursive_functions: List[str] = []
+    total_recursive_count: int = 0
+
 class FileNode(BaseModel):
     name: str
     type: str  # 'file' or 'directory'
@@ -180,8 +191,8 @@ class AnalysisResponse(BaseModel):
     monthly_commits: Dict[str, int]
     
     # New analysis features
-    inheritance_analysis: InheritanceAnalysis
-    recursion_analysis: RecursionAnalysis
+    inheritance_analysis: InheritanceAnalysisPydantic
+    recursion_analysis: RecursionAnalysisPydantic
     
     # Repository structure with symbols
     repo_structure: FileNode
@@ -214,6 +225,21 @@ def dict_to_file_node(data: Dict) -> FileNode:
         issues=data.get('issues'),
         symbols=data.get('symbols'),
         children=children
+    )
+
+def convert_inheritance_analysis(analysis: InheritanceAnalysis) -> InheritanceAnalysisPydantic:
+    """Convert InheritanceAnalysis dataclass to Pydantic model."""
+    return InheritanceAnalysisPydantic(
+        deepest_class_name=analysis.deepest_class_name,
+        deepest_class_depth=analysis.deepest_class_depth,
+        inheritance_chain=analysis.inheritance_chain or []
+    )
+
+def convert_recursion_analysis(analysis: RecursionAnalysis) -> RecursionAnalysisPydantic:
+    """Convert RecursionAnalysis dataclass to Pydantic model."""
+    return RecursionAnalysisPydantic(
+        recursive_functions=analysis.recursive_functions or [],
+        total_recursive_count=analysis.total_recursive_count
     )
 
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
@@ -447,8 +473,12 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
         desc = "Repository analysis completed"
     
     # Perform new analysis features
-    inheritance_analysis = analyze_inheritance_patterns(codebase)
-    recursion_analysis = analyze_recursive_functions(codebase)
+    inheritance_analysis_raw = analyze_inheritance_patterns(codebase)
+    recursion_analysis_raw = analyze_recursive_functions(codebase)
+    
+    # Convert to Pydantic models for serialization
+    inheritance_analysis = convert_inheritance_analysis(inheritance_analysis_raw)
+    recursion_analysis = convert_recursion_analysis(recursion_analysis_raw)
 
     return AnalysisResponse(
         repo_url=repo_url,
