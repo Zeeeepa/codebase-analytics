@@ -6,28 +6,21 @@ This directory contains the backend code for the Codebase Analytics tool, which 
 
 - `analysis.py`: Core analysis functionality
 - `visualize.py`: Visualization methods
-- `run_analysis.py`: Script to run analysis on a GitHub repository
-- `simple_analysis.py`: Simplified analysis script
 - `run_full_analysis.py`: Comprehensive analysis script
+- `api.py`: FastAPI server for exposing analysis functionality
 
 ## Usage
 
-### Basic Analysis
-
-```bash
-python run_analysis.py https://github.com/username/repo --output-dir ./output
-```
-
-### Simple Analysis
-
-```bash
-python simple_analysis.py https://github.com/username/repo --output-dir ./output
-```
-
-### Full Comprehensive Analysis
+### Comprehensive Analysis
 
 ```bash
 python run_full_analysis.py https://github.com/username/repo --output-dir ./output
+```
+
+### API Server
+
+```bash
+python api.py
 ```
 
 ## Output
@@ -40,6 +33,8 @@ The analysis scripts generate the following output:
   - `dependency_graph.png`: Visualization of the dependency graph
   - `complexity.png`: Visualization of code complexity
   - `issues.png`: Visualization of issues by severity
+  - `file_type_distribution.png`: Distribution of file types
+  - `treemap.png`: Treemap visualization of file sizes
 
 ## Features
 
@@ -56,4 +51,7 @@ The analysis scripts generate the following output:
 - NetworkX
 - Matplotlib
 - NumPy
+- FastAPI
+- Uvicorn
+- Squarify
 

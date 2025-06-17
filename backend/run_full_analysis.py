@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Script to run full comprehensive analysis on a GitHub repository.
-This script uses the codegen SDK to analyze a codebase and generate a comprehensive report.
+Script to run comprehensive analysis on a GitHub repository.
+This script provides a complete analysis of a codebase, including code complexity,
+dependencies, issues, and visualizations.
 """
 
 import os
@@ -18,7 +19,7 @@ import time
 
 def main():
     """Main function."""
-    parser = argparse.ArgumentParser(description="Run full comprehensive analysis on a GitHub repository")
+    parser = argparse.ArgumentParser(description="Run comprehensive analysis on a GitHub repository")
     parser.add_argument("repo_url", help="URL of the GitHub repository")
     parser.add_argument("--branch", help="Branch to analyze", default=None)
     parser.add_argument("--output-dir", help="Output directory", default="output")
