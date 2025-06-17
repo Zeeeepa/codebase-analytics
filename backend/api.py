@@ -83,13 +83,7 @@ class TestAnalysis(BaseModel):
     tests_per_file: float
     top_test_files: List[Dict[str, Any]]  # Changed from 'any' to 'Any'
 
-class FunctionAnalysis(BaseModel):
-    total_functions: int
-    most_called_function: Dict[str, Any]
-    function_with_most_calls: Dict[str, Any]
-    recursive_functions: List[str]
-    unused_functions: List[Dict[str, str]]
-    dead_code: List[Dict[str, str]]
+# Removed duplicate FunctionAnalysis class - using the newer one below
 
 class ClassAnalysis(BaseModel):
     total_classes: int
