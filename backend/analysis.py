@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
-Consolidated Analysis Module
+Enhanced Consolidated Analysis Module
 
 This module contains ALL analysis functions consolidated from:
 - analysis.py (existing analysis functions)
-- advanced_analysis.py (comprehensive analysis features)
 - analyzer.py (legacy analysis functions)
 - comprehensive_analysis.py (additional analysis features)
-- API analysis functions from api.py and enhanced_api.py
 
-Organized into logical sections for maintainability.
+Organized into logical sections for maintainability and enhanced with
+additional features for more comprehensive analysis.
 """
 
 import math
@@ -27,6 +26,9 @@ import uuid
 import inspect
 import time
 import json
+import sys
+import logging
+import tempfile
 
 # Import from Codegen SDK
 from codegen.sdk.core.codebase import Codebase
@@ -44,2004 +46,2649 @@ from codegen.sdk.core.expressions.comparison_expression import ComparisonExpress
 from codegen.sdk.enums import EdgeType, SymbolType
 from codegen.sdk.core.import_resolution import Import
 from codegen.sdk.core.external_module import ExternalModule
+from codegen.configs.models.codebase import CodebaseConfig
+from codegen.configs.models.secrets import SecretsConfig
+from codegen.git.repo_operator.repo_operator import RepoOperator
+from codegen.git.schemas.repo_config import RepoConfig
+from codegen.sdk.codebase.config import ProjectConfig
+from codegen.shared.enums.programming_language import ProgrammingLanguage
 
 # ============================================================================
 # SECTION 1: DATA CLASSES AND ENUMS
 # ============================================================================
 
-@dataclass
 class InheritanceAnalysis:
-    """Analysis of class inheritance patterns."""
-    deepest_class_name: Optional[str] = None
-    deepest_class_depth: int = 0
-    inheritance_chain: List[str] = None
-    
-    def __post_init__(self):
-        if self.inheritance_chain is None:
-            self.inheritance_chain = []
+    """Analysis of inheritance patterns in a codebase."""
+    def __init__(self):
+        self.inheritance_chains = []
+        self.max_inheritance_depth = 0
+        self.classes_with_multiple_inheritance = []
+        self.interface_implementations = {}
+        self.abstract_class_implementations = {}
 
-@dataclass
 class RecursionAnalysis:
-    """Analysis of recursive functions."""
-    recursive_functions: List[str] = None
-    total_recursive_count: int = 0
-    
-    def __post_init__(self):
-        if self.recursive_functions is None:
-            self.recursive_functions = []
+    """Analysis of recursion patterns in a codebase."""
+    def __init__(self):
+        self.recursive_functions = []
+        self.max_recursion_depth = 0
+        self.mutual_recursion_groups = []
 
-@dataclass
 class SymbolInfo:
-    """Information about a code symbol."""
-    id: str
-    name: str
-    type: str  # 'function', 'class', or 'variable'
-    filepath: str
-    start_line: int
-    end_line: int
-    issues: Optional[List[Dict[str, str]]] = None
+    """Information about a symbol in the codebase."""
+    def __init__(self, name, symbol_type, file_path, line_number):
+        self.name = name
+        self.symbol_type = symbol_type
+        self.file_path = file_path
+        self.line_number = line_number
+        self.references = []
+        self.context = {}
 
-@dataclass
 class DependencyAnalysis:
     """Comprehensive dependency analysis results."""
-    total_dependencies: int = 0
-    circular_dependencies: List[List[str]] = field(default_factory=list)
-    dependency_depth: int = 0
-    external_dependencies: List[str] = field(default_factory=list)
-    internal_dependencies: List[str] = field(default_factory=list)
-    dependency_graph: Dict[str, List[str]] = field(default_factory=dict)
-    critical_dependencies: List[str] = field(default_factory=list)
-    unused_dependencies: List[str] = field(default_factory=list)
+    def __init__(self):
+        self.total_dependencies = 0
+        self.circular_dependencies = []
+        self.dependency_depth = 0
+        self.external_dependencies = []
+        self.internal_dependencies = []
+        self.dependency_graph = {}
+        self.critical_dependencies = []
+        self.unused_dependencies = []
 
-@dataclass
 class CallGraphAnalysis:
     """Call graph analysis results."""
-    total_call_relationships: int = 0
-    call_depth: int = 0
-    call_graph: Dict[str, List[str]] = field(default_factory=dict)
-    entry_points: List[str] = field(default_factory=list)
-    leaf_functions: List[str] = field(default_factory=list)
-    most_connected_functions: List[Tuple[str, int]] = field(default_factory=list)
-    call_chains: List[List[str]] = field(default_factory=list)
+    def __init__(self):
+        self.total_functions = 0
+        self.entry_points = []
+        self.leaf_functions = []
+        self.call_chains = []
+        self.max_call_depth = 0
+        self.call_graph = {}
+        self.function_connectivity = {}
 
-@dataclass
 class CodeQualityMetrics:
-    """Advanced code quality metrics."""
-    technical_debt_ratio: float = 0.0
-    code_duplication_percentage: float = 0.0
-    test_coverage_estimate: float = 0.0
-    documentation_coverage: float = 0.0
-    naming_consistency_score: float = 0.0
-    architectural_violations: List[str] = field(default_factory=list)
-    code_smells: List[Dict[str, Any]] = field(default_factory=list)
-    refactoring_opportunities: List[Dict[str, Any]] = field(default_factory=list)
+    """Code quality metrics."""
+    def __init__(self):
+        self.average_complexity = 0.0
+        self.max_complexity = 0
+        self.complex_functions = []
+        self.duplication_percentage = 0.0
+        self.duplicated_blocks = []
+        self.maintainability_index = 0.0
+        self.technical_debt_ratio = 0.0
 
-@dataclass
 class ArchitecturalInsights:
-    """Architectural analysis insights."""
-    architectural_patterns: List[str] = field(default_factory=list)
-    layer_violations: List[str] = field(default_factory=list)
-    coupling_metrics: Dict[str, float] = field(default_factory=dict)
-    cohesion_metrics: Dict[str, float] = field(default_factory=dict)
-    modularity_score: float = 0.0
-    component_analysis: Dict[str, Any] = field(default_factory=dict)
+    """Architectural insights."""
+    def __init__(self):
+        self.component_coupling = {}
+        self.component_cohesion = {}
+        self.architectural_patterns = []
+        self.modularity_score = 0.0
+        self.layering_violations = []
 
-@dataclass
 class SecurityAnalysis:
-    """Security-focused code analysis."""
-    potential_vulnerabilities: List[Dict[str, Any]] = field(default_factory=list)
-    security_hotspots: List[str] = field(default_factory=list)
-    input_validation_issues: List[str] = field(default_factory=list)
-    authentication_patterns: List[str] = field(default_factory=list)
-    encryption_usage: List[str] = field(default_factory=list)
+    """Security analysis results."""
+    def __init__(self):
+        self.security_hotspots = []
+        self.vulnerability_count = 0
+        self.input_validation_issues = []
+        self.security_risk_level = "low"
+
+class PerformanceAnalysis:
+    """Performance analysis results."""
+    def __init__(self):
+        self.performance_hotspots = []
+        self.algorithmic_complexity_issues = []
+        self.memory_usage_patterns = []
 
 @dataclass
-class PerformanceAnalysis:
-    """Performance-related code analysis."""
-    performance_hotspots: List[Dict[str, Any]] = field(default_factory=list)
-    algorithmic_complexity: Dict[str, str] = field(default_factory=dict)
-    memory_usage_patterns: List[str] = field(default_factory=list)
-    optimization_opportunities: List[Dict[str, Any]] = field(default_factory=list)
-
 class AnalysisType(Enum):
-    """Types of analysis that can be performed."""
-    DEPENDENCY = "dependency"
-    CALL_GRAPH = "call_graph"
-    CODE_QUALITY = "code_quality"
-    ARCHITECTURAL = "architectural"
-    SECURITY = "security"
-    PERFORMANCE = "performance"
+    """Types of analysis available."""
+    DEPENDENCY = auto()
+    CALL_GRAPH = auto()
+    CODE_QUALITY = auto()
+    ARCHITECTURAL = auto()
+    SECURITY = auto()
+    PERFORMANCE = auto()
+    INHERITANCE = auto()
+    RECURSION = auto()
 
-# Legacy enums from analyzer.py
 class IssueSeverity(str, Enum):
     """Severity levels for issues."""
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
     CRITICAL = "critical"
+    MAJOR = "major"
+    MINOR = "minor"
+    INFO = "info"
 
 class IssueCategory(str, Enum):
-    """Categories of issues."""
-    SECURITY = "security"
-    PERFORMANCE = "performance"
-    MAINTAINABILITY = "maintainability"
-    RELIABILITY = "reliability"
-    STYLE = "style"
-    DEAD_CODE = "dead_code"
-    COMPLEXITY = "complexity"
-    STYLE_ISSUE = "style_issue"
-    DOCUMENTATION = "documentation"
-    TYPE_ERROR = "type_error"
-    PARAMETER_MISMATCH = "parameter_mismatch"
-    RETURN_TYPE_ERROR = "return_type_error"
+    """Categories for issues."""
     IMPLEMENTATION_ERROR = "implementation_error"
-    MISSING_IMPLEMENTATION = "missing_implementation"
-    IMPORT_ERROR = "import_error"
-    DEPENDENCY_CYCLE = "dependency_cycle"
+    MISSPELLED_FUNCTION = "misspelled_function"
+    NULL_REFERENCE = "null_reference"
+    UNSAFE_ASSERTION = "unsafe_assertion"
+    IMPROPER_EXCEPTION = "improper_exception"
+    INCOMPLETE_IMPLEMENTATION = "incomplete_implementation"
+    INEFFICIENT_PATTERN = "inefficient_pattern"
+    CODE_DUPLICATION = "code_duplication"
+    UNUSED_PARAMETER = "unused_parameter"
+    REDUNDANT_CODE = "redundant_code"
+    FORMATTING_ISSUE = "formatting_issue"
+    SUBOPTIMAL_DEFAULT = "suboptimal_default"
+    WRONG_PARAMETER = "wrong_parameter"
+    RUNTIME_ERROR = "runtime_error"
+    DEAD_CODE = "dead_code"
+    SECURITY_VULNERABILITY = "security_vulnerability"
+    PERFORMANCE_ISSUE = "performance_issue"
 
 class IssueStatus(str, Enum):
     """Status of an issue."""
     OPEN = "open"
-    FIXED = "fixed"
-    WONTFIX = "wontfix"
-    INVALID = "invalid"
+    IN_PROGRESS = "in_progress"
+    RESOLVED = "resolved"
+    WONT_FIX = "wont_fix"
     DUPLICATE = "duplicate"
 
 class ChangeType(str, Enum):
-    """Type of change for a diff."""
-    Added = "added"
-    Removed = "removed"
-    Modified = "modified"
-    Renamed = "renamed"
+    """Types of changes that can be made to code."""
+    ADD = "add"
+    MODIFY = "modify"
+    DELETE = "delete"
+    RENAME = "rename"
+    MOVE = "move"
 
 class TransactionPriority(int, Enum):
     """Priority levels for transactions."""
-    HIGH = 0
-    MEDIUM = 5
-    LOW = 10
+    LOW = 0
+    MEDIUM = 1
+    HIGH = 2
+    CRITICAL = 3
+
+
 
 @dataclass
 class CodeLocation:
-    """Location of an issue in code."""
-    file: str
-    line: Optional[int] = None
-    column: Optional[int] = None
-    end_line: Optional[int] = None
-    end_column: Optional[int] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
-        return {k: v for k, v in asdict(self).items() if v is not None}
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "CodeLocation":
-        """Create from dictionary representation."""
-        return cls(**{k: v for k, v in data.items() if k in inspect.signature(cls).parameters})
+    """Location of code in a file."""
+    file_path: str
+    line_start: int
+    line_end: Optional[int] = None
+    column_start: Optional[int] = None
+    column_end: Optional[int] = None
+    
+    def __str__(self):
+        if self.line_end and self.line_end != self.line_start:
+            return f"{self.file_path}:{self.line_start}-{self.line_end}"
+        return f"{self.file_path}:{self.line_start}"
 
 @dataclass
 class Issue:
-    """Represents an issue found during analysis."""
-    # Core fields
+    """Representation of a code issue."""
+    id: str
+    location: CodeLocation
     message: str
     severity: IssueSeverity
-    location: CodeLocation
-
-    # Classification fields
-    category: Optional[IssueCategory] = None
-    analysis_type: Optional[AnalysisType] = None
+    category: IssueCategory
     status: IssueStatus = IssueStatus.OPEN
-
-    # Context fields
-    symbol: Optional[str] = None
-    code: Optional[str] = None
-    suggestion: Optional[str] = None
-    related_symbols: List[str] = field(default_factory=list)
-    related_locations: List[CodeLocation] = field(default_factory=list)
-
-    # Metadata fields
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    updated_at: Optional[str] = None
-    resolved_at: Optional[str] = None
-    resolved_by: Optional[str] = None
-    id: str = field(default_factory=lambda: str(uuid.uuid4()))
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
-        result = {}
-        for k, v in asdict(self).items():
-            if k == "location" and v is not None:
-                result[k] = v.to_dict()
-            elif k == "related_locations" and v:
-                result[k] = [loc.to_dict() for loc in v]
-            elif v is not None:
-                if isinstance(v, Enum):
-                    result[k] = v.value
-                else:
-                    result[k] = v
-        return result
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Issue":
-        """Create from dictionary representation."""
-        # Handle nested objects
-        if "location" in data and data["location"]:
-            data["location"] = CodeLocation.from_dict(data["location"])
-        if "related_locations" in data and data["related_locations"]:
-            data["related_locations"] = [CodeLocation.from_dict(loc) for loc in data["related_locations"]]
-        
-        # Handle enums
-        if "severity" in data and not isinstance(data["severity"], IssueSeverity):
-            data["severity"] = IssueSeverity(data["severity"])
-        if "category" in data and data["category"] and not isinstance(data["category"], IssueCategory):
-            data["category"] = IssueCategory(data["category"])
-        if "status" in data and not isinstance(data["status"], IssueStatus):
-            data["status"] = IssueStatus(data["status"])
-        if "analysis_type" in data and data["analysis_type"] and not isinstance(data["analysis_type"], AnalysisType):
-            data["analysis_type"] = AnalysisType(data["analysis_type"])
-        
-        return cls(**{k: v for k, v in data.items() if k in inspect.signature(cls).parameters})
-
-class IssueCollection:
-    """Collection of issues with filtering and grouping capabilities."""
-
-    def __init__(self, issues: Optional[List[Issue]] = None):
-        """
-        Initialize the issue collection.
-
-        Args:
-            issues: Initial list of issues
-        """
-        self.issues = issues or []
-        self._filters = []
-
-    def add_issue(self, issue: Issue):
-        """
-        Add an issue to the collection.
-
-        Args:
-            issue: Issue to add
-        """
-        self.issues.append(issue)
-
-    def add_issues(self, issues: List[Issue]):
-        """
-        Add multiple issues to the collection.
-
-        Args:
-            issues: Issues to add
-        """
-        self.issues.extend(issues)
-
-    def filter(self, **kwargs) -> "IssueCollection":
-        """
-        Filter issues by attributes.
-
-        Args:
-            **kwargs: Attribute-value pairs to filter by
-
-        Returns:
-            A new IssueCollection with filtered issues
-        """
-        filtered_issues = []
-        for issue in self.issues:
-            match = True
-            for key, value in kwargs.items():
-                if not hasattr(issue, key) or getattr(issue, key) != value:
-                    match = False
-                    break
-            if match:
-                filtered_issues.append(issue)
-        return IssueCollection(filtered_issues)
-
-    def group_by(self, attribute: str) -> Dict[Any, "IssueCollection"]:
-        """
-        Group issues by an attribute.
-
-        Args:
-            attribute: Attribute to group by
-
-        Returns:
-            Dictionary mapping attribute values to IssueCollections
-        """
-        groups = {}
-        for issue in self.issues:
-            if hasattr(issue, attribute):
-                key = getattr(issue, attribute)
-                if isinstance(key, Enum):
-                    key = key.value
-                if key not in groups:
-                    groups[key] = IssueCollection()
-                groups[key].add_issue(issue)
-        return groups
-
-    def count(self) -> int:
-        """
-        Count the number of issues.
-
-        Returns:
-            Number of issues
-        """
-        return len(self.issues)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """
-        Convert to dictionary representation.
-
-        Returns:
-            Dictionary representation
-        """
+    created_at: datetime = field(default_factory=datetime.now)
+    updated_at: datetime = field(default_factory=datetime.now)
+    assigned_to: Optional[str] = None
+    related_issues: List[str] = field(default_factory=list)
+    tags: List[str] = field(default_factory=list)
+    context: Dict[str, Any] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        if not self.id:
+            self.id = str(uuid.uuid4())
+    
+    def update_status(self, status: IssueStatus):
+        """Update the status of the issue."""
+        self.status = status
+        self.updated_at = datetime.now()
+    
+    def assign(self, assignee: str):
+        """Assign the issue to someone."""
+        self.assigned_to = assignee
+        self.updated_at = datetime.now()
+    
+    def add_related_issue(self, issue_id: str):
+        """Add a related issue."""
+        if issue_id not in self.related_issues:
+            self.related_issues.append(issue_id)
+            self.updated_at = datetime.now()
+    
+    def add_tag(self, tag: str):
+        """Add a tag to the issue."""
+        if tag not in self.tags:
+            self.tags.append(tag)
+            self.updated_at = datetime.now()
+    
+    def add_context(self, key: str, value: Any):
+        """Add context information to the issue."""
+        self.context[key] = value
+        self.updated_at = datetime.now()
+    
+    def to_dict(self):
+        """Convert the issue to a dictionary."""
         return {
-            "count": self.count(),
-            "issues": [issue.to_dict() for issue in self.issues]
+            "id": self.id,
+            "location": str(self.location),
+            "message": self.message,
+            "severity": self.severity.value,
+            "category": self.category.value,
+            "status": self.status.value,
+            "created_at": self.created_at.isoformat(),
+            "updated_at": self.updated_at.isoformat(),
+            "assigned_to": self.assigned_to,
+            "related_issues": self.related_issues,
+            "tags": self.tags,
+            "context": self.context
         }
 
-    def to_list(self) -> List[Dict[str, Any]]:
-        """
-        Convert to list representation.
-
-        Returns:
-            List of issue dictionaries
-        """
-        return [issue.to_dict() for issue in self.issues]
+@dataclass
+class IssueCollection:
+    """Collection of issues."""
+    issues: List[Issue] = field(default_factory=list)
+    
+    def add_issue(self, issue: Issue):
+        """Add an issue to the collection."""
+        self.issues.append(issue)
+    
+    def get_issue_by_id(self, issue_id: str) -> Optional[Issue]:
+        """Get an issue by its ID."""
+        for issue in self.issues:
+            if issue.id == issue_id:
+                return issue
+        return None
+    
+    def get_issues_by_severity(self, severity: IssueSeverity) -> List[Issue]:
+        """Get issues by severity."""
+        return [issue for issue in self.issues if issue.severity == severity]
+    
+    def get_issues_by_category(self, category: IssueCategory) -> List[Issue]:
+        """Get issues by category."""
+        return [issue for issue in self.issues if issue.category == category]
+    
+    def get_issues_by_status(self, status: IssueStatus) -> List[Issue]:
+        """Get issues by status."""
+        return [issue for issue in self.issues if issue.status == status]
+    
+    def get_issues_by_file(self, file_path: str) -> List[Issue]:
+        """Get issues by file path."""
+        return [issue for issue in self.issues if issue.location.file_path == file_path]
+    
+    def get_issues_by_tag(self, tag: str) -> List[Issue]:
+        """Get issues by tag."""
+        return [issue for issue in self.issues if tag in issue.tags]
+    
+    def get_issues_by_assignee(self, assignee: str) -> List[Issue]:
+        """Get issues by assignee."""
+        return [issue for issue in self.issues if issue.assigned_to == assignee]
+    
+    def get_open_issues(self) -> List[Issue]:
+        """Get all open issues."""
+        return self.get_issues_by_status(IssueStatus.OPEN)
+    
+    def get_resolved_issues(self) -> List[Issue]:
+        """Get all resolved issues."""
+        return self.get_issues_by_status(IssueStatus.RESOLVED)
+    
+    def get_critical_issues(self) -> List[Issue]:
+        """Get all critical issues."""
+        return self.get_issues_by_severity(IssueSeverity.CRITICAL)
+    
+    def get_major_issues(self) -> List[Issue]:
+        """Get all major issues."""
+        return self.get_issues_by_severity(IssueSeverity.MAJOR)
+    
+    def get_minor_issues(self) -> List[Issue]:
+        """Get all minor issues."""
+        return self.get_issues_by_severity(IssueSeverity.MINOR)
+    
+    def get_info_issues(self) -> List[Issue]:
+        """Get all info issues."""
+        return self.get_issues_by_severity(IssueSeverity.INFO)
+    
+    def count_by_severity(self) -> Dict[str, int]:
+        """Count issues by severity."""
+        counts = {severity.value: 0 for severity in IssueSeverity}
+        for issue in self.issues:
+            counts[issue.severity.value] += 1
+        return counts
+    
+    def count_by_category(self) -> Dict[str, int]:
+        """Count issues by category."""
+        counts = {category.value: 0 for category in IssueCategory}
+        for issue in self.issues:
+            counts[issue.category.value] += 1
+        return counts
+    
+    def count_by_status(self) -> Dict[str, int]:
+        """Count issues by status."""
+        counts = {status.value: 0 for status in IssueStatus}
+        for issue in self.issues:
+            counts[issue.status.value] += 1
+        return counts
+    
+    def to_dict(self):
+        """Convert the collection to a dictionary."""
+        return {
+            "issues": [issue.to_dict() for issue in self.issues],
+            "counts": {
+                "by_severity": self.count_by_severity(),
+                "by_category": self.count_by_category(),
+                "by_status": self.count_by_status()
+            }
+        }
 
 @dataclass
 class AnalysisSummary:
-    """Summary statistics for an analysis."""
+    """Summary of analysis results."""
     total_files: int = 0
+    total_lines: int = 0
     total_functions: int = 0
     total_classes: int = 0
     total_issues: int = 0
-    analysis_time: str = field(default_factory=lambda: datetime.now().isoformat())
-    analysis_duration_ms: Optional[int] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
-        return {k: v for k, v in asdict(self).items() if v is not None}
+    issue_counts: Dict[str, int] = field(default_factory=dict)
+    metrics: Dict[str, Any] = field(default_factory=dict)
+    recommendations: List[str] = field(default_factory=list)
 
 @dataclass
 class CodeQualityResult:
-    """Results of code quality analysis."""
-    dead_code: Dict[str, Any] = field(default_factory=dict)
-    complexity: Dict[str, Any] = field(default_factory=dict)
-    parameter_issues: Dict[str, Any] = field(default_factory=dict)
-    style_issues: Dict[str, Any] = field(default_factory=dict)
-    implementation_issues: Dict[str, Any] = field(default_factory=dict)
-    maintainability: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
-        return dict(asdict(self).items())
-
-@dataclass
-class DependencyResult:
-    """Results of dependency analysis."""
-    import_dependencies: Dict[str, Any] = field(default_factory=dict)
-    circular_dependencies: Dict[str, Any] = field(default_factory=dict)
-    module_coupling: Dict[str, Any] = field(default_factory=dict)
-    external_dependencies: Dict[str, Any] = field(default_factory=dict)
-    call_graph: Dict[str, Any] = field(default_factory=dict)
-    class_hierarchy: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
-        return dict(asdict(self).items())
-
-@dataclass
-class AnalysisResult:
-    """Comprehensive analysis result."""
-    # Core data
-    analysis_types: List[AnalysisType]
-    summary: AnalysisSummary = field(default_factory=AnalysisSummary)
+    """Result of code quality analysis."""
+    maintainability_index: float = 0.0
+    cyclomatic_complexity: float = 0.0
+    halstead_volume: float = 0.0
+    source_lines_of_code: int = 0
+    comment_density: float = 0.0
+    duplication_percentage: float = 0.0
+    technical_debt_ratio: float = 0.0
     issues: IssueCollection = field(default_factory=IssueCollection)
 
-    # Analysis results
-    code_quality: Optional[CodeQualityResult] = None
-    dependencies: Optional[DependencyResult] = None
 
-    # Metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    repo_name: Optional[str] = None
-    repo_path: Optional[str] = None
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary representation."""
-        result = {}
-        for k, v in asdict(self).items():
-            if v is not None:
-                if k == "analysis_types":
-                    result[k] = [t.value for t in v]
-                elif k == "summary":
-                    result[k] = v.to_dict()
-                elif k == "issues":
-                    result[k] = v.to_dict()
-                elif k in ["code_quality", "dependencies"] and v is not None:
-                    result[k] = v.to_dict()
-                else:
-                    result[k] = v
-        return result
-
-class CodebaseAnalyzer:
-    """
-    Comprehensive code analyzer for detecting issues and analyzing codebase structure.
-    
-    This class provides a unified interface for analyzing codebases, integrating
-    functionality from various analyzer modules to detect code issues, analyze
-    dependencies, and provide insights into code quality and structure.
-    """
-
-    def __init__(
-        self,
-        repo_url: Optional[str] = None,
-        repo_path: Optional[str] = None,
-        base_branch: str = "main",
-        language: Optional[str] = None,
-        file_ignore_list: Optional[List[str]] = None,
-    ):
-        """
-        Initialize the analyzer.
-        
-        Args:
-            repo_url: URL of the repository to analyze
-            repo_path: Path to the repository to analyze
-            base_branch: Base branch to compare against
-            language: Primary language of the codebase
-            file_ignore_list: List of file patterns to ignore
-        """
-        self.repo_url = repo_url
-        self.repo_path = repo_path
-        self.base_branch = base_branch
-        self.language = language
-        self.file_ignore_list = file_ignore_list or []
-        self.codebase = None
-        self.issues = IssueCollection()
-        
-    def load_codebase(self, codebase: Optional[Codebase] = None) -> Codebase:
-        """
-        Load a codebase for analysis.
-        
-        Args:
-            codebase: Optional pre-loaded Codebase object
-            
-        Returns:
-            The loaded Codebase object
-        """
-        if codebase:
-            self.codebase = codebase
-            return codebase
-            
-        if not self.codebase:
-            # This is a placeholder - in a real implementation, we would use the SDK to load the codebase
-            self.codebase = Codebase()
-            
-        return self.codebase
-    
-    def analyze(self, analysis_types: Optional[List[AnalysisType]] = None) -> AnalysisResult:
-        """
-        Analyze the codebase.
-        
-        Args:
-            analysis_types: Types of analysis to perform
-            
-        Returns:
-            Analysis results
-        """
-        if not self.codebase:
-            self.load_codebase()
-            
-        if not analysis_types:
-            analysis_types = list(AnalysisType)
-            
-        # Create result object
-        result = AnalysisResult(
-            analysis_types=analysis_types,
-            repo_name=self.repo_url.split("/")[-1] if self.repo_url else None,
-            repo_path=self.repo_path,
-        )
-        
-        # Perform analysis
-        start_time = datetime.now()
-        
-        # Update summary
-        result.summary.total_files = len(list(self.codebase.files)) if hasattr(self.codebase, 'files') else 0
-        result.summary.total_functions = len(list(self.codebase.functions)) if hasattr(self.codebase, 'functions') else 0
-        result.summary.total_classes = len(list(self.codebase.classes)) if hasattr(self.codebase, 'classes') else 0
-        
-        # Perform specific analyses
-        if AnalysisType.CODE_QUALITY in analysis_types:
-            result.code_quality = self._analyze_code_quality()
-            
-        if AnalysisType.DEPENDENCY in analysis_types:
-            result.dependencies = self._analyze_dependencies()
-            
-        # Calculate duration
-        end_time = datetime.now()
-        duration_ms = int((end_time - start_time).total_seconds() * 1000)
-        result.summary.analysis_duration_ms = duration_ms
-        
-        # Add issues
-        result.issues = self.issues
-        result.summary.total_issues = self.issues.count()
-        
-        return result
-    
-    def _analyze_code_quality(self) -> CodeQualityResult:
-        """
-        Analyze code quality.
-        
-        Returns:
-            Code quality analysis results
-        """
-        # This is a placeholder implementation
-        return CodeQualityResult()
-    
-    def _analyze_dependencies(self) -> DependencyResult:
-        """
-        Analyze dependencies.
-        
-        Returns:
-            Dependency analysis results
-        """
-        # This is a placeholder implementation
-        return DependencyResult()
-
-    def _analyze_import_dependencies(self) -> Dict[str, Any]:
-        """
-        Analyze import dependencies between files.
-
-        Returns:
-            Dictionary containing import dependency analysis results
-        """
-        print("Analyzing import dependencies")
-
-        # Generate dependency graph
-        dependency_graph = self._get_dependency_graph()
-
-        # Count dependencies per file
-        dependency_counts = {
-            file_path: len(deps) for file_path, deps in dependency_graph.items()
-        }
-
-        # Find files with high number of dependencies
-        high_dependency_files = [
-            {"file": file_path, "dependency_count": count}
-            for file_path, count in dependency_counts.items()
-            if count > 10  # Threshold for high dependency count
-        ]
-
-        # Sort by dependency count (descending)
-        high_dependency_files.sort(key=lambda x: x["dependency_count"], reverse=True)
-
-        # Generate import dependency analysis results
-        import_dependencies = {
-            "dependency_graph": dependency_graph,
-            "high_dependency_files": high_dependency_files[:10],  # Top 10
-            "summary": {
-                "total_files": len(dependency_graph),
-                "avg_dependencies": sum(dependency_counts.values()) / len(dependency_counts) if dependency_counts else 0,
-                "max_dependencies": max(dependency_counts.values()) if dependency_counts else 0,
-            },
-        }
-
-        return import_dependencies
-
-    def _get_dependency_graph(self) -> Dict[str, List[str]]:
-        """
-        Generate a dependency graph for the codebase.
-
-        Returns:
-            Dictionary mapping file paths to lists of imported file paths
-        """
-        dependency_graph = {}
-
-        # Build dependency graph
-        for file in self.codebase.files:
-            file_path = file.path
-            dependency_graph[file_path] = []
-
-            # Add imported files to dependencies
-            if hasattr(file, "imports"):
-                for imp in file.imports:
-                    # Skip standard library imports
-                    if not hasattr(imp, "file") or not imp.file:
-                        continue
-
-                    # Add imported file to dependencies
-                    imported_file_path = imp.file.path
-                    if imported_file_path != file_path:  # Skip self-imports
-                        dependency_graph[file_path].append(imported_file_path)
-
-        return dependency_graph
-
-    def _find_circular_dependencies(self) -> Dict[str, Any]:
-        """
-        Find circular dependencies in the codebase.
-
-        Returns:
-            Dictionary containing circular dependency analysis results
-        """
-        print("Analyzing circular dependencies")
-
-        # Get dependency graph
-        dependency_graph = self._get_dependency_graph()
-        
-        # Find circular dependencies
-        circular_deps = []
-        visited = set()
-        
-        def detect_cycles(node, path):
-            if node in path:
-                # Found a cycle
-                cycle_start = path.index(node)
-                cycle = path[cycle_start:] + [node]
-                
-                # Add to circular dependencies if not already found
-                cycle_str = " -> ".join(cycle)
-                if not any(cycle_str in cd["cycle_str"] for cd in circular_deps):
-                    circular_deps.append({
-                        "cycle": cycle,
-                        "cycle_str": cycle_str,
-                        "length": len(cycle),
-                    })
-                return
-            
-            if node in visited:
-                return
-                
-            visited.add(node)
-            new_path = path + [node]
-            
-            # Check dependencies
-            if node in dependency_graph:
-                for dep in dependency_graph[node]:
-                    detect_cycles(dep, new_path)
-            
-            visited.remove(node)
-        
-        # Check each file for cycles
-        for file_path in dependency_graph:
-            detect_cycles(file_path, [])
-        
-        # Sort by cycle length
-        circular_deps.sort(key=lambda x: x["length"])
-        
-        # Generate circular dependency analysis results
-        circular_dependencies = {
-            "circular_dependencies": circular_deps,
-            "summary": {
-                "total_cycles": len(circular_deps),
-                "max_cycle_length": max([cd["length"] for cd in circular_deps]) if circular_deps else 0,
-            },
-        }
-        
-        return circular_dependencies
-
-    def _generate_html_report(self, output_file: Optional[str] = None):
-        """
-        Generate an HTML report of the analysis results.
-        
-        Args:
-            output_file: Path to save the report to
-        """
-        if not hasattr(self, "analysis_result") or not self.analysis_result:
-            raise ValueError("No analysis results to save")
-            
-        if not output_file:
-            output_file = "codebase_analysis_report.html"
-        
-        # Simple HTML template
-        repo_name = self.repo_url.split("/")[-1] if self.repo_url else (self.repo_path or "Unknown")
-        analysis_time = self.analysis_result.summary.analysis_time
-        
-        html = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Codebase Analysis Report: {repo_name}</title>
-            <style>
-                body {{
-                    font-family: Arial, sans-serif;
-                    line-height: 1.6;
-                    margin: 0;
-                    padding: 20px;
-                    color: #333;
-                }}
-                h1, h2, h3 {{
-                    color: #2c3e50;
-                }}
-                .container {{
-                    max-width: 1200px;
-                    margin: 0 auto;
-                }}
-                .summary {{
-                    background-color: #f8f9fa;
-                    padding: 15px;
-                    border-radius: 5px;
-                    margin-bottom: 20px;
-                }}
-                table {{
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin-bottom: 20px;
-                }}
-                th, td {{
-                    padding: 12px 15px;
-                    border-bottom: 1px solid #ddd;
-                    text-align: left;
-                }}
-                th {{
-                    background-color: #f2f2f2;
-                }}
-                tr:hover {{
-                    background-color: #f5f5f5;
-                }}
-                .severity-high {{
-                    color: #e74c3c;
-                }}
-                .severity-medium {{
-                    color: #f39c12;
-                }}
-                .severity-low {{
-                    color: #3498db;
-                }}
-                .severity-info {{
-                    color: #2ecc71;
-                }}
-                .footer {{
-                    margin-top: 30px;
-                    text-align: center;
-                    font-size: 0.8em;
-                    color: #7f8c8d;
-                }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>Codebase Analysis Report: {repo_name}</h1>
-                <div class="summary">
-                    <h2>Summary</h2>
-                    <p><strong>Analysis Time:</strong> {analysis_time}</p>
-                    <p><strong>Language:</strong> {self.language or 'Auto-detected'}</p>
-                    <p><strong>Total Files:</strong> {self.analysis_result.summary.total_files}</p>
-                    <p><strong>Total Classes:</strong> {self.analysis_result.summary.total_classes}</p>
-                    <p><strong>Total Functions:</strong> {self.analysis_result.summary.total_functions}</p>
-                </div>
-        """
-        
-        # Add code quality section if available
-        if hasattr(self.analysis_result, "code_quality"):
-            html += self._generate_code_quality_html()
-            
-        # Add dependency section if available
-        if hasattr(self.analysis_result, "dependencies"):
-            html += self._generate_dependencies_html()
-            
-        # Add performance section if available
-        if hasattr(self.analysis_result, "performance"):
-            html += self._generate_performance_html()
-            
-        # Add footer
-        html += f"""
-                <div class="footer">
-                    <p>Generated by Codebase Analyzer on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                </div>
-            </div>
-        </body>
-        </html>
-        """
-        
-        # Save to file
-        with open(output_file, "w") as f:
-            f.write(html)
-            
-        print(f"HTML report saved to: {output_file}")
-        
-    def _generate_code_quality_html(self) -> str:
-        """Generate HTML for code quality section."""
-        html = """
-                <h2>Code Quality Analysis</h2>
-        """
-        
-        # Add dead code section
-        if hasattr(self.analysis_result.code_quality, "dead_code"):
-            dead_code = self.analysis_result.code_quality.dead_code
-            html += f"""
-                <h3>Dead Code</h3>
-                <p>Found {dead_code['summary']['unused_functions_count']} unused functions, 
-                   {dead_code['summary']['unused_classes_count']} unused classes, and 
-                   {dead_code['summary']['unused_imports_count']} unused imports.</p>
-            """
-            
-            if dead_code["unused_functions"]:
-                html += """
-                <h4>Unused Functions</h4>
-                <table>
-                    <tr>
-                        <th>Function</th>
-                        <th>File</th>
-                        <th>Line</th>
-                    </tr>
-                """
-                
-                for func in dead_code["unused_functions"][:10]:  # Show top 10
-                    html += f"""
-                    <tr>
-                        <td>{func['name']}</td>
-                        <td>{func['file']}</td>
-                        <td>{func['line'] or 'N/A'}</td>
-                    </tr>
-                    """
-                    
-                html += "</table>"
-                
-                if len(dead_code["unused_functions"]) > 10:
-                    html += f"<p>And {len(dead_code['unused_functions']) - 10} more...</p>"
-        
-        # Add parameter issues section
-        if hasattr(self.analysis_result.code_quality, "parameter_issues"):
-            param_issues = self.analysis_result.code_quality.parameter_issues
-            html += f"""
-                <h3>Parameter Issues</h3>
-                <p>Found {param_issues['summary']['unused_parameters_count']} unused parameters, 
-                   {param_issues['summary']['missing_types_count']} parameters missing type annotations, and 
-                   {param_issues['summary']['incorrect_usage_count']} incorrect usages.</p>
-            """
-        
-        # Add implementation issues section
-        if hasattr(self.analysis_result.code_quality, "implementation_issues"):
-            impl_issues = self.analysis_result.code_quality.implementation_issues
-            html += f"""
-                <h3>Implementation Issues</h3>
-                <p>Found {impl_issues['summary']['empty_functions_count']} empty functions and 
-                   {impl_issues['summary']['abstract_methods_without_implementation_count']} unimplemented abstract methods.</p>
-            """
-            
-        return html
-        
-    def _generate_dependencies_html(self) -> str:
-        """Generate HTML for dependencies section."""
-        html = """
-                <h2>Dependency Analysis</h2>
-        """
-        
-        # Add import dependencies section
-        if hasattr(self.analysis_result.dependencies, "import_dependencies"):
-            import_deps = self.analysis_result.dependencies.import_dependencies
-            html += f"""
-                <h3>Import Dependencies</h3>
-                <p>Analyzed {import_deps['summary']['total_files']} files with an average of 
-                   {import_deps['summary']['avg_dependencies']:.2f} dependencies per file.</p>
-            """
-            
-            if import_deps["high_dependency_files"]:
-                html += """
-                <h4>Files with High Dependencies</h4>
-                <table>
-                    <tr>
-                        <th>File</th>
-                        <th>Dependency Count</th>
-                    </tr>
-                """
-                
-                for file in import_deps["high_dependency_files"]:
-                    html += f"""
-                    <tr>
-                        <td>{file['file']}</td>
-                        <td>{file['dependency_count']}</td>
-                    </tr>
-                    """
-                    
-                html += "</table>"
-        
-        # Add circular dependencies section
-        if hasattr(self.analysis_result.dependencies, "circular_dependencies"):
-            circular_deps = self.analysis_result.dependencies.circular_dependencies
-            html += f"""
-                <h3>Circular Dependencies</h3>
-                <p>Found {circular_deps['summary']['total_cycles']} cycles.</p>
-            """
-            
-            if circular_deps["circular_dependencies"]:
-                html += """
-                <h4>Circular Dependency Cycles</h4>
-                <table>
-                    <tr>
-                        <th>Cycle</th>
-                        <th>Length</th>
-                    </tr>
-                """
-                
-                for cycle in circular_deps["circular_dependencies"]:
-                    html += f"""
-                    <tr>
-                        <td>{cycle['cycle_str']}</td>
-                        <td>{cycle['length']}</td>
-                    </tr>
-                    """
-                    
-                html += "</table>"
-            
-        return html
-        
-    def _generate_performance_html(self) -> str:
-        """Generate HTML for performance section."""
-        html = """
-                <h2>Performance Analysis</h2>
-        """
-        
-        # Add complexity section
-        if hasattr(self.analysis_result.performance, "complexity"):
-            complexity = self.analysis_result.performance.complexity
-            html += f"""
-                <h3>Code Complexity</h3>
-                <p>Average cyclomatic complexity: {complexity['summary']['avg_complexity']:.2f}</p>
-            """
-            
-            if complexity.get("high_complexity_functions"):
-                html += """
-                <h4>High Complexity Functions</h4>
-                <table>
-                    <tr>
-                        <th>Function</th>
-                        <th>File</th>
-                        <th>Complexity</th>
-                    </tr>
-                """
-                
-                for func in complexity["high_complexity_functions"]:
-                    html += f"""
-                    <tr>
-                        <td>{func['name']}</td>
-                        <td>{func['file']}</td>
-                        <td>{func['complexity']}</td>
-                    </tr>
-                    """
-                    
-                html += "</table>"
-            
-        return html
-        
-    def _print_console_report(self):
-        """Print a summary report to the console."""
-        if not hasattr(self, "analysis_result") or not self.analysis_result:
-            raise ValueError("No analysis results to print")
-            
-        repo_name = self.repo_url.split("/")[-1] if self.repo_url else (self.repo_path or "Unknown")
-        
-        print(f"\n{'=' * 80}")
-        print(f"CODEBASE ANALYSIS REPORT: {repo_name}")
-        print(f"{'=' * 80}")
-        print(f"Analysis Time: {self.analysis_result.summary.analysis_time}")
-        print(f"Language: {self.language or 'Auto-detected'}")
-        
-        # Print summary
-        print(f"\n{'-' * 40}")
-        print("SUMMARY:")
-        print(f"{'-' * 40}")
-        print(f"Total Files: {self.analysis_result.summary.total_files}")
-        print(f"Total Classes: {self.analysis_result.summary.total_classes}")
-        print(f"Total Functions: {self.analysis_result.summary.total_functions}")
-        print(f"Total Issues: {self.analysis_result.summary.total_issues}")
-        
-        # Print code quality summary
-        if hasattr(self.analysis_result, "code_quality"):
-            print(f"\n{'-' * 40}")
-            print("CODE QUALITY:")
-            print(f"{'-' * 40}")
-            
-            # Print dead code summary
-            if hasattr(self.analysis_result.code_quality, "dead_code"):
-                dead_code = self.analysis_result.code_quality.dead_code
-                print(f"Dead Code: {dead_code['summary']['unused_functions_count']} unused functions, "
-                      f"{dead_code['summary']['unused_classes_count']} unused classes, "
-                      f"{dead_code['summary']['unused_imports_count']} unused imports")
-            
-            # Print parameter issues summary
-            if hasattr(self.analysis_result.code_quality, "parameter_issues"):
-                param_issues = self.analysis_result.code_quality.parameter_issues
-                print(f"Parameter Issues: {param_issues['summary']['unused_parameters_count']} unused parameters, "
-                      f"{param_issues['summary']['missing_types_count']} missing type annotations, "
-                      f"{param_issues['summary']['incorrect_usage_count']} incorrect usages")
-            
-            # Print implementation issues summary
-            if hasattr(self.analysis_result.code_quality, "implementation_issues"):
-                impl_issues = self.analysis_result.code_quality.implementation_issues
-                print(f"Implementation Issues: {impl_issues['summary']['empty_functions_count']} empty functions, "
-                      f"{impl_issues['summary']['abstract_methods_without_implementation_count']} unimplemented abstract methods")
-        
-        # Print dependency summary
-        if hasattr(self.analysis_result, "dependencies"):
-            print(f"\n{'-' * 40}")
-            print("DEPENDENCIES:")
-            print(f"{'-' * 40}")
-            
-            # Print import dependencies summary
-            if hasattr(self.analysis_result.dependencies, "import_dependencies"):
-                import_deps = self.analysis_result.dependencies.import_dependencies
-                print(f"Import Dependencies: {import_deps['summary']['total_files']} files, "
-                      f"{import_deps['summary']['avg_dependencies']:.2f} avg dependencies per file")
-            
-            # Print circular dependencies summary
-            if hasattr(self.analysis_result.dependencies, "circular_dependencies"):
-                circular_deps = self.analysis_result.dependencies.circular_dependencies
-                print(f"Circular Dependencies: {circular_deps['summary']['total_cycles']} cycles found")
-        
-        # Print performance summary
-        if hasattr(self.analysis_result, "performance"):
-            print(f"\n{'-' * 40}")
-            print("PERFORMANCE:")
-            print(f"{'-' * 40}")
-            
-            # Print complexity summary
-            if hasattr(self.analysis_result.performance, "complexity"):
-                complexity = self.analysis_result.performance.complexity
-                print(f"Code Complexity: {complexity['summary']['avg_complexity']:.2f} avg cyclomatic complexity")
-                print(f"High Complexity Functions: {len(complexity.get('high_complexity_functions', []))}")
-        
-        print(f"\n{'=' * 80}")
 
 # ============================================================================
 # SECTION 2: CORE COMPLEXITY AND METRICS FUNCTIONS
 # ============================================================================
 
-def calculate_cyclomatic_complexity(function: Function) -> int:
-    """Calculate cyclomatic complexity for a function."""
-    def analyze_statement(statement):
-        complexity = 0
-
-        if isinstance(statement, IfBlockStatement):
-            complexity += 1
-            if hasattr(statement, "elif_statements"):
-                complexity += len(statement.elif_statements)
-
-        elif isinstance(statement, (ForLoopStatement, WhileStatement)):
-            complexity += 1
-
-        elif isinstance(statement, TryCatchStatement):
-            complexity += len(getattr(statement, "except_blocks", []))
-
-        if hasattr(statement, "condition") and isinstance(statement.condition, str):
-            complexity += statement.condition.count(" and ") + statement.condition.count(" or ")
-
-        if hasattr(statement, "nested_code_blocks"):
-            for block in statement.nested_code_blocks:
-                complexity += analyze_block(block)
-
-        return complexity
-
-    def analyze_block(block):
-        if not block or not hasattr(block, "statements"):
-            return 0
-        return sum(analyze_statement(stmt) for stmt in block.statements)
-
-    return 1 + analyze_block(function.code_block) if hasattr(function, "code_block") else 1
-
-# ============================================================================
-# SECTION 6: MISSING FUNCTIONS FROM ANALYZER.PY
-# ============================================================================
-
-def create_issue(
-    message: str,
-    severity: Union[str, IssueSeverity],
-    file: str,
-    line: Optional[int] = None,
-    category: Optional[Union[str, IssueCategory]] = None,
-    symbol: Optional[str] = None,
-    suggestion: Optional[str] = None,
-) -> Issue:
+def calculate_cyclomatic_complexity(func: Function) -> int:
     """
-    Create an issue with simplified parameters.
-
-    Args:
-        message: Issue message
-        severity: Issue severity
-        file: File path
-        line: Line number
-        category: Issue category
-        symbol: Symbol name
-        suggestion: Suggested fix
-
-    Returns:
-        Created issue
-    """
-    # Convert string severity to enum if needed
-    if isinstance(severity, str):
-        severity = IssueSeverity(severity)
-
-    # Convert string category to enum if needed
-    if isinstance(category, str) and category:
-        category = IssueCategory(category)
-
-    # Create location
-    location = CodeLocation(file=file, line=line)
-
-    # Create and return issue
-    return Issue(
-        message=message,
-        severity=severity,
-        location=location,
-        category=category,
-        symbol=symbol,
-        suggestion=suggestion,
-    )
-
-def get_codebase_summary(codebase: Codebase) -> str:
-    """
-    Generate a comprehensive summary of a codebase.
+    Calculate the cyclomatic complexity of a function.
+    
+    Cyclomatic complexity is a measure of the number of linearly independent paths
+    through a program's source code. It is calculated as:
+    
+    M = E - N + 2P
+    
+    Where:
+    - E is the number of edges in the control flow graph
+    - N is the number of nodes in the control flow graph
+    - P is the number of connected components (usually 1 for a single function)
+    
+    For simplicity, we count:
+    - 1 for the function itself
+    - +1 for each if, elif, for, while, except, with, assert
+    - +1 for each boolean operator (and, or) in conditions
     
     Args:
-        codebase: The Codebase object to summarize
+        func: The function to analyze
         
     Returns:
-        A formatted string containing a summary of the codebase's nodes and edges
+        The cyclomatic complexity score
     """
-    node_summary = f"""Contains {len(codebase.ctx.get_nodes()) if hasattr(codebase, 'ctx') else 0} nodes
-- {len(list(codebase.files)) if hasattr(codebase, 'files') else 0} files
-- {len(list(codebase.imports)) if hasattr(codebase, 'imports') else 0} imports
-- {len(list(codebase.external_modules)) if hasattr(codebase, 'external_modules') else 0} external_modules
-- {len(list(codebase.symbols)) if hasattr(codebase, 'symbols') else 0} symbols
-\t- {len(list(codebase.classes)) if hasattr(codebase, 'classes') else 0} classes
-\t- {len(list(codebase.functions)) if hasattr(codebase, 'functions') else 0} functions
-\t- {len([s for s in codebase.symbols if s.symbol_type == SymbolType.VARIABLE]) if hasattr(codebase, 'symbols') else 0} variables"""
+    complexity = 1  # Base complexity for the function
+    
+    # Count control flow statements
+    if_statements = func.find_statements(IfBlockStatement)
+    complexity += len(if_statements)
+    
+    for_loops = func.find_statements(ForLoopStatement)
+    complexity += len(for_loops)
+    
+    while_loops = func.find_statements(WhileStatement)
+    complexity += len(while_loops)
+    
+    try_catch = func.find_statements(TryCatchStatement)
+    complexity += len(try_catch)
+    
+    # Count boolean operators in conditions
+    binary_expressions = func.find_expressions(BinaryExpression)
+    for expr in binary_expressions:
+        if expr.operator in ["and", "or"]:
+            complexity += 1
+    
+    return complexity
 
-    edge_summary = f"""Contains {len(codebase.ctx.get_edges()) if hasattr(codebase, 'ctx') else 0} edges
-- {len([e for e in codebase.ctx.get_edges() if e.edge_type == EdgeType.CONTAINS]) if hasattr(codebase, 'ctx') else 0} CONTAINS edges
-- {len([e for e in codebase.ctx.get_edges() if e.edge_type == EdgeType.IMPORTS]) if hasattr(codebase, 'ctx') else 0} IMPORTS edges
-- {len([e for e in codebase.ctx.get_edges() if e.edge_type == EdgeType.CALLS]) if hasattr(codebase, 'ctx') else 0} CALLS edges
-- {len([e for e in codebase.ctx.get_edges() if e.edge_type == EdgeType.INHERITS_FROM]) if hasattr(codebase, 'ctx') else 0} INHERITS_FROM edges
-- {len([e for e in codebase.ctx.get_edges() if e.edge_type == EdgeType.REFERENCES]) if hasattr(codebase, 'ctx') else 0} REFERENCES edges"""
-
-    return f"{node_summary}\n\n{edge_summary}"
-
-def get_dependency_graph(codebase: Codebase, file_path: Optional[str] = None) -> Dict[str, List[str]]:
+def calculate_halstead_metrics(func: Function) -> Dict[str, float]:
     """
-    Generate a dependency graph for a codebase or specific file.
+    Calculate Halstead complexity metrics for a function.
+    
+    Halstead metrics are based on the number of operators and operands in the code:
+    - n1 = number of distinct operators
+    - n2 = number of distinct operands
+    - N1 = total number of operators
+    - N2 = total number of operands
+    
+    From these, we calculate:
+    - Program vocabulary: n = n1 + n2
+    - Program length: N = N1 + N2
+    - Calculated program length: N_hat = n1 * log2(n1) + n2 * log2(n2)
+    - Volume: V = N * log2(n)
+    - Difficulty: D = (n1/2) * (N2/n2)
+    - Effort: E = D * V
+    - Time to implement: T = E / 18 (in seconds)
+    - Bugs delivered: B = V / 3000
     
     Args:
-        codebase: The Codebase object to analyze
-        file_path: Optional path to a specific file to analyze
+        func: The function to analyze
         
     Returns:
-        A dictionary mapping file paths to lists of dependencies
+        Dictionary containing the Halstead metrics
+    """
+    # Get all expressions
+    binary_expressions = func.find_expressions(BinaryExpression)
+    unary_expressions = func.find_expressions(UnaryExpression)
+    comparison_expressions = func.find_expressions(ComparisonExpression)
+    
+    # Count operators and operands
+    operators = set()
+    operands = set()
+    total_operators = 0
+    total_operands = 0
+    
+    # Process binary expressions
+    for expr in binary_expressions:
+        operators.add(expr.operator)
+        total_operators += 1
+        
+        # Left and right are operands
+        if hasattr(expr, 'left') and expr.left:
+            operands.add(str(expr.left))
+            total_operands += 1
+        
+        if hasattr(expr, 'right') and expr.right:
+            operands.add(str(expr.right))
+            total_operands += 1
+    
+    # Process unary expressions
+    for expr in unary_expressions:
+        operators.add(expr.operator)
+        total_operators += 1
+        
+        if hasattr(expr, 'expression') and expr.expression:
+            operands.add(str(expr.expression))
+            total_operands += 1
+    
+    # Process comparison expressions
+    for expr in comparison_expressions:
+        operators.add(expr.operator)
+        total_operators += 1
+        
+        if hasattr(expr, 'left') and expr.left:
+            operands.add(str(expr.left))
+            total_operands += 1
+        
+        if hasattr(expr, 'right') and expr.right:
+            operands.add(str(expr.right))
+            total_operands += 1
+    
+    # Calculate metrics
+    n1 = len(operators)
+    n2 = len(operands)
+    N1 = total_operators
+    N2 = total_operands
+    
+    # Handle edge cases
+    if n1 == 0 or n2 == 0:
+        return {
+            "vocabulary": 0,
+            "length": 0,
+            "calculated_length": 0,
+            "volume": 0,
+            "difficulty": 0,
+            "effort": 0,
+            "time": 0,
+            "bugs": 0
+        }
+    
+    n = n1 + n2
+    N = N1 + N2
+    
+    # Calculate log2 values safely
+    log2_n1 = math.log2(n1) if n1 > 0 else 0
+    log2_n2 = math.log2(n2) if n2 > 0 else 0
+    log2_n = math.log2(n) if n > 0 else 0
+    
+    N_hat = n1 * log2_n1 + n2 * log2_n2
+    V = N * log2_n
+    D = (n1 / 2) * (N2 / n2) if n2 > 0 else 0
+    E = D * V
+    T = E / 18
+    B = V / 3000
+    
+    return {
+        "vocabulary": n,
+        "length": N,
+        "calculated_length": N_hat,
+        "volume": V,
+        "difficulty": D,
+        "effort": E,
+        "time": T,
+        "bugs": B
+    }
+
+def calculate_maintainability_index(func: Function) -> float:
+    """
+    Calculate the maintainability index for a function.
+    
+    The maintainability index is a composite metric that incorporates several other metrics:
+    - Halstead Volume (V)
+    - Cyclomatic Complexity (CC)
+    - Lines of Code (LOC)
+    - Comment Percentage (CP)
+    
+    The formula is:
+    MI = 171 - 5.2 * ln(V) - 0.23 * CC - 16.2 * ln(LOC) + 50 * sin(sqrt(2.4 * CP))
+    
+    For simplicity, we use a modified version:
+    MI = 171 - 5.2 * ln(V) - 0.23 * CC - 16.2 * ln(LOC)
+    
+    Args:
+        func: The function to analyze
+        
+    Returns:
+        The maintainability index (0-100, higher is better)
+    """
+    # Calculate Halstead Volume
+    halstead_metrics = calculate_halstead_metrics(func)
+    V = halstead_metrics["volume"]
+    
+    # Calculate Cyclomatic Complexity
+    CC = calculate_cyclomatic_complexity(func)
+    
+    # Calculate Lines of Code
+    LOC = func.end_line - func.start_line + 1
+    
+    # Calculate Maintainability Index
+    if V <= 0 or LOC <= 0:
+        return 100  # Perfect score for very simple functions
+    
+    MI = 171 - 5.2 * math.log(V) - 0.23 * CC - 16.2 * math.log(LOC)
+    
+    # Normalize to 0-100 scale
+    MI = max(0, min(100, MI))
+    
+    return MI
+
+def calculate_code_duplication(codebase: Codebase, min_lines: int = 6) -> Dict[str, Any]:
+    """
+    Calculate code duplication metrics for a codebase.
+    
+    This function identifies duplicated code blocks across the codebase.
+    A code block is considered duplicated if it appears in multiple places
+    and has at least min_lines lines.
+    
+    Args:
+        codebase: The codebase to analyze
+        min_lines: Minimum number of lines for a block to be considered duplicated
+        
+    Returns:
+        Dictionary containing duplication metrics and duplicated blocks
+    """
+    files = codebase.get_files()
+    
+    # Extract content from all files
+    file_contents = {}
+    for file in files:
+        if file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            file_contents[file.path] = file.content.split('\n')
+    
+    # Find duplicated blocks
+    duplicated_blocks = []
+    processed_blocks = set()
+    
+    for file_path, lines in file_contents.items():
+        for i in range(len(lines) - min_lines + 1):
+            # Create a block of min_lines lines
+            block = '\n'.join(lines[i:i+min_lines])
+            block_hash = hash(block)
+            
+            # Skip if we've already processed this block
+            if block_hash in processed_blocks:
+                continue
+            
+            processed_blocks.add(block_hash)
+            
+            # Find all occurrences of this block
+            occurrences = []
+            for other_path, other_lines in file_contents.items():
+                for j in range(len(other_lines) - min_lines + 1):
+                    other_block = '\n'.join(other_lines[j:j+min_lines])
+                    if block == other_block:
+                        occurrences.append({
+                            "file_path": other_path,
+                            "start_line": j + 1,
+                            "end_line": j + min_lines
+                        })
+            
+            # If the block appears more than once, it's duplicated
+            if len(occurrences) > 1:
+                duplicated_blocks.append({
+                    "block": block,
+                    "occurrences": occurrences
+                })
+    
+    # Calculate duplication percentage
+    total_lines = sum(len(lines) for lines in file_contents.values())
+    duplicated_lines = sum(len(block["occurrences"]) * min_lines for block in duplicated_blocks)
+    duplication_percentage = (duplicated_lines / total_lines) * 100 if total_lines > 0 else 0
+    
+    return {
+        "duplication_percentage": duplication_percentage,
+        "duplicated_blocks": duplicated_blocks,
+        "total_lines": total_lines,
+        "duplicated_lines": duplicated_lines
+    }
+
+def calculate_technical_debt_ratio(codebase: Codebase) -> float:
+    """
+    Calculate the technical debt ratio for a codebase.
+    
+    Technical debt ratio is calculated as:
+    TDR = (Remediation Cost / Development Cost) * 100
+    
+    Where:
+    - Remediation Cost is the estimated effort to fix all issues
+    - Development Cost is the estimated effort to develop the codebase
+    
+    For simplicity, we use a heuristic approach:
+    - Each issue has a remediation cost based on its severity
+    - Development cost is estimated based on codebase size and complexity
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        The technical debt ratio as a percentage
+    """
+    # Analyze the codebase to find issues
+    issues = find_issues(codebase)
+    
+    # Assign remediation costs based on severity
+    remediation_costs = {
+        IssueSeverity.CRITICAL: 8,  # hours
+        IssueSeverity.MAJOR: 4,     # hours
+        IssueSeverity.MINOR: 1,     # hours
+        IssueSeverity.INFO: 0.5     # hours
+    }
+    
+    # Calculate total remediation cost
+    total_remediation_cost = 0
+    for issue in issues:
+        total_remediation_cost += remediation_costs[issue.severity]
+    
+    # Estimate development cost based on codebase size and complexity
+    files = codebase.get_files()
+    total_lines = sum(len(file.content.split('\n')) for file in files)
+    
+    # Rough estimate: 10 lines of code per hour
+    development_cost = total_lines / 10
+    
+    # Calculate technical debt ratio
+    if development_cost > 0:
+        technical_debt_ratio = (total_remediation_cost / development_cost) * 100
+    else:
+        technical_debt_ratio = 0
+    
+    return technical_debt_ratio
+
+def find_issues(codebase: Codebase) -> List[Issue]:
+    """
+    Find issues in a codebase.
+    
+    This function analyzes the codebase and identifies various issues such as:
+    - Implementation errors
+    - Misspelled function names
+    - Null references
+    - Unsafe assertions
+    - Improper exception handling
+    - Incomplete implementations
+    - Inefficient patterns
+    - Code duplication
+    - Unused parameters
+    - Redundant code
+    - Formatting issues
+    - Suboptimal defaults
+    - Wrong parameters
+    - Runtime errors
+    - Dead code
+    - Security vulnerabilities
+    - Performance issues
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of issues found in the codebase
+    """
+    issues = []
+    
+    # Get all files
+    files = codebase.get_files()
+    
+    # Analyze each file
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        # Find issues in the file
+        file_issues = find_issues_in_file(file)
+        issues.extend(file_issues)
+    
+    return issues
+
+def find_issues_in_file(file: SourceFile) -> List[Issue]:
+    """
+    Find issues in a file.
+    
+    Args:
+        file: The file to analyze
+        
+    Returns:
+        List of issues found in the file
+    """
+    issues = []
+    
+    # Get all functions in the file
+    functions = file.get_functions()
+    
+    # Analyze each function
+    for func in functions:
+        # Check for unused parameters
+        unused_params = find_unused_parameters(func)
+        for param in unused_params:
+            issues.append(Issue(
+                id=str(uuid.uuid4()),
+                location=CodeLocation(
+                    file_path=file.path,
+                    line_start=func.start_line,
+                    line_end=func.end_line
+                ),
+                message=f"Unused parameter '{param}' in function '{func.name}'",
+                severity=IssueSeverity.MINOR,
+                category=IssueCategory.UNUSED_PARAMETER
+            ))
+        
+        # Check for complex functions
+        complexity = calculate_cyclomatic_complexity(func)
+        if complexity > 15:
+            issues.append(Issue(
+                id=str(uuid.uuid4()),
+                location=CodeLocation(
+                    file_path=file.path,
+                    line_start=func.start_line,
+                    line_end=func.end_line
+                ),
+                message=f"Function '{func.name}' has high cyclomatic complexity ({complexity})",
+                severity=IssueSeverity.MAJOR if complexity > 25 else IssueSeverity.MINOR,
+                category=IssueCategory.PERFORMANCE_ISSUE
+            ))
+        
+        # Check for improper exception handling
+        improper_exceptions = find_improper_exception_handling(func)
+        for exception in improper_exceptions:
+            issues.append(Issue(
+                id=str(uuid.uuid4()),
+                location=CodeLocation(
+                    file_path=file.path,
+                    line_start=exception["line"],
+                    line_end=exception["line"]
+                ),
+                message=f"Improper exception handling: {exception['message']}",
+                severity=IssueSeverity.MAJOR,
+                category=IssueCategory.IMPROPER_EXCEPTION
+            ))
+    
+    # Check for code duplication within the file
+    duplications = find_duplicated_code_in_file(file)
+    for duplication in duplications:
+        issues.append(Issue(
+            id=str(uuid.uuid4()),
+            location=CodeLocation(
+                file_path=file.path,
+                line_start=duplication["start_line"],
+                line_end=duplication["end_line"]
+            ),
+            message=f"Duplicated code block ({duplication['lines']} lines)",
+            severity=IssueSeverity.MINOR,
+            category=IssueCategory.CODE_DUPLICATION
+        ))
+    
+    return issues
+
+def find_unused_parameters(func: Function) -> List[str]:
+    """
+    Find unused parameters in a function.
+    
+    Args:
+        func: The function to analyze
+        
+    Returns:
+        List of unused parameter names
+    """
+    unused_params = []
+    
+    # Get all parameters
+    params = func.parameters
+    
+    # Get function body as text
+    body_text = func.body
+    
+    # Check each parameter
+    for param in params:
+        param_name = param.name
+        
+        # Skip self and cls parameters in methods
+        if param_name in ["self", "cls"]:
+            continue
+        
+        # Check if the parameter is used in the function body
+        if param_name not in body_text:
+            unused_params.append(param_name)
+    
+    return unused_params
+
+def find_improper_exception_handling(func: Function) -> List[Dict[str, Any]]:
+    """
+    Find improper exception handling in a function.
+    
+    Args:
+        func: The function to analyze
+        
+    Returns:
+        List of improper exception handling instances
+    """
+    improper_exceptions = []
+    
+    # Get all try-catch statements
+    try_catch_statements = func.find_statements(TryCatchStatement)
+    
+    for stmt in try_catch_statements:
+        # Check for bare except
+        for handler in stmt.handlers:
+            if handler.type is None or handler.type == "Exception":
+                improper_exceptions.append({
+                    "line": handler.start_line,
+                    "message": "Bare except or catching Exception is too broad"
+                })
+            
+            # Check for pass in except block
+            if "pass" in handler.body:
+                improper_exceptions.append({
+                    "line": handler.start_line,
+                    "message": "Empty except block (pass) silently ignores exceptions"
+                })
+    
+    return improper_exceptions
+
+def find_duplicated_code_in_file(file: SourceFile, min_lines: int = 6) -> List[Dict[str, Any]]:
+    """
+    Find duplicated code blocks within a file.
+    
+    Args:
+        file: The file to analyze
+        min_lines: Minimum number of lines for a block to be considered duplicated
+        
+    Returns:
+        List of duplicated code blocks
+    """
+    duplicated_blocks = []
+    
+    # Get file content as lines
+    lines = file.content.split('\n')
+    
+    # Find duplicated blocks
+    processed_blocks = set()
+    
+    for i in range(len(lines) - min_lines + 1):
+        # Create a block of min_lines lines
+        block = '\n'.join(lines[i:i+min_lines])
+        block_hash = hash(block)
+        
+        # Skip if we've already processed this block
+        if block_hash in processed_blocks:
+            continue
+        
+        processed_blocks.add(block_hash)
+        
+        # Find all occurrences of this block
+        occurrences = []
+        for j in range(len(lines) - min_lines + 1):
+            other_block = '\n'.join(lines[j:j+min_lines])
+            if block == other_block and i != j:
+                occurrences.append({
+                    "start_line": j + 1,
+                    "end_line": j + min_lines
+                })
+        
+        # If the block appears more than once, it's duplicated
+        if len(occurrences) > 0:
+            duplicated_blocks.append({
+                "start_line": i + 1,
+                "end_line": i + min_lines,
+                "lines": min_lines,
+                "occurrences": occurrences
+            })
+    
+    return duplicated_blocks
+
+
+
+# ============================================================================
+# SECTION 3: DEPENDENCY ANALYSIS FUNCTIONS
+# ============================================================================
+
+def analyze_dependencies(codebase: Codebase) -> DependencyAnalysis:
+    """
+    Analyze dependencies in a codebase.
+    
+    This function analyzes the dependencies between files and modules in a codebase,
+    identifying circular dependencies, dependency depth, and critical dependencies.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        DependencyAnalysis object containing the results
+    """
+    dependency_analysis = DependencyAnalysis()
+    
+    # Build dependency graph
+    dependency_graph = build_dependency_graph(codebase)
+    dependency_analysis.dependency_graph = dependency_graph
+    
+    # Count total dependencies
+    dependency_analysis.total_dependencies = sum(len(deps) for deps in dependency_graph.values())
+    
+    # Find circular dependencies
+    circular_deps = find_circular_dependencies(dependency_graph)
+    dependency_analysis.circular_dependencies = circular_deps
+    
+    # Calculate dependency depth
+    dependency_analysis.dependency_depth = calculate_dependency_depth(dependency_graph)
+    
+    # Identify external dependencies
+    dependency_analysis.external_dependencies = find_external_dependencies(codebase)
+    
+    # Identify internal dependencies
+    dependency_analysis.internal_dependencies = find_internal_dependencies(codebase)
+    
+    # Identify critical dependencies
+    dependency_analysis.critical_dependencies = find_critical_dependencies(dependency_graph)
+    
+    # Identify unused dependencies
+    dependency_analysis.unused_dependencies = find_unused_dependencies(codebase)
+    
+    return dependency_analysis
+
+def build_dependency_graph(codebase: Codebase) -> Dict[str, List[str]]:
+    """
+    Build a dependency graph for a codebase.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        Dictionary mapping file paths to lists of dependencies
     """
     dependency_graph = {}
     
-    files_to_analyze = [f for f in codebase.files if not file_path or f.filepath == file_path]
+    # Get all files
+    files = codebase.get_files()
     
-    for file in files_to_analyze:
+    # Build the graph
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        # Get imports
+        imports = file.get_imports()
+        
+        # Map imports to file paths
         dependencies = []
+        for imp in imports:
+            # Skip external imports
+            if isinstance(imp, ExternalModule):
+                continue
+            
+            # Add the dependency
+            if hasattr(imp, 'source_file') and imp.source_file:
+                dependencies.append(imp.source_file.path)
         
-        # Get imports from the file
-        if hasattr(file, 'imports') and file.imports:
-            for imp in file.imports:
-                if hasattr(imp, 'source_file') and imp.source_file:
-                    dependencies.append(imp.source_file.filepath)
-                elif hasattr(imp, 'module'):
-                    dependencies.append(imp.module)
-                elif hasattr(imp, 'name'):
-                    dependencies.append(imp.name)
-        
-        dependency_graph[file.filepath] = dependencies
+        # Add to graph
+        dependency_graph[file.path] = dependencies
     
     return dependency_graph
 
-def get_symbol_references(codebase: Codebase, symbol_name: str) -> List[Dict[str, Any]]:
+def find_circular_dependencies(dependency_graph: Dict[str, List[str]]) -> List[List[str]]:
     """
-    Find all references to a symbol in the codebase.
+    Find circular dependencies in a dependency graph.
     
     Args:
-        codebase: The Codebase object to search
-        symbol_name: The name of the symbol to find references for
+        dependency_graph: Dictionary mapping file paths to lists of dependencies
         
     Returns:
-        A list of dictionaries containing reference information
+        List of circular dependency chains
     """
-    references = []
+    circular_deps = []
     
-    # Find all symbols with the given name
-    target_symbols = [s for s in codebase.symbols if s.name == symbol_name]
+    # Create a directed graph
+    G = nx.DiGraph()
     
-    if not target_symbols:
-        return references
+    # Add nodes and edges
+    for file, deps in dependency_graph.items():
+        G.add_node(file)
+        for dep in deps:
+            G.add_edge(file, dep)
     
-    # For each symbol, find references
-    for symbol in target_symbols:
-        # Get direct references from the graph
-        if hasattr(codebase, 'ctx'):
-            reference_edges = [
-                e for e in codebase.ctx.get_edges() 
-                if e.edge_type == EdgeType.REFERENCES and e.target_id == symbol.id
-            ]
-            
-            for edge in reference_edges:
-                source_node = codebase.ctx.get_node(edge.source_id)
-                if source_node:
-                    reference = {
-                        "symbol": symbol_name,
-                        "referenced_by": source_node.name,
-                        "referenced_by_type": source_node.node_type,
-                        "file": source_node.filepath if hasattr(source_node, 'filepath') else None,
-                        "line": edge.metadata.get("line") if hasattr(edge, 'metadata') else None,
-                    }
-                    references.append(reference)
+    # Find cycles
+    try:
+        cycles = list(nx.simple_cycles(G))
+        circular_deps = cycles
+    except nx.NetworkXNoCycle:
+        # No cycles found
+        pass
     
-    # If no references found through graph, try text-based search
-    if not references:
-        for file in codebase.files:
-            if not hasattr(file, 'source') or not file.source:
-                continue
-                
-            lines = file.source.split('\n')
-            for i, line in enumerate(lines):
-                if symbol_name in line:
-                    # Simple check to avoid false positives
-                    if re.search(r'\b' + re.escape(symbol_name) + r'\b', line):
-                        reference = {
-                            "symbol": symbol_name,
-                            "referenced_by": file.filepath,
-                            "referenced_by_type": "file",
-                            "file": file.filepath,
-                            "line": i + 1,
-                            "context": line.strip(),
-                        }
-                        references.append(reference)
-    
-    return references
+    return circular_deps
 
-def analyze_codebase(
-    repo_path: Optional[str] = None,
-    repo_url: Optional[str] = None,
-    output_file: Optional[str] = None,
-    analysis_types: Optional[List[str]] = None,
-    language: Optional[str] = None,
-    output_format: str = "json",
-) -> AnalysisResult:
+def calculate_dependency_depth(dependency_graph: Dict[str, List[str]]) -> int:
     """
-    Analyze a codebase and optionally save results to a file.
+    Calculate the maximum dependency depth in a dependency graph.
     
     Args:
-        repo_path: Path to the repository to analyze
-        repo_url: URL of the repository to analyze
-        output_file: Optional path to save results to
-        analysis_types: Optional list of analysis types to perform
-        language: Optional language to filter by
-        output_format: Output format (json or text)
+        dependency_graph: Dictionary mapping file paths to lists of dependencies
         
     Returns:
-        Analysis results
+        Maximum dependency depth
     """
-    # Convert string analysis types to enums
-    analysis_type_enums = []
-    if analysis_types:
-        for analysis_type in analysis_types:
-            try:
-                analysis_type_enums.append(AnalysisType(analysis_type))
-            except ValueError:
-                pass
+    # Create a directed graph
+    G = nx.DiGraph()
     
-    if not analysis_type_enums:
-        analysis_type_enums = list(AnalysisType)
+    # Add nodes and edges
+    for file, deps in dependency_graph.items():
+        G.add_node(file)
+        for dep in deps:
+            G.add_edge(file, dep)
     
-    # Create analyzer
-    analyzer = CodebaseAnalyzer(
-        repo_url=repo_url,
-        repo_path=repo_path,
-        language=language,
-    )
-    
-    # Load codebase
-    codebase = None
-    
-    # This is a placeholder - in a real implementation, we would use the SDK to load the codebase
-    # For now, we'll create a dummy codebase if repo_path is provided
-    if repo_path:
-        from codegen.sdk.codebase.loader import load_codebase
-        try:
-            codebase = load_codebase(repo_path)
-        except Exception as e:
-            print(f"Error loading codebase: {e}")
-            codebase = Codebase()
-    else:
-        codebase = Codebase()
-    
-    # Analyze codebase
-    analyzer.load_codebase(codebase)
-    result = analyzer.analyze(analysis_type_enums)
-    
-    # Save results if output file is provided
-    if output_file:
-        result_dict = result.to_dict()
+    # Find the longest path
+    try:
+        # Convert to DAG by removing cycles
+        DAG = nx.DiGraph(G)
+        cycles = list(nx.simple_cycles(G))
+        for cycle in cycles:
+            if len(cycle) > 1:
+                DAG.remove_edge(cycle[0], cycle[1])
         
-        if output_format == "json":
-            import json
-            with open(output_file, "w") as f:
-                json.dump(result_dict, f, indent=2)
-        else:
-            with open(output_file, "w") as f:
-                f.write(str(result_dict))
+        # Find the longest path in the DAG
+        longest_path_length = 0
+        for node in DAG.nodes():
+            paths = nx.single_source_shortest_path_length(DAG, node)
+            if paths:
+                longest_path_length = max(longest_path_length, max(paths.values()))
+        
+        return longest_path_length
+    except (nx.NetworkXError, ValueError):
+        # Error calculating longest path
+        return 0
+
+def find_external_dependencies(codebase: Codebase) -> List[str]:
+    """
+    Find external dependencies in a codebase.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of external dependencies
+    """
+    external_deps = set()
+    
+    # Get all files
+    files = codebase.get_files()
+    
+    # Find external imports
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        # Get imports
+        imports = file.get_imports()
+        
+        # Find external imports
+        for imp in imports:
+            if isinstance(imp, ExternalModule):
+                external_deps.add(imp.name)
+    
+    return list(external_deps)
+
+def find_internal_dependencies(codebase: Codebase) -> List[Dict[str, str]]:
+    """
+    Find internal dependencies in a codebase.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of internal dependencies
+    """
+    internal_deps = []
+    
+    # Get all files
+    files = codebase.get_files()
+    
+    # Find internal imports
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        # Get imports
+        imports = file.get_imports()
+        
+        # Find internal imports
+        for imp in imports:
+            if not isinstance(imp, ExternalModule) and hasattr(imp, 'source_file') and imp.source_file:
+                internal_deps.append({
+                    "from": file.path,
+                    "to": imp.source_file.path
+                })
+    
+    return internal_deps
+
+def find_critical_dependencies(dependency_graph: Dict[str, List[str]]) -> List[str]:
+    """
+    Find critical dependencies in a dependency graph.
+    
+    Critical dependencies are files that many other files depend on.
+    
+    Args:
+        dependency_graph: Dictionary mapping file paths to lists of dependencies
+        
+    Returns:
+        List of critical dependencies
+    """
+    # Count how many files depend on each file
+    dependency_counts = Counter()
+    
+    for file, deps in dependency_graph.items():
+        for dep in deps:
+            dependency_counts[dep] += 1
+    
+    # Find files with high dependency counts
+    threshold = max(1, len(dependency_graph) // 10)  # At least 10% of files depend on it
+    critical_deps = [dep for dep, count in dependency_counts.items() if count >= threshold]
+    
+    return critical_deps
+
+def find_unused_dependencies(codebase: Codebase) -> List[Dict[str, Any]]:
+    """
+    Find unused dependencies in a codebase.
+    
+    Unused dependencies are imports that are not used in the file.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of unused dependencies
+    """
+    unused_deps = []
+    
+    # Get all files
+    files = codebase.get_files()
+    
+    # Find unused imports
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        # Get imports
+        imports = file.get_imports()
+        
+        # Check each import
+        for imp in imports:
+            # Skip external imports
+            if isinstance(imp, ExternalModule):
+                continue
+            
+            # Check if the import is used
+            if hasattr(imp, 'symbol') and imp.symbol:
+                symbol = imp.symbol
+                
+                # Get file content
+                content = file.content
+                
+                # Check if the symbol is used
+                if symbol.name not in content or symbol.name + "." not in content:
+                    unused_deps.append({
+                        "file": file.path,
+                        "import": symbol.name,
+                        "line": imp.line if hasattr(imp, 'line') else None
+                    })
+    
+    return unused_deps
+
+# ============================================================================
+# SECTION 4: CALL GRAPH ANALYSIS FUNCTIONS
+# ============================================================================
+
+def analyze_call_graph(codebase: Codebase) -> CallGraphAnalysis:
+    """
+    Analyze the call graph of a codebase.
+    
+    This function analyzes the call graph of a codebase, identifying entry points,
+    leaf functions, call chains, and function connectivity.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        CallGraphAnalysis object containing the results
+    """
+    call_graph_analysis = CallGraphAnalysis()
+    
+    # Build call graph
+    call_graph = build_call_graph(codebase)
+    call_graph_analysis.call_graph = call_graph
+    
+    # Count total functions
+    call_graph_analysis.total_functions = len(call_graph)
+    
+    # Find entry points
+    call_graph_analysis.entry_points = find_entry_points(call_graph)
+    
+    # Find leaf functions
+    call_graph_analysis.leaf_functions = find_leaf_functions(call_graph)
+    
+    # Find call chains
+    call_graph_analysis.call_chains = find_call_chains(call_graph)
+    
+    # Calculate max call depth
+    call_graph_analysis.max_call_depth = calculate_max_call_depth(call_graph)
+    
+    # Calculate function connectivity
+    call_graph_analysis.function_connectivity = calculate_function_connectivity(call_graph)
+    
+    return call_graph_analysis
+
+def build_call_graph(codebase: Codebase) -> Dict[str, List[str]]:
+    """
+    Build a call graph for a codebase.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        Dictionary mapping function names to lists of called functions
+    """
+    call_graph = {}
+    
+    # Get all functions
+    functions = []
+    for file in codebase.get_files():
+        functions.extend(file.get_functions())
+    
+    # Build the graph
+    for func in functions:
+        # Get function name
+        func_name = func.name
+        if hasattr(func, 'parent') and func.parent:
+            func_name = f"{func.parent.name}.{func_name}"
+        
+        # Get called functions
+        called_functions = []
+        
+        # Parse function body to find function calls
+        # This is a simplified approach and may not catch all calls
+        body = func.body
+        for other_func in functions:
+            other_name = other_func.name
+            if hasattr(other_func, 'parent') and other_func.parent:
+                other_name = f"{other_func.parent.name}.{other_name}"
+            
+            # Check if the function is called
+            if f"{other_name}(" in body:
+                called_functions.append(other_name)
+        
+        # Add to graph
+        call_graph[func_name] = called_functions
+    
+    return call_graph
+
+def find_entry_points(call_graph: Dict[str, List[str]]) -> List[str]:
+    """
+    Find entry points in a call graph.
+    
+    Entry points are functions that are not called by any other function.
+    
+    Args:
+        call_graph: Dictionary mapping function names to lists of called functions
+        
+    Returns:
+        List of entry point function names
+    """
+    # Find all functions that are called
+    called_functions = set()
+    for func, called in call_graph.items():
+        called_functions.update(called)
+    
+    # Find functions that are not called
+    entry_points = [func for func in call_graph.keys() if func not in called_functions]
+    
+    return entry_points
+
+def find_leaf_functions(call_graph: Dict[str, List[str]]) -> List[str]:
+    """
+    Find leaf functions in a call graph.
+    
+    Leaf functions are functions that do not call any other function.
+    
+    Args:
+        call_graph: Dictionary mapping function names to lists of called functions
+        
+    Returns:
+        List of leaf function names
+    """
+    # Find functions that do not call any other function
+    leaf_functions = [func for func, called in call_graph.items() if not called]
+    
+    return leaf_functions
+
+def find_call_chains(call_graph: Dict[str, List[str]]) -> List[List[str]]:
+    """
+    Find call chains in a call graph.
+    
+    A call chain is a sequence of function calls from an entry point to a leaf function.
+    
+    Args:
+        call_graph: Dictionary mapping function names to lists of called functions
+        
+    Returns:
+        List of call chains
+    """
+    call_chains = []
+    
+    # Find entry points
+    entry_points = find_entry_points(call_graph)
+    
+    # Find call chains for each entry point
+    for entry_point in entry_points:
+        # Use DFS to find all paths
+        def dfs(func, path):
+            # Add the current function to the path
+            path.append(func)
+            
+            # If this is a leaf function, add the path to call chains
+            if not call_graph.get(func, []):
+                call_chains.append(path.copy())
+            
+            # Explore called functions
+            for called_func in call_graph.get(func, []):
+                # Avoid cycles
+                if called_func not in path:
+                    dfs(called_func, path.copy())
+        
+        # Start DFS from the entry point
+        dfs(entry_point, [])
+    
+    return call_chains
+
+def calculate_max_call_depth(call_graph: Dict[str, List[str]]) -> int:
+    """
+    Calculate the maximum call depth in a call graph.
+    
+    Args:
+        call_graph: Dictionary mapping function names to lists of called functions
+        
+    Returns:
+        Maximum call depth
+    """
+    # Create a directed graph
+    G = nx.DiGraph()
+    
+    # Add nodes and edges
+    for func, called in call_graph.items():
+        G.add_node(func)
+        for called_func in called:
+            G.add_edge(func, called_func)
+    
+    # Find the longest path
+    try:
+        # Convert to DAG by removing cycles
+        DAG = nx.DiGraph(G)
+        cycles = list(nx.simple_cycles(G))
+        for cycle in cycles:
+            if len(cycle) > 1:
+                DAG.remove_edge(cycle[0], cycle[1])
+        
+        # Find the longest path in the DAG
+        longest_path_length = 0
+        for node in DAG.nodes():
+            paths = nx.single_source_shortest_path_length(DAG, node)
+            if paths:
+                longest_path_length = max(longest_path_length, max(paths.values()))
+        
+        return longest_path_length
+    except (nx.NetworkXError, ValueError):
+        # Error calculating longest path
+        return 0
+
+def calculate_function_connectivity(call_graph: Dict[str, List[str]]) -> Dict[str, Dict[str, int]]:
+    """
+    Calculate function connectivity metrics.
+    
+    Args:
+        call_graph: Dictionary mapping function names to lists of called functions
+        
+    Returns:
+        Dictionary mapping function names to connectivity metrics
+    """
+    connectivity = {}
+    
+    # Create a directed graph
+    G = nx.DiGraph()
+    
+    # Add nodes and edges
+    for func, called in call_graph.items():
+        G.add_node(func)
+        for called_func in called:
+            G.add_edge(func, called_func)
+    
+    # Calculate connectivity metrics for each function
+    for func in call_graph.keys():
+        # Calculate in-degree (number of functions that call this function)
+        in_degree = G.in_degree(func) if func in G else 0
+        
+        # Calculate out-degree (number of functions this function calls)
+        out_degree = G.out_degree(func) if func in G else 0
+        
+        # Calculate betweenness centrality (how important this function is for connecting other functions)
+        try:
+            betweenness = nx.betweenness_centrality(G).get(func, 0)
+        except:
+            betweenness = 0
+        
+        # Add to connectivity metrics
+        connectivity[func] = {
+            "in_degree": in_degree,
+            "out_degree": out_degree,
+            "betweenness": betweenness
+        }
+    
+    return connectivity
+
+
+
+# ============================================================================
+# SECTION 5: ISSUE DETECTION FUNCTIONS
+# ============================================================================
+
+def detect_issues(codebase: Codebase) -> IssueCollection:
+    """
+    Detect issues in a codebase.
+    
+    This function analyzes the codebase and detects various issues such as:
+    - Implementation errors
+    - Misspelled function names
+    - Null references
+    - Unsafe assertions
+    - Improper exception handling
+    - Incomplete implementations
+    - Inefficient patterns
+    - Code duplication
+    - Unused parameters
+    - Redundant code
+    - Formatting issues
+    - Suboptimal defaults
+    - Wrong parameters
+    - Runtime errors
+    - Dead code
+    - Security vulnerabilities
+    - Performance issues
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        IssueCollection containing the detected issues
+    """
+    issue_collection = IssueCollection()
+    
+    # Detect implementation errors
+    implementation_errors = detect_implementation_errors(codebase)
+    for issue in implementation_errors:
+        issue_collection.add_issue(issue)
+    
+    # Detect misspelled function names
+    misspelled_functions = detect_misspelled_functions(codebase)
+    for issue in misspelled_functions:
+        issue_collection.add_issue(issue)
+    
+    # Detect null references
+    null_references = detect_null_references(codebase)
+    for issue in null_references:
+        issue_collection.add_issue(issue)
+    
+    # Detect unsafe assertions
+    unsafe_assertions = detect_unsafe_assertions(codebase)
+    for issue in unsafe_assertions:
+        issue_collection.add_issue(issue)
+    
+    # Detect improper exception handling
+    improper_exceptions = detect_improper_exception_handling(codebase)
+    for issue in improper_exceptions:
+        issue_collection.add_issue(issue)
+    
+    # Detect incomplete implementations
+    incomplete_implementations = detect_incomplete_implementations(codebase)
+    for issue in incomplete_implementations:
+        issue_collection.add_issue(issue)
+    
+    # Detect inefficient patterns
+    inefficient_patterns = detect_inefficient_patterns(codebase)
+    for issue in inefficient_patterns:
+        issue_collection.add_issue(issue)
+    
+    # Detect code duplication
+    code_duplications = detect_code_duplication(codebase)
+    for issue in code_duplications:
+        issue_collection.add_issue(issue)
+    
+    # Detect unused parameters
+    unused_parameters = detect_unused_parameters(codebase)
+    for issue in unused_parameters:
+        issue_collection.add_issue(issue)
+    
+    # Detect redundant code
+    redundant_code = detect_redundant_code(codebase)
+    for issue in redundant_code:
+        issue_collection.add_issue(issue)
+    
+    # Detect formatting issues
+    formatting_issues = detect_formatting_issues(codebase)
+    for issue in formatting_issues:
+        issue_collection.add_issue(issue)
+    
+    # Detect suboptimal defaults
+    suboptimal_defaults = detect_suboptimal_defaults(codebase)
+    for issue in suboptimal_defaults:
+        issue_collection.add_issue(issue)
+    
+    # Detect wrong parameters
+    wrong_parameters = detect_wrong_parameters(codebase)
+    for issue in wrong_parameters:
+        issue_collection.add_issue(issue)
+    
+    # Detect runtime errors
+    runtime_errors = detect_runtime_errors(codebase)
+    for issue in runtime_errors:
+        issue_collection.add_issue(issue)
+    
+    # Detect dead code
+    dead_code = detect_dead_code(codebase)
+    for issue in dead_code:
+        issue_collection.add_issue(issue)
+    
+    # Detect security vulnerabilities
+    security_vulnerabilities = detect_security_vulnerabilities(codebase)
+    for issue in security_vulnerabilities:
+        issue_collection.add_issue(issue)
+    
+    # Detect performance issues
+    performance_issues = detect_performance_issues(codebase)
+    for issue in performance_issues:
+        issue_collection.add_issue(issue)
+    
+    return issue_collection
+
+def detect_implementation_errors(codebase: Codebase) -> List[Issue]:
+    """
+    Detect implementation errors in a codebase.
+    
+    Implementation errors are logical errors in the code that may cause incorrect behavior.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of issues representing implementation errors
+    """
+    issues = []
+    
+    # Get all files
+    files = codebase.get_files()
+    
+    # Analyze each file
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        # Get all functions
+        functions = file.get_functions()
+        
+        # Analyze each function
+        for func in functions:
+            # Check for common implementation errors
+            
+            # Check for unreachable code
+            unreachable_code = find_unreachable_code(func)
+            for code in unreachable_code:
+                issues.append(Issue(
+                    id=str(uuid.uuid4()),
+                    location=CodeLocation(
+                        file_path=file.path,
+                        line_start=code["line"],
+                        line_end=code["line"]
+                    ),
+                    message=f"Unreachable code: {code['message']}",
+                    severity=IssueSeverity.MAJOR,
+                    category=IssueCategory.IMPLEMENTATION_ERROR
+                ))
+            
+            # Check for infinite loops
+            infinite_loops = find_infinite_loops(func)
+            for loop in infinite_loops:
+                issues.append(Issue(
+                    id=str(uuid.uuid4()),
+                    location=CodeLocation(
+                        file_path=file.path,
+                        line_start=loop["line"],
+                        line_end=loop["line"]
+                    ),
+                    message=f"Potential infinite loop: {loop['message']}",
+                    severity=IssueSeverity.CRITICAL,
+                    category=IssueCategory.IMPLEMENTATION_ERROR
+                ))
+            
+            # Check for off-by-one errors
+            off_by_one_errors = find_off_by_one_errors(func)
+            for error in off_by_one_errors:
+                issues.append(Issue(
+                    id=str(uuid.uuid4()),
+                    location=CodeLocation(
+                        file_path=file.path,
+                        line_start=error["line"],
+                        line_end=error["line"]
+                    ),
+                    message=f"Potential off-by-one error: {error['message']}",
+                    severity=IssueSeverity.MAJOR,
+                    category=IssueCategory.IMPLEMENTATION_ERROR
+                ))
+    
+    return issues
+
+def find_unreachable_code(func: Function) -> List[Dict[str, Any]]:
+    """
+    Find unreachable code in a function.
+    
+    Args:
+        func: The function to analyze
+        
+    Returns:
+        List of unreachable code instances
+    """
+    unreachable_code = []
+    
+    # Get function body as text
+    body_text = func.body
+    
+    # Find return statements
+    return_statements = re.finditer(r'^\s*return', body_text, re.MULTILINE)
+    
+    # Check for code after return statements
+    for match in return_statements:
+        # Get the line number
+        line_number = body_text[:match.start()].count('\n') + func.start_line
+        
+        # Check if there's code after this return statement
+        lines_after_return = body_text[match.end():].strip()
+        if lines_after_return and not lines_after_return.startswith('#'):
+            # Find the next non-empty line
+            next_line = lines_after_return.split('\n')[0].strip()
+            if next_line and not next_line.startswith('#'):
+                unreachable_code.append({
+                    "line": line_number + 1,
+                    "message": f"Code after return statement: '{next_line}'"
+                })
+    
+    return unreachable_code
+
+def find_infinite_loops(func: Function) -> List[Dict[str, Any]]:
+    """
+    Find potential infinite loops in a function.
+    
+    Args:
+        func: The function to analyze
+        
+    Returns:
+        List of potential infinite loop instances
+    """
+    infinite_loops = []
+    
+    # Get while statements
+    while_statements = func.find_statements(WhileStatement)
+    
+    # Check each while statement
+    for stmt in while_statements:
+        # Check if the condition is always true
+        if stmt.condition == "True" or stmt.condition == "true" or stmt.condition == "1":
+            # Check if there's a break statement in the loop
+            if "break" not in stmt.body:
+                infinite_loops.append({
+                    "line": stmt.start_line,
+                    "message": "While loop with condition that is always true and no break statement"
+                })
+    
+    # Get for statements
+    for_statements = func.find_statements(ForLoopStatement)
+    
+    # Check each for statement
+    for stmt in for_statements:
+        # Check if the loop variable is not modified in the loop body
+        loop_var = stmt.target if hasattr(stmt, 'target') else None
+        if loop_var and loop_var not in stmt.body:
+            infinite_loops.append({
+                "line": stmt.start_line,
+                "message": f"For loop where loop variable '{loop_var}' is not modified in the loop body"
+            })
+    
+    return infinite_loops
+
+def find_off_by_one_errors(func: Function) -> List[Dict[str, Any]]:
+    """
+    Find potential off-by-one errors in a function.
+    
+    Args:
+        func: The function to analyze
+        
+    Returns:
+        List of potential off-by-one error instances
+    """
+    off_by_one_errors = []
+    
+    # Get function body as text
+    body_text = func.body
+    
+    # Find array/list access with hardcoded indices
+    array_accesses = re.finditer(r'(\w+)\[(\d+)\]', body_text)
+    
+    # Check each array access
+    for match in array_accesses:
+        # Get the array name and index
+        array_name = match.group(1)
+        index = int(match.group(2))
+        
+        # Check if the index is suspicious (very high or exactly at common boundaries)
+        if index > 1000 or index == 0:
+            # Get the line number
+            line_number = body_text[:match.start()].count('\n') + func.start_line
+            
+            off_by_one_errors.append({
+                "line": line_number,
+                "message": f"Suspicious array index: {array_name}[{index}]"
+            })
+    
+    # Find range/len expressions
+    range_expressions = re.finditer(r'range\((\w+)\)', body_text)
+    
+    # Check each range expression
+    for match in range_expressions:
+        # Get the range argument
+        range_arg = match.group(1)
+        
+        # Check if the range argument is a length
+        if range_arg.startswith('len('):
+            # This is fine, range(len(x)) is a common pattern
+            continue
+        
+        # Get the line number
+        line_number = body_text[:match.start()].count('\n') + func.start_line
+        
+        # Check if there's a comparison with the range variable
+        # This is a heuristic and may produce false positives
+        if re.search(r'for \w+ in range\(' + range_arg + r'\):\s+if \w+ ==', body_text):
+            off_by_one_errors.append({
+                "line": line_number,
+                "message": f"Potential off-by-one error: comparison with range({range_arg}) variable"
+            })
+    
+    return off_by_one_errors
+
+def detect_misspelled_functions(codebase: Codebase) -> List[Issue]:
+    """
+    Detect misspelled function names in a codebase.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of issues representing misspelled function names
+    """
+    issues = []
+    
+    # Get all functions
+    all_functions = []
+    for file in codebase.get_files():
+        all_functions.extend(file.get_functions())
+    
+    # Create a dictionary of function names
+    function_names = {func.name: func for func in all_functions}
+    
+    # Get all files
+    files = codebase.get_files()
+    
+    # Analyze each file
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        # Get file content
+        content = file.content
+        
+        # Find function calls
+        function_calls = re.finditer(r'(\w+)\(', content)
+        
+        # Check each function call
+        for match in function_calls:
+            # Get the function name
+            func_name = match.group(1)
+            
+            # Skip if this is a known function
+            if func_name in function_names:
+                continue
+            
+            # Skip common built-in functions and keywords
+            if func_name in ['print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'set', 'tuple', 'super', 'isinstance', 'issubclass', 'hasattr', 'getattr', 'setattr', 'delattr', 'property', 'staticmethod', 'classmethod', 'enumerate', 'zip', 'map', 'filter', 'reduce', 'sorted', 'reversed', 'sum', 'min', 'max', 'any', 'all', 'abs', 'round', 'pow', 'divmod', 'complex', 'hash', 'id', 'type', 'repr', 'ascii', 'format', 'bin', 'oct', 'hex', 'chr', 'ord', 'input', 'open', 'exec', 'eval', 'compile', 'globals', 'locals', 'vars', 'dir', 'help', 'next', 'iter', 'slice', 'sorted', 'reversed', 'enumerate', 'zip', 'filter', 'map', 'sum', 'all', 'any', 'callable', 'delattr', 'getattr', 'hasattr', 'setattr', 'isinstance', 'issubclass', 'breakpoint', 'bytes', 'bytearray', 'memoryview', 'frozenset', 'object', 'property', 'classmethod', 'staticmethod', 'super', 'type', 'bool', 'complex', 'dict', 'float', 'int', 'list', 'set', 'str', 'tuple', 'if', 'else', 'elif', 'for', 'while', 'try', 'except', 'finally', 'with', 'def', 'class', 'return', 'yield', 'lambda', 'pass', 'break', 'continue', 'assert', 'raise', 'import', 'from', 'as', 'global', 'nonlocal', 'and', 'or', 'not', 'is', 'in']:
+                continue
+            
+            # Check if this might be a misspelled function
+            for known_func in function_names:
+                # Calculate Levenshtein distance
+                distance = levenshtein_distance(func_name, known_func)
+                
+                # If the distance is small and the names are similar length, it might be misspelled
+                if distance <= 2 and abs(len(func_name) - len(known_func)) <= 2:
+                    # Get the line number
+                    line_number = content[:match.start()].count('\n') + 1
+                    
+                    issues.append(Issue(
+                        id=str(uuid.uuid4()),
+                        location=CodeLocation(
+                            file_path=file.path,
+                            line_start=line_number,
+                            line_end=line_number
+                        ),
+                        message=f"Potential misspelled function: '{func_name}' (did you mean '{known_func}'?)",
+                        severity=IssueSeverity.MAJOR,
+                        category=IssueCategory.MISSPELLED_FUNCTION
+                    ))
+                    
+                    # Only report one potential correction per function call
+                    break
+    
+    return issues
+
+def levenshtein_distance(s1: str, s2: str) -> int:
+    """
+    Calculate the Levenshtein distance between two strings.
+    
+    The Levenshtein distance is the minimum number of single-character edits
+    (insertions, deletions, or substitutions) required to change one string into the other.
+    
+    Args:
+        s1: First string
+        s2: Second string
+        
+    Returns:
+        Levenshtein distance between the two strings
+    """
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    
+    if len(s2) == 0:
+        return len(s1)
+    
+    previous_row = range(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+    
+    return previous_row[-1]
+
+def detect_null_references(codebase: Codebase) -> List[Issue]:
+    """
+    Detect potential null references in a codebase.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of issues representing potential null references
+    """
+    issues = []
+    
+    # Get all files
+    files = codebase.get_files()
+    
+    # Analyze each file
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        # Get file content
+        content = file.content
+        
+        # Find potential null references
+        null_refs = []
+        
+        # Python: None
+        none_refs = re.finditer(r'(\w+)\.(\w+)\s*\(', content)
+        for match in none_refs:
+            # Get the object and method
+            obj = match.group(1)
+            method = match.group(2)
+            
+            # Check if there's a null check before this call
+            before_call = content[:match.start()]
+            if f"if {obj} is None" not in before_call and f"if {obj} is not None" not in before_call:
+                # Get the line number
+                line_number = content[:match.start()].count('\n') + 1
+                
+                null_refs.append({
+                    "line": line_number,
+                    "message": f"Potential null reference: '{obj}.{method}()' without null check"
+                })
+        
+        # JavaScript/TypeScript: null/undefined
+        null_refs_js = re.finditer(r'(\w+)\.(\w+)\s*\(', content)
+        for match in null_refs_js:
+            # Get the object and method
+            obj = match.group(1)
+            method = match.group(2)
+            
+            # Check if there's a null check before this call
+            before_call = content[:match.start()]
+            if f"if ({obj} === null" not in before_call and f"if ({obj} !== null" not in before_call and f"if ({obj} === undefined" not in before_call and f"if ({obj} !== undefined" not in before_call:
+                # Get the line number
+                line_number = content[:match.start()].count('\n') + 1
+                
+                null_refs.append({
+                    "line": line_number,
+                    "message": f"Potential null reference: '{obj}.{method}()' without null check"
+                })
+        
+        # Create issues for null references
+        for ref in null_refs:
+            issues.append(Issue(
+                id=str(uuid.uuid4()),
+                location=CodeLocation(
+                    file_path=file.path,
+                    line_start=ref["line"],
+                    line_end=ref["line"]
+                ),
+                message=ref["message"],
+                severity=IssueSeverity.MAJOR,
+                category=IssueCategory.NULL_REFERENCE
+            ))
+    
+    return issues
+
+
+
+# ============================================================================
+# SECTION 6: CODE QUALITY METRICS FUNCTIONS
+# ============================================================================
+
+def analyze_code_quality(codebase: Codebase) -> CodeQualityResult:
+    """
+    Analyze code quality metrics for a codebase.
+    
+    This function calculates various code quality metrics for a codebase, including:
+    - Maintainability index
+    - Cyclomatic complexity
+    - Halstead volume
+    - Source lines of code
+    - Comment density
+    - Duplication percentage
+    - Technical debt ratio
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        CodeQualityResult object containing the metrics
+    """
+    result = CodeQualityResult()
+    
+    # Get all files
+    files = codebase.get_files()
+    
+    # Calculate metrics for each file
+    total_maintainability = 0
+    total_complexity = 0
+    total_halstead = 0
+    total_sloc = 0
+    total_comments = 0
+    file_count = 0
+    
+    for file in files:
+        # Skip non-code files
+        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+            continue
+        
+        file_count += 1
+        
+        # Calculate maintainability index
+        maintainability = calculate_file_maintainability_index(file)
+        total_maintainability += maintainability
+        
+        # Calculate cyclomatic complexity
+        complexity = calculate_file_cyclomatic_complexity(file)
+        total_complexity += complexity
+        
+        # Calculate Halstead volume
+        halstead = calculate_file_halstead_volume(file)
+        total_halstead += halstead
+        
+        # Calculate source lines of code
+        sloc = calculate_source_lines_of_code(file)
+        total_sloc += sloc
+        
+        # Calculate comment density
+        comments = calculate_comment_density(file)
+        total_comments += comments
+    
+    # Calculate averages
+    if file_count > 0:
+        result.maintainability_index = total_maintainability / file_count
+        result.cyclomatic_complexity = total_complexity / file_count
+        result.halstead_volume = total_halstead / file_count
+        result.source_lines_of_code = total_sloc
+        result.comment_density = total_comments / file_count
+    
+    # Calculate duplication percentage
+    duplication = calculate_code_duplication(codebase)
+    result.duplication_percentage = duplication["duplication_percentage"]
+    
+    # Calculate technical debt ratio
+    result.technical_debt_ratio = calculate_technical_debt_ratio(codebase)
+    
+    # Find issues
+    result.issues = IssueCollection(find_issues(codebase))
     
     return result
 
-# ============================================================================
-# SECTION 7: COMPREHENSIVE ANALYSIS FUNCTIONS
-# ============================================================================
-
-class IssueType(Enum):
-    """Types of issues that can be detected in code analysis."""
-    UNUSED_FUNCTION = auto()
-    UNUSED_CLASS = auto()
-    UNUSED_IMPORT = auto()
-    UNUSED_PARAMETER = auto()
-    PARAMETER_MISMATCH = auto()
-    MISSING_TYPE_ANNOTATION = auto()
-    CIRCULAR_DEPENDENCY = auto()
-    EMPTY_FUNCTION = auto()
-    IMPLEMENTATION_ERROR = auto()
-
-class ComprehensiveAnalyzer:
+def calculate_file_maintainability_index(file: SourceFile) -> float:
     """
-    Comprehensive analyzer for codebases using the Codegen SDK.
-    Implements deep analysis of code issues, dependencies, and metrics.
+    Calculate the maintainability index for a file.
+    
+    Args:
+        file: The file to analyze
+        
+    Returns:
+        Maintainability index (0-100, higher is better)
     """
+    # Get all functions in the file
+    functions = file.get_functions()
     
-    def __init__(self, repo_path_or_url: str):
-        """
-        Initialize the analyzer with a repository path or URL.
+    # Calculate maintainability index for each function
+    total_maintainability = 0
+    for func in functions:
+        maintainability = calculate_maintainability_index(func)
+        total_maintainability += maintainability
+    
+    # Calculate average maintainability index
+    if functions:
+        return total_maintainability / len(functions)
+    else:
+        return 100  # Perfect score for files with no functions
+    
+def calculate_file_cyclomatic_complexity(file: SourceFile) -> float:
+    """
+    Calculate the average cyclomatic complexity for a file.
+    
+    Args:
+        file: The file to analyze
         
-        Args:
-            repo_path_or_url: Path to local repo or URL to GitHub repo
-        """
-        self.repo_path_or_url = repo_path_or_url
-        self.issues: List[Issue] = []
-        self.start_time = time.time()
-        self.codebase = None
+    Returns:
+        Average cyclomatic complexity
+    """
+    # Get all functions in the file
+    functions = file.get_functions()
+    
+    # Calculate cyclomatic complexity for each function
+    total_complexity = 0
+    for func in functions:
+        complexity = calculate_cyclomatic_complexity(func)
+        total_complexity += complexity
+    
+    # Calculate average cyclomatic complexity
+    if functions:
+        return total_complexity / len(functions)
+    else:
+        return 1  # Minimum complexity for files with no functions
+
+def calculate_file_halstead_volume(file: SourceFile) -> float:
+    """
+    Calculate the average Halstead volume for a file.
+    
+    Args:
+        file: The file to analyze
         
-    def analyze(self) -> Dict[str, Any]:
-        """
-        Perform a comprehensive analysis of the codebase.
+    Returns:
+        Average Halstead volume
+    """
+    # Get all functions in the file
+    functions = file.get_functions()
+    
+    # Calculate Halstead volume for each function
+    total_volume = 0
+    for func in functions:
+        halstead = calculate_halstead_metrics(func)
+        total_volume += halstead["volume"]
+    
+    # Calculate average Halstead volume
+    if functions:
+        return total_volume / len(functions)
+    else:
+        return 0  # Minimum volume for files with no functions
+
+def calculate_source_lines_of_code(file: SourceFile) -> int:
+    """
+    Calculate the source lines of code for a file.
+    
+    Args:
+        file: The file to analyze
         
-        Returns:
-            Dictionary with analysis results
-        """
-        print(f"Starting comprehensive analysis of {self.repo_path_or_url}...")
+    Returns:
+        Number of source lines of code
+    """
+    # Get file content
+    content = file.content
+    
+    # Split into lines
+    lines = content.split('\n')
+    
+    # Count non-empty, non-comment lines
+    sloc = 0
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith('#') and not line.startswith('//') and not line.startswith('/*') and not line.startswith('*') and not line.startswith('*/'):
+            sloc += 1
+    
+    return sloc
+
+def calculate_comment_density(file: SourceFile) -> float:
+    """
+    Calculate the comment density for a file.
+    
+    Comment density is the ratio of comment lines to total lines.
+    
+    Args:
+        file: The file to analyze
         
-        # Initialize codebase
-        try:
-            print(f"Initializing codebase from {self.repo_path_or_url}")
-            if self.repo_path_or_url.startswith(("http://", "https://")):
-                # Extract repo name for GitHub URLs
-                parts = self.repo_path_or_url.rstrip('/').split('/')
-                repo_name = f"{parts[-2]}/{parts[-1]}"
-                try:
-                    self.codebase = Codebase.from_repo(repo_full_name=repo_name)
-                    print(f"Successfully initialized codebase from GitHub repository: {repo_name}")
-                except Exception as e:
-                    print(f"Error initializing codebase from GitHub: {e}")
-                    self.issues.append(Issue(
-                        self.repo_path_or_url,
-                        "Initialization Error",
-                        f"Failed to initialize codebase from GitHub: {e}",
-                        IssueSeverity.ERROR,
-                        suggestion="Check your network connection and GitHub access permissions."
-                    ))
-                    return {
-                        "error": f"Failed to initialize codebase: {str(e)}",
-                        "success": False
-                    }
-            else:
-                # Local path
-                try:
-                    self.codebase = Codebase.from_local(self.repo_path_or_url)
-                    print(f"Successfully initialized codebase from local path: {self.repo_path_or_url}")
-                except Exception as e:
-                    print(f"Error initializing codebase from local path: {e}")
-                    self.issues.append(Issue(
-                        self.repo_path_or_url,
-                        "Initialization Error",
-                        f"Failed to initialize codebase from local path: {e}",
-                        IssueSeverity.ERROR,
-                        suggestion="Check if the path exists and is a valid repository."
-                    ))
-                    return {
-                        "error": f"Failed to initialize codebase: {str(e)}",
-                        "success": False
-                    }
-        except Exception as e:
-            print(f"Unexpected error initializing codebase: {e}")
-            return {
-                "error": f"Failed to initialize codebase: {str(e)}",
-                "success": False
+    Returns:
+        Comment density (0-1, higher means more comments)
+    """
+    # Get file content
+    content = file.content
+    
+    # Split into lines
+    lines = content.split('\n')
+    
+    # Count comment lines and total lines
+    comment_lines = 0
+    total_lines = len(lines)
+    
+    for line in lines:
+        line = line.strip()
+        if line.startswith('#') or line.startswith('//') or line.startswith('/*') or line.startswith('*') or line.startswith('*/'):
+            comment_lines += 1
+    
+    # Calculate comment density
+    if total_lines > 0:
+        return comment_lines / total_lines
+    else:
+        return 0
+
+# ============================================================================
+# SECTION 7: VISUALIZATION FUNCTIONS
+# ============================================================================
+
+def generate_dependency_graph_visualization(dependency_analysis: DependencyAnalysis) -> Dict[str, Any]:
+    """
+    Generate a visualization of the dependency graph.
+    
+    Args:
+        dependency_analysis: DependencyAnalysis object containing the dependency graph
+        
+    Returns:
+        Dictionary containing visualization data
+    """
+    # Create a directed graph
+    G = nx.DiGraph()
+    
+    # Add nodes and edges
+    for file, deps in dependency_analysis.dependency_graph.items():
+        G.add_node(file)
+        for dep in deps:
+            G.add_edge(file, dep)
+    
+    # Calculate node positions using a layout algorithm
+    pos = nx.spring_layout(G)
+    
+    # Convert positions to a format suitable for visualization
+    nodes = []
+    for node, position in pos.items():
+        nodes.append({
+            "id": node,
+            "label": os.path.basename(node),
+            "x": float(position[0]),
+            "y": float(position[1]),
+            "size": 1 + len(G.in_edges(node)) + len(G.out_edges(node))
+        })
+    
+    # Create edges
+    edges = []
+    for source, target in G.edges():
+        edges.append({
+            "source": source,
+            "target": target
+        })
+    
+    # Create visualization data
+    visualization = {
+        "nodes": nodes,
+        "edges": edges,
+        "circular_dependencies": dependency_analysis.circular_dependencies,
+        "critical_dependencies": dependency_analysis.critical_dependencies
+    }
+    
+    return visualization
+
+def generate_call_graph_visualization(call_graph_analysis: CallGraphAnalysis) -> Dict[str, Any]:
+    """
+    Generate a visualization of the call graph.
+    
+    Args:
+        call_graph_analysis: CallGraphAnalysis object containing the call graph
+        
+    Returns:
+        Dictionary containing visualization data
+    """
+    # Create a directed graph
+    G = nx.DiGraph()
+    
+    # Add nodes and edges
+    for func, called in call_graph_analysis.call_graph.items():
+        G.add_node(func)
+        for called_func in called:
+            G.add_edge(func, called_func)
+    
+    # Calculate node positions using a layout algorithm
+    pos = nx.spring_layout(G)
+    
+    # Convert positions to a format suitable for visualization
+    nodes = []
+    for node, position in pos.items():
+        # Get node connectivity
+        connectivity = call_graph_analysis.function_connectivity.get(node, {})
+        in_degree = connectivity.get("in_degree", 0)
+        out_degree = connectivity.get("out_degree", 0)
+        betweenness = connectivity.get("betweenness", 0)
+        
+        nodes.append({
+            "id": node,
+            "label": node,
+            "x": float(position[0]),
+            "y": float(position[1]),
+            "size": 1 + in_degree + out_degree,
+            "color": "rgb(255, 0, 0)" if node in call_graph_analysis.entry_points else "rgb(0, 0, 255)" if node in call_graph_analysis.leaf_functions else "rgb(0, 255, 0)",
+            "in_degree": in_degree,
+            "out_degree": out_degree,
+            "betweenness": betweenness
+        })
+    
+    # Create edges
+    edges = []
+    for source, target in G.edges():
+        edges.append({
+            "source": source,
+            "target": target
+        })
+    
+    # Create visualization data
+    visualization = {
+        "nodes": nodes,
+        "edges": edges,
+        "entry_points": call_graph_analysis.entry_points,
+        "leaf_functions": call_graph_analysis.leaf_functions,
+        "max_call_depth": call_graph_analysis.max_call_depth
+    }
+    
+    return visualization
+
+def generate_issue_visualization(issue_collection: IssueCollection) -> Dict[str, Any]:
+    """
+    Generate a visualization of the issues.
+    
+    Args:
+        issue_collection: IssueCollection object containing the issues
+        
+    Returns:
+        Dictionary containing visualization data
+    """
+    # Count issues by file
+    issues_by_file = {}
+    for issue in issue_collection.issues:
+        file_path = issue.location.file_path
+        if file_path not in issues_by_file:
+            issues_by_file[file_path] = {
+                "total": 0,
+                "critical": 0,
+                "major": 0,
+                "minor": 0,
+                "info": 0
             }
-            
-        # Run analysis
-        try:
-            print("Running dead code analysis...")
-            self._analyze_dead_code()
-            
-            print("Running parameter issues analysis...")
-            self._analyze_parameter_issues()
-            
-            print("Running type annotation analysis...")
-            self._analyze_type_annotations()
-            
-            print("Running circular dependency analysis...")
-            self._analyze_circular_dependencies()
-            
-            print("Running implementation issues analysis...")
-            self._analyze_implementation_issues()
-            
-            # Generate report
-            report = self._generate_report()
-            
-            # Print report
-            self._print_report(report)
-            
-            # Save report
-            self._save_report(report)
-            
-            # Save detailed summaries
-            self._save_detailed_summaries("detailed_analysis.txt")
-            
-            return report
-            
-        except Exception as e:
-            print(f"Error during analysis: {e}")
-            return {
-                "error": f"Analysis failed: {str(e)}",
-                "success": False
-            }
+        
+        issues_by_file[file_path]["total"] += 1
+        if issue.severity == IssueSeverity.CRITICAL:
+            issues_by_file[file_path]["critical"] += 1
+        elif issue.severity == IssueSeverity.MAJOR:
+            issues_by_file[file_path]["major"] += 1
+        elif issue.severity == IssueSeverity.MINOR:
+            issues_by_file[file_path]["minor"] += 1
+        elif issue.severity == IssueSeverity.INFO:
+            issues_by_file[file_path]["info"] += 1
     
-    def _analyze_dead_code(self):
-        """Find and log unused code (functions, classes, imports)."""
-        print("Analyzing dead code")
+    # Count issues by category
+    issues_by_category = issue_collection.count_by_category()
+    
+    # Count issues by severity
+    issues_by_severity = issue_collection.count_by_severity()
+    
+    # Create visualization data
+    visualization = {
+        "issues_by_file": issues_by_file,
+        "issues_by_category": issues_by_category,
+        "issues_by_severity": issues_by_severity,
+        "total_issues": len(issue_collection.issues)
+    }
+    
+    return visualization
 
-        dead_code = {
-            "unused_functions": [],
-            "unused_classes": [],
-            "unused_variables": [],
-            "unused_imports": [],
-        }
+def generate_code_quality_visualization(code_quality_result: CodeQualityResult) -> Dict[str, Any]:
+    """
+    Generate a visualization of the code quality metrics.
+    
+    Args:
+        code_quality_result: CodeQualityResult object containing the metrics
+        
+    Returns:
+        Dictionary containing visualization data
+    """
+    # Create visualization data
+    visualization = {
+        "maintainability_index": code_quality_result.maintainability_index,
+        "cyclomatic_complexity": code_quality_result.cyclomatic_complexity,
+        "halstead_volume": code_quality_result.halstead_volume,
+        "source_lines_of_code": code_quality_result.source_lines_of_code,
+        "comment_density": code_quality_result.comment_density,
+        "duplication_percentage": code_quality_result.duplication_percentage,
+        "technical_debt_ratio": code_quality_result.technical_debt_ratio,
+        "issues": generate_issue_visualization(code_quality_result.issues)
+    }
+    
+    return visualization
 
-        # Find unused functions
-        for function in self.codebase.functions:
-            # Skip decorated functions (as they might be used indirectly)
-            if hasattr(function, "decorators") and function.decorators:
-                continue
-
-            # Check if function has no call sites or usages
-            has_call_sites = (
-                hasattr(function, "call_sites") and len(function.call_sites) > 0
-            )
-            has_usages = hasattr(function, "usages") and len(function.usages) > 0
-
-            if not has_call_sites and not has_usages:
-                # Skip magic methods and main functions
-                if (hasattr(function, "is_magic") and function.is_magic) or (
-                    hasattr(function, "name") and function.name in ["main", "__main__"]
-                ):
-                    continue
-
-                # Get file path and name safely
-                file_path = (
-                    function.file.path
-                    if hasattr(function, "file") and hasattr(function.file, "path")
-                    else "unknown"
-                )
-                func_name = (
-                    function.name if hasattr(function, "name") else str(function)
-                )
-
-                # Add to dead code list
-                dead_code["unused_functions"].append({
-                    "name": func_name,
-                    "file": file_path,
-                    "line": function.line if hasattr(function, "line") else None,
-                })
-
-        # Find unused classes
-        for cls in self.codebase.classes:
-            # Check if class has no usages
-            has_usages = hasattr(cls, "usages") and len(cls.usages) > 0
-
-            if not has_usages:
-                # Skip base classes and abstract classes
-                if (hasattr(cls, "is_abstract") and cls.is_abstract):
-                    continue
-
-                # Get file path and name safely
-                file_path = (
-                    cls.file.path
-                    if hasattr(cls, "file") and hasattr(cls.file, "path")
-                    else "unknown"
-                )
-                cls_name = cls.name if hasattr(cls, "name") else str(cls)
-
-                # Add to dead code list
-                dead_code["unused_classes"].append({
-                    "name": cls_name,
-                    "file": file_path,
-                    "line": cls.line if hasattr(cls, "line") else None,
-                })
-
-        # Find unused imports
-        for file in self.codebase.files:
-            if hasattr(file, "imports"):
-                for imp in file.imports:
-                    # Check if import has no usages
-                    has_usages = hasattr(imp, "usages") and len(imp.usages) > 0
-
-                    if not has_usages:
-                        # Get import name safely
-                        imp_name = imp.name if hasattr(imp, "name") else str(imp)
-
-                        # Add to dead code list
-                        dead_code["unused_imports"].append({
-                            "name": imp_name,
-                            "file": file.path,
-                            "line": imp.line if hasattr(imp, "line") else None,
-                        })
-
-        # Add summary counts
-        dead_code["summary"] = {
-            "unused_functions_count": len(dead_code["unused_functions"]),
-            "unused_classes_count": len(dead_code["unused_classes"]),
-            "unused_variables_count": len(dead_code["unused_variables"]),
-            "unused_imports_count": len(dead_code["unused_imports"]),
-        }
-
-        return dead_code
-
-    def _analyze_parameter_issues(self):
-        """Find and log parameter issues (unused, mismatches)."""
-        parameter_issues = {
-            "missing_types": [],
-            "unused_parameters": [],
-            "incorrect_usage": [],
-        }
-
-        for func in self.codebase.functions:
-            # Skip if no parameters
-            if not hasattr(func, "parameters"):
-                continue
-
-            file_path = (
-                func.file.path
-                if hasattr(func, "file") and hasattr(func.file, "path")
-                else "unknown"
-            )
-            func_name = func.name if hasattr(func, "name") else str(func)
-
-            # Check for parameters without type annotations
-            if hasattr(func, "parameters"):
-                for param in func.parameters:
-                    # Skip self parameter in methods
-                    if param.name == "self" and hasattr(func, "is_method") and func.is_method:
-                        continue
-
-                    # Check for missing type annotations
-                    if not hasattr(param, "type") or not param.type:
-                        parameter_issues["missing_types"].append({
-                            "function": func_name,
-                            "parameter": param.name,
-                            "file": file_path,
-                            "line": func.line if hasattr(func, "line") else None,
-                        })
-
-                    # Check for unused parameters
-                    param_dependencies = [dep.name for dep in func.dependencies if hasattr(dep, "name")]
-                    if param.name not in param_dependencies:
-                        # Skip 'self' in methods
-                        if param.name == 'self' and func.is_method:
-                            continue
-                            
-                        self.issues.append(Issue(
-                            func,
-                            IssueType.UNUSED_PARAMETER,
-                            f"Function '{func.name}' has unused parameter: {param.name}",
-                            IssueSeverity.INFO,
-                            suggestion=f"Consider removing the unused parameter '{param.name}' if it's not needed"
-                        ))
-                        
-                        parameter_issues["unused_parameters"].append({
-                            "function": func_name,
-                            "parameter": param.name,
-                            "file": file_path,
-                            "line": func.line if hasattr(func, "line") else None,
-                        })
-
-            # Check call sites for parameter mismatches
-            for call in func.call_sites:
-                if hasattr(call, 'args') and hasattr(func, 'parameters'):
-                    expected_params = set(p.name for p in func.parameters if not p.is_optional and p.name != 'self')
-                    actual_params = set()
+def generate_repository_structure_visualization(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Generate a visualization of the repository structure.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        Dictionary containing visualization data
+    """
+    # Get all files
+    files = codebase.get_files()
+    
+    # Create a tree structure
+    tree = {"name": "root", "children": []}
+    
+    # Add files to the tree
+    for file in files:
+        # Skip hidden files
+        if os.path.basename(file.path).startswith('.'):
+            continue
+        
+        # Split the path into components
+        path_components = file.path.split('/')
+        
+        # Start at the root
+        current_node = tree
+        
+        # Navigate through the path
+        for i, component in enumerate(path_components):
+            # Check if this is the last component (file)
+            is_file = i == len(path_components) - 1
+            
+            # Find or create the node
+            found = False
+            for child in current_node["children"]:
+                if child["name"] == component:
+                    current_node = child
+                    found = True
+                    break
+            
+            if not found:
+                # Create a new node
+                new_node = {"name": component}
+                if is_file:
+                    # This is a file, add file-specific data
+                    new_node["type"] = "file"
+                    new_node["path"] = file.path
+                    new_node["size"] = len(file.content)
                     
-                    # Extract parameter names from call arguments
-                    if hasattr(call, 'args'):
-                        for arg in call.args:
-                            if hasattr(arg, 'parameter_name') and arg.parameter_name:
-                                actual_params.add(arg.parameter_name)
-                    
-                    # Check for missing required parameters
-                    missing_params = expected_params - actual_params
-                    if missing_params:
-                        self.issues.append(Issue(
-                            call,
-                            IssueType.PARAMETER_MISMATCH,
-                            f"Call to '{func.name}' is missing required parameters: {', '.join(missing_params)}",
-                            IssueSeverity.ERROR,
-                            suggestion=f"Add the missing parameters to the function call"
-                        ))
-                        
-                        # Get call location
-                        call_file = (
-                            call.file.path
-                            if hasattr(call, "file") and hasattr(call.file, "path")
-                            else "unknown"
-                        )
-                        call_line = call.line if hasattr(call, "line") else None
-
-                        parameter_issues["incorrect_usage"].append({
-                            "function": func_name,
-                            "call_file": call_file,
-                            "call_line": call_line,
-                            "missing_parameters": list(missing_params),
-                        })
-
-        # Add summary counts
-        parameter_issues["summary"] = {
-            "missing_types_count": len(parameter_issues["missing_types"]),
-            "unused_parameters_count": len(parameter_issues["unused_parameters"]),
-            "incorrect_usage_count": len(parameter_issues["incorrect_usage"]),
-        }
-
-        return parameter_issues
-
-    def _analyze_type_annotations(self):
-        """Find and log missing type annotations."""
-        for func in self.codebase.functions:
-            # Skip if function is in a type-annotated file
-            file_path = str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else ''
-            if any(file_ext in file_path for file_ext in ['.pyi']):
-                continue
+                    # Count issues in this file
+                    issues = find_issues_in_file(file)
+                    new_node["issues"] = {
+                        "total": len(issues),
+                        "critical": len([i for i in issues if i.severity == IssueSeverity.CRITICAL]),
+                        "major": len([i for i in issues if i.severity == IssueSeverity.MAJOR]),
+                        "minor": len([i for i in issues if i.severity == IssueSeverity.MINOR]),
+                        "info": len([i for i in issues if i.severity == IssueSeverity.INFO])
+                    }
+                else:
+                    # This is a directory, add children
+                    new_node["type"] = "directory"
+                    new_node["children"] = []
                 
-            # Check return type
-            if not func.return_type and not func.name.startswith('__'):
-                self.issues.append(Issue(
-                    func,
-                    IssueType.MISSING_TYPE_ANNOTATION,
-                    f"Function '{func.name}' is missing return type annotation",
-                    IssueSeverity.INFO,
-                    suggestion="Add a return type annotation to improve type safety"
-                ))
-            
-            # Check parameter types
-            params_without_type = [p.name for p in func.parameters 
-                                 if not p.type and p.name != 'self' and not p.name.startswith('*')]
-            if params_without_type:
-                self.issues.append(Issue(
-                    func,
-                    IssueType.MISSING_TYPE_ANNOTATION,
-                    f"Function '{func.name}' has parameters without type annotations: {', '.join(params_without_type)}",
-                    IssueSeverity.INFO,
-                    suggestion="Add type annotations to all parameters"
-                ))
+                current_node["children"].append(new_node)
+                current_node = new_node
     
-    def _analyze_circular_dependencies(self):
-        """Find and log circular dependencies."""
-        circular_deps = {}
-        
-        # Basic implementation to detect file-level circular dependencies
-        for file in self.codebase.files:
-            visited = set()
-            path = []
-            self._check_circular_deps(file, visited, path, circular_deps)
-        
-        # Log circular dependencies
-        for file_path, cycles in circular_deps.items():
-            for cycle in cycles:
-                cycle_str = " -> ".join([f.path for f in cycle])
-                self.issues.append(Issue(
-                    file_path,
-                    IssueType.CIRCULAR_DEPENDENCY,
-                    f"Circular dependency detected: {cycle_str}",
-                    IssueSeverity.ERROR,
-                    suggestion="Refactor the code to break the circular dependency"
-                ))
+    # Create visualization data
+    visualization = {
+        "tree": tree,
+        "total_files": len(files),
+        "total_directories": count_directories(tree),
+        "total_size": sum(file.content for file in files)
+    }
     
-    def _check_circular_deps(self, file, visited, path, circular_deps):
-        """Helper method to check for circular dependencies using DFS."""
-        if file in path:
-            # Found a cycle
-            cycle = path[path.index(file):] + [file]
-            if file.path not in circular_deps:
-                circular_deps[file.path] = []
-            circular_deps[file.path].append(cycle)
-            return
-        
-        if file in visited:
-            return
-            
-        visited.add(file)
-        path.append(file)
-        
-        # Check dependencies
-        for dep in file.dependencies:
-            if hasattr(dep, 'file') and dep.file:
-                self._check_circular_deps(dep.file, visited, path.copy(), circular_deps)
-        
-        path.pop()
+    return visualization
+
+def count_directories(node: Dict[str, Any]) -> int:
+    """
+    Count the number of directories in a tree.
     
-    def _analyze_implementation_issues(self):
-        """Find and log implementation issues (empty functions, etc.)."""
-        implementation_issues = {
-            "empty_functions": [],
-            "abstract_methods_without_implementation": [],
-            "summary": {
-                "empty_functions_count": 0,
-                "abstract_methods_without_implementation_count": 0,
-            },
-        }
-
-        # Check for empty functions
-        for func in self.codebase.functions:
-            # Skip dunder methods and abstract methods
-            if func.name.startswith('__') and func.name.endswith('__'):
-                continue
-            
-            # Check for empty function bodies
-            if not func.body or not func.body.strip():
-                # Skip if it's a method overridden from parent class
-                is_override = False
-                if hasattr(func, 'parent') and hasattr(func.parent, 'parents'):
-                    for parent_class in func.parent.parents:
-                        if any(m.name == func.name for m in parent_class.methods):
-                            is_override = True
-                            break
-                
-                if not is_override:
-                    self.issues.append(Issue(
-                        func,
-                        IssueType.EMPTY_FUNCTION,
-                        f"Function '{func.name}' has an empty body",
-                        IssueSeverity.WARNING,
-                        suggestion="Implement the function or remove it if it's not needed"
-                    ))
-                    
-                    # Get file path
-                    file_path = (
-                        func.file.path
-                        if hasattr(func, "file") and hasattr(func.file, "path")
-                        else "unknown"
-                    )
-                    
-                    # Add to implementation issues
-                    implementation_issues["empty_functions"].append({
-                        "name": func.name,
-                        "file": file_path,
-                        "line": func.line if hasattr(func, "line") else None,
-                    })
-                    implementation_issues["summary"]["empty_functions_count"] += 1
-
-        # Check for abstract methods without implementation
-        for cls in self.codebase.classes:
-            if not hasattr(cls, "methods") or not hasattr(cls, "parents"):
-                continue
-                
-            # Get abstract methods from parent classes
-            abstract_methods = set()
-            for parent in cls.parents:
-                if hasattr(parent, "methods"):
-                    for method in parent.methods:
-                        if hasattr(method, "is_abstract") and method.is_abstract:
-                            abstract_methods.add(method.name)
-            
-            # Check if abstract methods are implemented
-            implemented_methods = {method.name for method in cls.methods}
-            missing_implementations = abstract_methods - implemented_methods
-            
-            if missing_implementations:
-                # Get file path
-                file_path = (
-                    cls.file.path
-                    if hasattr(cls, "file") and hasattr(cls.file, "path")
-                    else "unknown"
-                )
-                
-                for method_name in missing_implementations:
-                    implementation_issues["abstract_methods_without_implementation"].append({
-                        "class": cls.name,
-                        "method": method_name,
-                        "file": file_path,
-                        "line": cls.line if hasattr(cls, "line") else None,
-                    })
-                    implementation_issues["summary"]["abstract_methods_without_implementation_count"] += 1
-
-        return implementation_issues
-
-    def _generate_report(self) -> Dict[str, Any]:
-        """
-        Generate a comprehensive report of the analysis results.
+    Args:
+        node: Tree node
         
-        Returns:
-            Dictionary with analysis results
-        """
-        # Calculate analysis time
-        analysis_time = time.time() - self.start_time
-        
-        # Count issues by type and severity
-        issue_counts = defaultdict(int)
-        severity_counts = defaultdict(int)
-        
-        for issue in self.issues:
-            issue_type = issue.issue_type if hasattr(issue, 'issue_type') else "Unknown"
-            severity = issue.severity if hasattr(issue, 'severity') else "Unknown"
-            
-            issue_counts[str(issue_type)] += 1
-            severity_counts[str(severity)] += 1
-        
-        # Generate summary statistics
-        total_files = len(self.codebase.files) if self.codebase else 0
-        total_functions = len(self.codebase.functions) if self.codebase else 0
-        total_classes = len(self.codebase.classes) if self.codebase else 0
-        total_issues = len(self.issues)
-        
-        # Calculate issue density
-        issue_density = total_issues / total_files if total_files > 0 else 0
-        
-        # Generate report
-        report = {
-            "summary": {
-                "repo": self.repo_path_or_url,
-                "analysis_time_seconds": analysis_time,
-                "total_files": total_files,
-                "total_functions": total_functions,
-                "total_classes": total_classes,
-                "total_issues": total_issues,
-                "issue_density": issue_density
-            },
-            "issues_by_type": dict(issue_counts),
-            "issues_by_severity": dict(severity_counts),
-            "success": True
-        }
-        
-        return report
+    Returns:
+        Number of directories
+    """
+    if node.get("type") == "file":
+        return 0
     
-    def _print_report(self, report: Dict[str, Any]):
-        """Print a summary of the analysis report to the console."""
-        summary = report["summary"]
-        
-        print("\n" + "="*80)
-        print(f"ANALYSIS REPORT FOR: {summary['repo']}")
-        print("="*80)
-        
-        print(f"\nAnalysis completed in {summary['analysis_time_seconds']:.2f} seconds")
-        print(f"Files analyzed: {summary['total_files']}")
-        print(f"Functions analyzed: {summary['total_functions']}")
-        print(f"Classes analyzed: {summary['total_classes']}")
-        print(f"Total issues found: {summary['total_issues']}")
-        print(f"Issue density: {summary['issue_density']:.2f} issues per file")
-        
-        print("\nIssues by type:")
-        for issue_type, count in report["issues_by_type"].items():
-            print(f"  - {issue_type}: {count}")
-        
-        print("\nIssues by severity:")
-        for severity, count in report["issues_by_severity"].items():
-            print(f"  - {severity}: {count}")
-        
-        print("\nTop issues:")
-        for i, issue in enumerate(self.issues[:10]):
-            print(f"  {i+1}. {issue}")
-        
-        if len(self.issues) > 10:
-            print(f"  ... and {len(self.issues) - 10} more issues")
-        
-        print("\n" + "="*80)
+    count = 1  # Count this directory
     
-    def _save_report(self, report: Dict[str, Any]):
-        """Save the analysis report to a JSON file."""
-        try:
-            # Create output directory if it doesn't exist
-            output_dir = Path("analysis_reports")
-            output_dir.mkdir(exist_ok=True)
-            
-            # Generate filename based on repo name
-            repo_name = self.repo_path_or_url.split('/')[-1].replace('.', '_')
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            filename = output_dir / f"analysis_{repo_name}_{timestamp}.json"
-            
-            # Save report
-            with open(filename, 'w') as f:
-                json.dump(report, f, indent=2)
-                
-            print(f"\nReport saved to: {filename}")
-            
-        except Exception as e:
-            print(f"Error saving report: {e}")
+    for child in node.get("children", []):
+        if child.get("type") == "directory":
+            count += count_directories(child)
     
-    def _save_detailed_summaries(self, filename: str):
-        """Save detailed summaries of the codebase to a text file."""
-        try:
-            # Create output directory if it doesn't exist
-            output_dir = Path("analysis_reports")
-            output_dir.mkdir(exist_ok=True)
-            
-            # Generate full path
-            filepath = output_dir / filename
-            
-            with open(filepath, 'w') as f:
-                f.write("="*80 + "\n")
-                f.write(f"DETAILED ANALYSIS SUMMARY FOR: {self.repo_path_or_url}\n")
-                f.write("="*80 + "\n\n")
-                
-                # Write file summaries
-                f.write("FILE SUMMARIES\n")
-                f.write("-"*80 + "\n")
-                
-                for file in self.codebase.files:
-                    try:
-                        f.write(f"File: {file.path}\n")
-                        f.write(f"  Size: {file.size} bytes\n")
-                        f.write(f"  Lines: {len(file.content.splitlines())}\n")
-                        f.write(f"  Functions: {len(file.functions)}\n")
-                        f.write(f"  Classes: {len(file.classes)}\n")
-                        f.write(f"  Imports: {len(file.imports)}\n")
-                        f.write("\n")
-                    except Exception as e:
-                        f.write(f"Error generating file summary: {str(e)}\n\n")
-                
-                # Write function summaries
-                f.write("\nFUNCTION SUMMARIES\n")
-                f.write("-"*80 + "\n")
-                
-                for func in self.codebase.functions:
-                    try:
-                        f.write(f"Function: {func.name}\n")
-                        f.write(f"  File: {func.file.path if hasattr(func, 'file') else 'Unknown'}\n")
-                        f.write(f"  Parameters: {', '.join(p.name for p in func.parameters)}\n")
-                        f.write(f"  Return type: {func.return_type if func.return_type else 'None'}\n")
-                        f.write(f"  Usages: {len(func.usages)}\n")
-                        f.write(f"  Dependencies: {len(func.dependencies)}\n")
-                        f.write("\n")
-                    except Exception as e:
-                        f.write(f"Error generating function summary: {str(e)}\n\n")
-                
-                # Write class summaries
-                f.write("\nCLASS SUMMARIES\n")
-                f.write("-"*80 + "\n")
-                
-                for cls in self.codebase.classes:
-                    try:
-                        f.write(f"Class: {cls.name}\n")
-                        f.write(f"  File: {cls.file.path if hasattr(cls, 'file') else 'Unknown'}\n")
-                        f.write(f"  Methods: {len(cls.methods)}\n")
-                        f.write(f"  Attributes: {len(cls.attributes)}\n")
-                        f.write(f"  Parents: {', '.join(p.name for p in cls.parents) if hasattr(cls, 'parents') else 'None'}\n")
-                        f.write(f"  Usages: {len(cls.usages)}\n")
-                        f.write("\n")
-                    except Exception as e:
-                        f.write(f"Error generating class summary: {str(e)}\n\n")
-                
-                # Write issue summaries
-                f.write("\nISSUE SUMMARIES\n")
-                f.write("-"*80 + "\n")
-                
-                for issue in self.issues:
-                    f.write(f"{issue}\n\n")
-                
-            print(f"\nDetailed summaries saved to: {filepath}")
-            
-        except Exception as e:
-            print(f"Error saving detailed summaries: {e}")
+    return count
 
-def analyze_comprehensive(repo_path_or_url: str) -> Dict[str, Any]:
+# ============================================================================
+# SECTION 8: MAIN ANALYSIS FUNCTION
+# ============================================================================
+
+def analyze_codebase(codebase: Codebase) -> Dict[str, Any]:
     """
     Perform a comprehensive analysis of a codebase.
     
+    This function analyzes a codebase and returns a comprehensive analysis result,
+    including dependency analysis, call graph analysis, code quality metrics,
+    issue detection, and visualizations.
+    
     Args:
-        repo_path_or_url: Path to local repo or URL to GitHub repo
+        codebase: The codebase to analyze
         
     Returns:
-        Dictionary with analysis results
+        Dictionary containing the analysis results
     """
-    analyzer = ComprehensiveAnalyzer(repo_path_or_url)
-    return analyzer.analyze()
+    # Create analysis summary
+    summary = AnalysisSummary()
+    
+    # Count files and lines
+    files = codebase.get_files()
+    summary.total_files = len(files)
+    summary.total_lines = sum(len(file.content.split('\n')) for file in files)
+    
+    # Count functions and classes
+    functions = []
+    classes = []
+    for file in files:
+        functions.extend(file.get_functions())
+        classes.extend(file.get_classes())
+    
+    summary.total_functions = len(functions)
+    summary.total_classes = len(classes)
+    
+    # Analyze dependencies
+    dependency_analysis = analyze_dependencies(codebase)
+    
+    # Analyze call graph
+    call_graph_analysis = analyze_call_graph(codebase)
+    
+    # Analyze code quality
+    code_quality_result = analyze_code_quality(codebase)
+    
+    # Detect issues
+    issue_collection = detect_issues(codebase)
+    summary.total_issues = len(issue_collection.issues)
+    summary.issue_counts = issue_collection.count_by_severity()
+    
+    # Generate visualizations
+    dependency_visualization = generate_dependency_graph_visualization(dependency_analysis)
+    call_graph_visualization = generate_call_graph_visualization(call_graph_analysis)
+    issue_visualization = generate_issue_visualization(issue_collection)
+    code_quality_visualization = generate_code_quality_visualization(code_quality_result)
+    repository_visualization = generate_repository_structure_visualization(codebase)
+    
+    # Generate recommendations
+    recommendations = generate_recommendations(dependency_analysis, call_graph_analysis, code_quality_result, issue_collection)
+    summary.recommendations = recommendations
+    
+    # Create analysis result
+    analysis_result = {
+        "summary": summary,
+        "dependency_analysis": dependency_analysis,
+        "call_graph_analysis": call_graph_analysis,
+        "code_quality_result": code_quality_result,
+        "issue_collection": issue_collection,
+        "visualizations": {
+            "dependency_graph": dependency_visualization,
+            "call_graph": call_graph_visualization,
+            "issues": issue_visualization,
+            "code_quality": code_quality_visualization,
+            "repository_structure": repository_visualization
+        },
+        "recommendations": recommendations
+    }
+    
+    return analysis_result
+
+def generate_recommendations(dependency_analysis: DependencyAnalysis, call_graph_analysis: CallGraphAnalysis, code_quality_result: CodeQualityResult, issue_collection: IssueCollection) -> List[str]:
+    """
+    Generate recommendations based on the analysis results.
+    
+    Args:
+        dependency_analysis: DependencyAnalysis object
+        call_graph_analysis: CallGraphAnalysis object
+        code_quality_result: CodeQualityResult object
+        issue_collection: IssueCollection object
+        
+    Returns:
+        List of recommendations
+    """
+    recommendations = []
+    
+    # Recommendations based on dependency analysis
+    if dependency_analysis.circular_dependencies:
+        recommendations.append("Resolve circular dependencies to improve maintainability")
+    
+    if dependency_analysis.unused_dependencies:
+        recommendations.append("Remove unused dependencies to reduce code bloat")
+    
+    # Recommendations based on call graph analysis
+    if call_graph_analysis.max_call_depth > 10:
+        recommendations.append("Reduce call depth to improve performance and maintainability")
+    
+    # Recommendations based on code quality
+    if code_quality_result.maintainability_index < 50:
+        recommendations.append("Improve code maintainability by reducing complexity and improving documentation")
+    
+    if code_quality_result.cyclomatic_complexity > 10:
+        recommendations.append("Reduce cyclomatic complexity by breaking down complex functions")
+    
+    if code_quality_result.duplication_percentage > 10:
+        recommendations.append("Reduce code duplication by extracting common functionality into reusable components")
+    
+    if code_quality_result.technical_debt_ratio > 20:
+        recommendations.append("Reduce technical debt by addressing issues and improving code quality")
+    
+    # Recommendations based on issues
+    critical_issues = issue_collection.get_critical_issues()
+    if critical_issues:
+        recommendations.append(f"Address {len(critical_issues)} critical issues to prevent potential failures")
+    
+    major_issues = issue_collection.get_major_issues()
+    if major_issues:
+        recommendations.append(f"Address {len(major_issues)} major issues to improve code quality")
+    
+    # Return recommendations
+    return recommendations
+
+
+

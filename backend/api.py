@@ -1,444 +1,40 @@
 #!/usr/bin/env python3
 """
-Unified API Server
+API Module for Codebase Analysis
 
-This module contains the consolidated API server that imports and uses:
-- consolidated_analysis.py (all analysis functions)
-- consolidated_visualization.py (all visualization functions)
-
-This is the single API entry point for the codebase analytics platform.
+This module provides a FastAPI server for codebase analysis.
+It includes endpoints for analyzing codebases, retrieving analysis results,
+and generating visualizations.
 """
 
-from fastapi import FastAPI, HTTPException
+import os
+import json
+import tempfile
+import shutil
+from typing import Dict, List, Any, Optional
+from fastapi import FastAPI, HTTPException, BackgroundTasks, File, UploadFile, Form, Query
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, List, Any, Optional
-import requests
-from datetime import datetime, timedelta
-import modal
+import uvicorn
+from pathlib import Path
 
-# Import consolidated modules
-from analysis import (
-    # Data classes
-    InheritanceAnalysis,
-    RecursionAnalysis,
-    DependencyAnalysis,
-    CallGraphAnalysis,
-    CodeQualityMetrics,
-    ArchitecturalInsights,
-    SecurityAnalysis,
-    PerformanceAnalysis,
-    AnalysisType,
-    
-    # Analysis functions
-    perform_comprehensive_analysis,
-    analyze_dependencies_comprehensive,
-    analyze_call_graph,
-    analyze_code_quality,
-    analyze_architecture,
-    analyze_security,
-    analyze_performance,
-    analyze_inheritance_patterns,
-    analyze_recursive_functions,
-    calculate_cyclomatic_complexity,
-    calculate_halstead_volume,
-    count_lines,
-    calculate_maintainability_index,
-    get_maintainability_rank,
-    get_operators_and_operands,
-    calculate_doi
-)
-
-from visualization import (
-    # Visualization classes
-    VisualizationType,
-    OutputFormat,
-    VisualizationConfig,
-    
-    # Visualization functions
-    create_call_graph,
-    create_dependency_graph,
-    create_class_hierarchy,
-    create_complexity_heatmap,
-    create_blast_radius,
-    create_enhanced_dependency_graph,
-    create_comprehensive_dashboard_data,
-    generate_all_visualizations,
-    get_visualization_summary,
-    save_visualization
-)
+# Import analysis and visualization modules
+from analysis import analyze_codebase
+from visualize import visualize_codebase, generate_html_report
 
 # Import from Codegen SDK
 from codegen.sdk.core.codebase import Codebase
+from codegen.sdk.core.file import SourceFile
 
-# ============================================================================
-# PYDANTIC MODELS
-# ============================================================================
-
-class CodebaseStats(BaseModel):
-    """Basic codebase statistics."""
-    total_files: int
-    total_functions: int
-    total_classes: int
-    total_lines: int
-    languages: List[str]
-
-class FunctionAnalysis(BaseModel):
-    """Function analysis results."""
-    most_called_function: str
-    most_called_count: int
-    most_calling_function: str
-    most_calling_count: int
-    dead_functions: List[str]
-    sample_functions: List[str]
-    sample_classes: List[str]
-    sample_imports: List[str]
-
-class RepoRequest(BaseModel):
-    """Repository analysis request."""
-    repo_url: str
-
-class AnalysisRequest(BaseModel):
-    """Enhanced analysis request."""
-    repo_url: str
-    analysis_types: Optional[List[str]] = None
-    include_visualizations: bool = False
-    max_analysis_time: int = 300
-
-class VisualizationRequest(BaseModel):
-    """Visualization request."""
-    repo_url: str
-    visualization_type: str
-    config: Optional[Dict[str, Any]] = None
-
-class AnalysisResponse(BaseModel):
-    """Standard analysis response."""
-    repo_url: str
-    description: str
-    num_files: int
-    num_functions: int
-    num_classes: int
-    line_metrics: Dict[str, Dict[str, float]]
-    cyclomatic_complexity: Dict[str, float]
-    depth_of_inheritance: Dict[str, float]
-    halstead_metrics: Dict[str, int]
-    maintainability_index: Dict[str, int]
-    monthly_commits: Dict[str, int]
-    inheritance_analysis: InheritanceAnalysis
-    recursion_analysis: RecursionAnalysis
-    function_analysis: FunctionAnalysis
-
-class EnhancedAnalysisResponse(BaseModel):
-    """Enhanced analysis response with comprehensive metrics."""
-    # Basic stats
-    repo_url: str
-    description: str
-    num_files: int
-    num_functions: int
-    num_classes: int
-    
-    # Line metrics
-    line_metrics: Dict[str, Dict[str, float]]
-    
-    # Complexity metrics
-    cyclomatic_complexity: Dict[str, float]
-    depth_of_inheritance: Dict[str, float]
-    halstead_metrics: Dict[str, int]
-    maintainability_index: Dict[str, int]
-    
-    # Git metrics
-    monthly_commits: Dict[str, int]
-    
-    # Existing analysis features
-    inheritance_analysis: InheritanceAnalysis
-    recursion_analysis: RecursionAnalysis
-    function_analysis: FunctionAnalysis
-    
-    # New comprehensive analysis features
-    dependency_analysis: Optional[DependencyAnalysis] = None
-    call_graph_analysis: Optional[CallGraphAnalysis] = None
-    code_quality_metrics: Optional[CodeQualityMetrics] = None
-    architectural_insights: Optional[ArchitecturalInsights] = None
-    security_analysis: Optional[SecurityAnalysis] = None
-    performance_analysis: Optional[PerformanceAnalysis] = None
-    
-    # Analysis metadata
-    analysis_timestamp: str
-    analysis_duration_seconds: float
-    analysis_types_performed: List[str]
-
-class ComprehensiveInsights(BaseModel):
-    """Comprehensive insights derived from all analyses."""
-    overall_quality_score: float
-    technical_debt_level: str
-    maintainability_rating: str
-    architectural_health: str
-    security_risk_level: str
-    performance_concerns: List[str]
-    top_recommendations: List[str]
-    complexity_distribution: Dict[str, int]
-    dependency_health: str
-
-class VisualizationResponse(BaseModel):
-    """Visualization response."""
-    visualization_type: str
-    data: Dict[str, Any]
-    metadata: Dict[str, Any]
-
-# ============================================================================
-# UTILITY FUNCTIONS
-# ============================================================================
-
-def get_github_repo_description(repo_url: str) -> str:
-    """Get repository description from GitHub API."""
-    try:
-        api_url = f"https://api.github.com/repos/{repo_url}"
-        response = requests.get(api_url, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            return data.get('description', 'No description available')
-        return 'Description not available'
-    except Exception:
-        return 'Description not available'
-
-def get_monthly_commits(repo_url: str) -> Dict[str, int]:
-    """Get monthly commit statistics from GitHub API."""
-    try:
-        api_url = f"https://api.github.com/repos/{repo_url}/stats/commit_activity"
-        response = requests.get(api_url, timeout=15)
-        
-        if response.status_code == 200:
-            data = response.json()
-            if data:
-                monthly_commits = {}
-                for week_data in data[-12:]:  # Last 12 weeks
-                    week_timestamp = week_data.get('week', 0)
-                    commits = week_data.get('total', 0)
-                    
-                    date = datetime.fromtimestamp(week_timestamp)
-                    month_key = date.strftime('%Y-%m')
-                    
-                    if month_key not in monthly_commits:
-                        monthly_commits[month_key] = 0
-                    monthly_commits[month_key] += commits
-                
-                return monthly_commits
-        
-        # Fallback data
-        return {
-            datetime.now().strftime('%Y-%m'): 10,
-            (datetime.now() - timedelta(days=30)).strftime('%Y-%m'): 15,
-            (datetime.now() - timedelta(days=60)).strftime('%Y-%m'): 8
-        }
-    except Exception:
-        return {'2024-01': 5, '2024-02': 12, '2024-03': 8}
-
-def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
-    """Comprehensive function analysis for API response."""
-    functions = codebase.functions
-    
-    if not functions:
-        return FunctionAnalysis(
-            most_called_function="No functions found",
-            most_called_count=0,
-            most_calling_function="No functions found", 
-            most_calling_count=0,
-            dead_functions=[],
-            sample_functions=[],
-            sample_classes=[],
-            sample_imports=[]
-        )
-    
-    # Analyze call patterns
-    call_counts = {}
-    calling_counts = {}
-    
-    for func in functions:
-        func_name = func.name
-        call_counts[func_name] = 0
-        calling_counts[func_name] = 0
-        
-        # Count how many times this function is called
-        for other_func in functions:
-            if hasattr(other_func, 'function_calls') and other_func.function_calls:
-                for call in other_func.function_calls:
-                    if hasattr(call, 'name') and call.name == func_name:
-                        call_counts[func_name] += 1
-        
-        # Count how many functions this function calls
-        if hasattr(func, 'function_calls') and func.function_calls:
-            calling_counts[func_name] = len(func.function_calls)
-    
-    # Find most called and most calling functions
-    most_called = max(call_counts.items(), key=lambda x: x[1]) if call_counts else ("None", 0)
-    most_calling = max(calling_counts.items(), key=lambda x: x[1]) if calling_counts else ("None", 0)
-    
-    # Find dead functions (not called by anyone)
-    dead_functions = [name for name, count in call_counts.items() if count == 0]
-    
-    # Get samples
-    sample_functions = [func.name for func in functions[:5]]
-    sample_classes = [cls.name for cls in codebase.classes[:5]]
-    
-    # Get sample imports
-    sample_imports = []
-    for file in codebase.files[:3]:
-        if hasattr(file, 'imports') and file.imports:
-            for imp in file.imports[:2]:
-                # Handle different import object types
-                if hasattr(imp, 'source'):
-                    module_name = str(imp.source)
-                elif hasattr(imp, 'module'):
-                    module_name = str(imp.module)
-                elif hasattr(imp, 'name'):
-                    module_name = str(imp.name)
-                else:
-                    module_name = str(imp)
-                
-                if module_name and module_name not in sample_imports:
-                    sample_imports.append(module_name)
-    
-    return FunctionAnalysis(
-        most_called_function=most_called[0],
-        most_called_count=most_called[1],
-        most_calling_function=most_calling[0],
-        most_calling_count=most_calling[1],
-        dead_functions=dead_functions[:10],  # Limit to 10
-        sample_functions=sample_functions,
-        sample_classes=sample_classes,
-        sample_imports=sample_imports[:10]  # Limit to 10
-    )
-
-def calculate_comprehensive_insights(analysis_results: Dict[str, Any]) -> ComprehensiveInsights:
-    """Calculate comprehensive insights from all analysis results."""
-    insights = ComprehensiveInsights(
-        overall_quality_score=0.0,
-        technical_debt_level="Unknown",
-        maintainability_rating="Unknown",
-        architectural_health="Unknown",
-        security_risk_level="Unknown",
-        performance_concerns=[],
-        top_recommendations=[],
-        complexity_distribution={},
-        dependency_health="Unknown"
-    )
-    
-    scores = []
-    recommendations = []
-    
-    # Analyze code quality metrics
-    if 'code_quality_metrics' in analysis_results:
-        quality = analysis_results['code_quality_metrics']
-        
-        # Technical debt assessment
-        debt_ratio = quality.technical_debt_ratio
-        if debt_ratio < 5:
-            insights.technical_debt_level = "Low"
-            scores.append(90)
-        elif debt_ratio < 15:
-            insights.technical_debt_level = "Medium"
-            scores.append(70)
-        elif debt_ratio < 30:
-            insights.technical_debt_level = "High"
-            scores.append(40)
-        else:
-            insights.technical_debt_level = "Critical"
-            scores.append(20)
-            recommendations.append("Address technical debt by resolving TODO/FIXME items")
-        
-        # Documentation coverage
-        if quality.documentation_coverage < 50:
-            recommendations.append("Improve code documentation coverage")
-        
-        # Code duplication
-        if quality.code_duplication_percentage > 10:
-            recommendations.append("Reduce code duplication through refactoring")
-    
-    # Analyze dependency health
-    if 'dependency_analysis' in analysis_results:
-        deps = analysis_results['dependency_analysis']
-        
-        if deps.circular_dependencies:
-            insights.dependency_health = "Poor"
-            recommendations.append("Resolve circular dependencies")
-            scores.append(30)
-        elif deps.dependency_depth > 10:
-            insights.dependency_health = "Fair"
-            scores.append(60)
-        else:
-            insights.dependency_health = "Good"
-            scores.append(80)
-    
-    # Analyze security
-    if 'security_analysis' in analysis_results:
-        security = analysis_results['security_analysis']
-        
-        vuln_count = len(security.potential_vulnerabilities)
-        if vuln_count == 0:
-            insights.security_risk_level = "Low"
-            scores.append(90)
-        elif vuln_count < 3:
-            insights.security_risk_level = "Medium"
-            scores.append(60)
-        else:
-            insights.security_risk_level = "High"
-            scores.append(30)
-            recommendations.append("Address security vulnerabilities")
-    
-    # Analyze performance
-    if 'performance_analysis' in analysis_results:
-        perf = analysis_results['performance_analysis']
-        
-        insights.performance_concerns = [
-            hotspot['description'] for hotspot in perf.performance_hotspots
-        ]
-        
-        if len(perf.performance_hotspots) > 5:
-            recommendations.append("Optimize performance hotspots")
-    
-    # Analyze architecture
-    if 'architectural_insights' in analysis_results:
-        arch = analysis_results['architectural_insights']
-        
-        if arch.modularity_score > 70:
-            insights.architectural_health = "Good"
-            scores.append(80)
-        elif arch.modularity_score > 40:
-            insights.architectural_health = "Fair"
-            scores.append(60)
-        else:
-            insights.architectural_health = "Poor"
-            scores.append(40)
-            recommendations.append("Improve code modularity and organization")
-    
-    # Calculate overall quality score
-    if scores:
-        insights.overall_quality_score = sum(scores) / len(scores)
-    
-    # Determine maintainability rating
-    if insights.overall_quality_score >= 80:
-        insights.maintainability_rating = "Excellent"
-    elif insights.overall_quality_score >= 65:
-        insights.maintainability_rating = "Good"
-    elif insights.overall_quality_score >= 45:
-        insights.maintainability_rating = "Fair"
-    else:
-        insights.maintainability_rating = "Poor"
-    
-    insights.top_recommendations = recommendations[:5]  # Top 5 recommendations
-    
-    return insights
-
-# ============================================================================
-# FASTAPI APPLICATION
-# ============================================================================
-
+# Create FastAPI app
 app = FastAPI(
-    title="Unified Codebase Analytics API",
-    description="Comprehensive codebase analysis with advanced metrics and insights",
-    version="3.0.0"
+    title="Codebase Analysis API",
+    description="API for analyzing codebases and generating visualizations",
+    version="1.0.0"
 )
 
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -447,365 +43,548 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ============================================================================
-# API ENDPOINTS
-# ============================================================================
+# Create storage directory
+STORAGE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "storage")
+os.makedirs(STORAGE_DIR, exist_ok=True)
 
-@app.post("/analyze", response_model=AnalysisResponse)
-async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
-    """Standard repository analysis endpoint."""
-    start_time = datetime.now()
+# Create results directory
+RESULTS_DIR = os.path.join(STORAGE_DIR, "results")
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+# Create uploads directory
+UPLOADS_DIR = os.path.join(STORAGE_DIR, "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+# Create visualizations directory
+VISUALIZATIONS_DIR = os.path.join(STORAGE_DIR, "visualizations")
+os.makedirs(VISUALIZATIONS_DIR, exist_ok=True)
+
+# Define models
+class AnalysisRequest(BaseModel):
+    """Request model for codebase analysis."""
+    repo_url: str
+    branch: Optional[str] = None
+    include_visualizations: bool = True
+
+class AnalysisResponse(BaseModel):
+    """Response model for codebase analysis."""
+    analysis_id: str
+    status: str
+    message: str
+
+class AnalysisResult(BaseModel):
+    """Model for analysis result."""
+    analysis_id: str
+    summary: Dict[str, Any]
+    visualizations: Optional[Dict[str, Any]] = None
+
+# Store analysis tasks
+analysis_tasks = {}
+
+# Background task for analyzing a codebase
+def analyze_codebase_task(analysis_id: str, repo_url: str, branch: Optional[str], include_visualizations: bool):
+    """
+    Background task for analyzing a codebase.
     
-    repo_url = request.repo_url
-    
-    # Validate and clean repo URL
-    if not repo_url or '/' not in repo_url:
-        raise HTTPException(status_code=400, detail="Repository URL must be in format 'owner/repo'")
-    
-    if repo_url.startswith('https://github.com/'):
-        repo_url = repo_url.replace('https://github.com/', '')
-    if repo_url.endswith('.git'):
-        repo_url = repo_url[:-4]
-    
-    parts = repo_url.split('/')
-    if len(parts) < 2:
-        raise HTTPException(status_code=400, detail="Repository URL must be in format 'owner/repo'")
-    
-    repo_url = f"{parts[0]}/{parts[1]}"
-    
+    Args:
+        analysis_id: ID of the analysis task
+        repo_url: URL of the repository to analyze
+        branch: Optional branch to analyze
+        include_visualizations: Whether to include visualizations
+    """
     try:
-        # Add timeout for large repositories (60 seconds)
-        import asyncio
-        codebase = await asyncio.wait_for(
-            asyncio.to_thread(Codebase.from_repo, repo_url),
-            timeout=60.0
-        )
-    except asyncio.TimeoutError:
-        raise HTTPException(
-            status_code=408, 
-            detail=f"Repository analysis timed out after 60 seconds. The repository '{repo_url}' may be too large. Please try with a smaller repository."
-        )
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
-
-    # Basic analysis
-    num_files = len(codebase.files)
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
-
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
-
-    monthly_commits = get_monthly_commits(repo_url)
-
-    # Analyze files
-    for file in codebase.files:
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-    # Calculate metrics
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-    num_callables = 0
-    
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
-
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, N1, N2, n1, n2 = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
-    
-    # Perform analysis features
-    inheritance_analysis = analyze_inheritance_patterns(codebase)
-    recursion_analysis = analyze_recursive_functions(codebase)
-    function_analysis = analyze_functions_comprehensive(codebase)
-
-    return AnalysisResponse(
-        repo_url=repo_url,
-        description=desc,
-        num_files=num_files,
-        num_functions=num_functions,
-        num_classes=num_classes,
-        line_metrics={
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100) if total_loc > 0 else 0,
-            },
-        },
-        cyclomatic_complexity={
-            "average": total_complexity / num_callables if num_callables > 0 else 0,
-        },
-        depth_of_inheritance={
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        halstead_metrics={
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables) if num_callables > 0 else 0,
-        },
-        maintainability_index={
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        monthly_commits=monthly_commits,
-        inheritance_analysis=inheritance_analysis,
-        recursion_analysis=recursion_analysis,
-        function_analysis=function_analysis
-    )
-
-@app.post("/analyze_comprehensive", response_model=EnhancedAnalysisResponse)
-async def analyze_comprehensive(request: AnalysisRequest) -> EnhancedAnalysisResponse:
-    """Comprehensive repository analysis with advanced features."""
-    start_time = datetime.now()
-    
-    # First perform standard analysis
-    standard_request = RepoRequest(repo_url=request.repo_url)
-    standard_response = await analyze_repo(standard_request)
-    
-    # Get codebase for comprehensive analysis
-    repo_url = request.repo_url
-    if repo_url.startswith('https://github.com/'):
-        repo_url = repo_url.replace('https://github.com/', '')
-    if repo_url.endswith('.git'):
-        repo_url = repo_url[:-4]
-    
-    try:
-        codebase = Codebase.from_repo(repo_url)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
-
-    # Determine which analysis types to perform
-    analysis_types_to_perform = []
-    if request.analysis_types:
-        for analysis_type in request.analysis_types:
-            try:
-                analysis_types_to_perform.append(AnalysisType(analysis_type))
-            except ValueError:
-                pass  # Skip invalid analysis types
-    else:
-        analysis_types_to_perform = list(AnalysisType)  # Perform all analyses
-
-    # Perform comprehensive analysis
-    comprehensive_results = perform_comprehensive_analysis(codebase, analysis_types_to_perform)
-    
-    # Calculate analysis duration
-    end_time = datetime.now()
-    duration = (end_time - start_time).total_seconds()
-
-    # Build enhanced response
-    response = EnhancedAnalysisResponse(
-        repo_url=standard_response.repo_url,
-        description=standard_response.description,
-        num_files=standard_response.num_files,
-        num_functions=standard_response.num_functions,
-        num_classes=standard_response.num_classes,
-        line_metrics=standard_response.line_metrics,
-        cyclomatic_complexity=standard_response.cyclomatic_complexity,
-        depth_of_inheritance=standard_response.depth_of_inheritance,
-        halstead_metrics=standard_response.halstead_metrics,
-        maintainability_index=standard_response.maintainability_index,
-        monthly_commits=standard_response.monthly_commits,
-        inheritance_analysis=standard_response.inheritance_analysis,
-        recursion_analysis=standard_response.recursion_analysis,
-        function_analysis=standard_response.function_analysis,
-        analysis_timestamp=start_time.isoformat(),
-        analysis_duration_seconds=duration,
-        analysis_types_performed=[at.value for at in analysis_types_to_perform]
-    )
-    
-    # Add comprehensive analysis results
-    if 'dependency_analysis' in comprehensive_results:
-        response.dependency_analysis = comprehensive_results['dependency_analysis']
-    
-    if 'call_graph_analysis' in comprehensive_results:
-        response.call_graph_analysis = comprehensive_results['call_graph_analysis']
-    
-    if 'code_quality_metrics' in comprehensive_results:
-        response.code_quality_metrics = comprehensive_results['code_quality_metrics']
-    
-    if 'architectural_insights' in comprehensive_results:
-        response.architectural_insights = comprehensive_results['architectural_insights']
-    
-    if 'security_analysis' in comprehensive_results:
-        response.security_analysis = comprehensive_results['security_analysis']
-    
-    if 'performance_analysis' in comprehensive_results:
-        response.performance_analysis = comprehensive_results['performance_analysis']
-
-    return response
-
-@app.post("/insights", response_model=ComprehensiveInsights)
-async def get_comprehensive_insights(request: AnalysisRequest) -> ComprehensiveInsights:
-    """Get high-level insights and recommendations."""
-    # First perform comprehensive analysis
-    analysis_response = await analyze_comprehensive(request)
-    
-    # Extract analysis results
-    analysis_results = {}
-    
-    if analysis_response.dependency_analysis:
-        analysis_results['dependency_analysis'] = analysis_response.dependency_analysis
-    
-    if analysis_response.call_graph_analysis:
-        analysis_results['call_graph_analysis'] = analysis_response.call_graph_analysis
-    
-    if analysis_response.code_quality_metrics:
-        analysis_results['code_quality_metrics'] = analysis_response.code_quality_metrics
-    
-    if analysis_response.architectural_insights:
-        analysis_results['architectural_insights'] = analysis_response.architectural_insights
-    
-    if analysis_response.security_analysis:
-        analysis_results['security_analysis'] = analysis_response.security_analysis
-    
-    if analysis_response.performance_analysis:
-        analysis_results['performance_analysis'] = analysis_response.performance_analysis
-    
-    # Calculate comprehensive insights
-    return calculate_comprehensive_insights(analysis_results)
-
-@app.post("/visualize", response_model=VisualizationResponse)
-async def create_visualization(request: VisualizationRequest) -> VisualizationResponse:
-    """Create a visualization for the repository."""
-    repo_url = request.repo_url
-    
-    # Clean repo URL
-    if repo_url.startswith('https://github.com/'):
-        repo_url = repo_url.replace('https://github.com/', '')
-    if repo_url.endswith('.git'):
-        repo_url = repo_url[:-4]
-    
-    try:
-        codebase = Codebase.from_repo(repo_url)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
-    
-    # Create visualization config
-    config = VisualizationConfig()
-    if request.config:
-        for key, value in request.config.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-    
-    # Create the requested visualization
-    viz_type = request.visualization_type
-    
-    if viz_type == VisualizationType.CALL_GRAPH.value:
-        viz_data = create_call_graph(codebase, config=config)
-    elif viz_type == VisualizationType.DEPENDENCY_GRAPH.value:
-        viz_data = create_dependency_graph(codebase, config=config)
-    elif viz_type == VisualizationType.CLASS_HIERARCHY.value:
-        viz_data = create_class_hierarchy(codebase, config=config)
-    elif viz_type == VisualizationType.COMPLEXITY_HEATMAP.value:
-        viz_data = create_complexity_heatmap(codebase, config=config)
-    elif viz_type == VisualizationType.BLAST_RADIUS.value:
-        # For blast radius, we need a symbol name - use first function if not provided
-        symbol_name = request.config.get('symbol_name') if request.config else None
-        if not symbol_name and codebase.functions:
-            symbol_name = codebase.functions[0].name
-        if symbol_name:
-            viz_data = create_blast_radius(codebase, symbol_name, config=config)
-        else:
-            raise HTTPException(status_code=400, detail="Symbol name required for blast radius visualization")
-    elif viz_type == VisualizationType.ENHANCED_DEPENDENCY_GRAPH.value:
-        viz_data = create_enhanced_dependency_graph(codebase)
-    elif viz_type == VisualizationType.COMPREHENSIVE_DASHBOARD.value:
-        viz_data = create_comprehensive_dashboard_data(codebase)
-    else:
-        raise HTTPException(status_code=400, detail=f"Unsupported visualization type: {viz_type}")
-    
-    return VisualizationResponse(
-        visualization_type=viz_type,
-        data=viz_data,
-        metadata=viz_data.get('metadata', {})
-    )
-
-@app.get("/visualizations/summary")
-async def get_visualizations_summary(repo_url: str):
-    """Get a summary of available visualizations for a repository."""
-    # Clean repo URL
-    if repo_url.startswith('https://github.com/'):
-        repo_url = repo_url.replace('https://github.com/', '')
-    if repo_url.endswith('.git'):
-        repo_url = repo_url[:-4]
-    
-    try:
-        codebase = Codebase.from_repo(repo_url)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
-    
-    return get_visualization_summary(codebase)
-
-@app.get("/analysis_types")
-async def get_available_analysis_types() -> List[Dict[str, str]]:
-    """Get available analysis types."""
-    return [
-        {
-            "type": analysis_type.value,
-            "description": get_analysis_type_description(analysis_type)
+        # Update task status
+        analysis_tasks[analysis_id] = {
+            "status": "running",
+            "message": "Cloning repository..."
         }
-        for analysis_type in AnalysisType
-    ]
+        
+        # Create temporary directory for the repository
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Clone the repository
+            import subprocess
+            clone_cmd = ["git", "clone", repo_url, temp_dir]
+            if branch:
+                clone_cmd.extend(["--branch", branch])
+            
+            subprocess.run(clone_cmd, check=True)
+            
+            # Update task status
+            analysis_tasks[analysis_id] = {
+                "status": "running",
+                "message": "Analyzing codebase..."
+            }
+            
+            # Create codebase object
+            codebase = Codebase.from_directory(temp_dir)
+            
+            # Analyze codebase
+            analysis_result = analyze_codebase(codebase)
+            
+            # Create result directory
+            result_dir = os.path.join(RESULTS_DIR, analysis_id)
+            os.makedirs(result_dir, exist_ok=True)
+            
+            # Save analysis result
+            with open(os.path.join(result_dir, "analysis.json"), "w") as f:
+                # Convert to serializable format
+                serializable_result = {
+                    "summary": {
+                        "total_files": analysis_result["summary"].total_files,
+                        "total_lines": analysis_result["summary"].total_lines,
+                        "total_functions": analysis_result["summary"].total_functions,
+                        "total_classes": analysis_result["summary"].total_classes,
+                        "total_issues": analysis_result["summary"].total_issues,
+                        "issue_counts": analysis_result["summary"].issue_counts,
+                        "metrics": analysis_result["summary"].metrics,
+                        "recommendations": analysis_result["summary"].recommendations
+                    },
+                    "dependency_analysis": {
+                        "total_dependencies": analysis_result["dependency_analysis"].total_dependencies,
+                        "circular_dependencies": analysis_result["dependency_analysis"].circular_dependencies,
+                        "dependency_depth": analysis_result["dependency_analysis"].dependency_depth,
+                        "external_dependencies": analysis_result["dependency_analysis"].external_dependencies,
+                        "internal_dependencies": analysis_result["dependency_analysis"].internal_dependencies,
+                        "critical_dependencies": analysis_result["dependency_analysis"].critical_dependencies,
+                        "unused_dependencies": analysis_result["dependency_analysis"].unused_dependencies
+                    },
+                    "call_graph_analysis": {
+                        "total_functions": analysis_result["call_graph_analysis"].total_functions,
+                        "entry_points": analysis_result["call_graph_analysis"].entry_points,
+                        "leaf_functions": analysis_result["call_graph_analysis"].leaf_functions,
+                        "max_call_depth": analysis_result["call_graph_analysis"].max_call_depth
+                    },
+                    "code_quality_result": {
+                        "maintainability_index": analysis_result["code_quality_result"].maintainability_index,
+                        "cyclomatic_complexity": analysis_result["code_quality_result"].cyclomatic_complexity,
+                        "halstead_volume": analysis_result["code_quality_result"].halstead_volume,
+                        "source_lines_of_code": analysis_result["code_quality_result"].source_lines_of_code,
+                        "comment_density": analysis_result["code_quality_result"].comment_density,
+                        "duplication_percentage": analysis_result["code_quality_result"].duplication_percentage,
+                        "technical_debt_ratio": analysis_result["code_quality_result"].technical_debt_ratio
+                    },
+                    "issue_collection": {
+                        "total_issues": len(analysis_result["issue_collection"].issues),
+                        "by_severity": analysis_result["issue_collection"].count_by_severity(),
+                        "by_category": analysis_result["issue_collection"].count_by_category(),
+                        "by_status": analysis_result["issue_collection"].count_by_status()
+                    },
+                    "recommendations": analysis_result["recommendations"]
+                }
+                
+                json.dump(serializable_result, f, indent=2)
+            
+            # Generate visualizations if requested
+            if include_visualizations:
+                # Update task status
+                analysis_tasks[analysis_id] = {
+                    "status": "running",
+                    "message": "Generating visualizations..."
+                }
+                
+                # Create visualizations directory
+                vis_dir = os.path.join(VISUALIZATIONS_DIR, analysis_id)
+                os.makedirs(vis_dir, exist_ok=True)
+                
+                # Generate visualizations
+                visualization = visualize_codebase(codebase, vis_dir)
+                
+                # Generate HTML report
+                html_report = generate_html_report(analysis_result, os.path.join(vis_dir, "report.html"))
+            
+            # Update task status
+            analysis_tasks[analysis_id] = {
+                "status": "completed",
+                "message": "Analysis completed successfully",
+                "result": {
+                    "analysis_id": analysis_id,
+                    "summary": serializable_result["summary"],
+                    "visualizations": {
+                        "html_report": f"/api/visualizations/{analysis_id}/report.html",
+                        "dependency_graph": f"/api/visualizations/{analysis_id}/dependency_graph.png",
+                        "call_graph": f"/api/visualizations/{analysis_id}/call_graph.png",
+                        "issues": f"/api/visualizations/{analysis_id}/issues.png",
+                        "issues_by_file": f"/api/visualizations/{analysis_id}/issues_by_file.png",
+                        "code_quality": f"/api/visualizations/{analysis_id}/code_quality.png"
+                    } if include_visualizations else None
+                }
+            }
+    except Exception as e:
+        # Update task status with error
+        analysis_tasks[analysis_id] = {
+            "status": "failed",
+            "message": f"Analysis failed: {str(e)}"
+        }
+        
+        # Log the error
+        import traceback
+        print(f"Error analyzing codebase: {str(e)}")
+        print(traceback.format_exc())
 
-def get_analysis_type_description(analysis_type: AnalysisType) -> str:
-    """Get description for analysis type."""
-    descriptions = {
-        AnalysisType.DEPENDENCY: "Analyze dependencies, circular dependencies, and dependency depth",
-        AnalysisType.CALL_GRAPH: "Analyze function call relationships and call chains",
-        AnalysisType.CODE_QUALITY: "Analyze code quality metrics, duplication, and technical debt",
-        AnalysisType.ARCHITECTURAL: "Analyze architectural patterns, coupling, and modularity",
-        AnalysisType.SECURITY: "Analyze potential security vulnerabilities and risks",
-        AnalysisType.PERFORMANCE: "Analyze performance hotspots and optimization opportunities"
+# API endpoints
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {"message": "Codebase Analysis API"}
+
+@app.post("/api/analyze", response_model=AnalysisResponse)
+async def analyze(request: AnalysisRequest, background_tasks: BackgroundTasks):
+    """
+    Analyze a codebase.
+    
+    Args:
+        request: AnalysisRequest object
+        background_tasks: BackgroundTasks object
+        
+    Returns:
+        AnalysisResponse object
+    """
+    # Generate analysis ID
+    import uuid
+    analysis_id = str(uuid.uuid4())
+    
+    # Create analysis task
+    analysis_tasks[analysis_id] = {
+        "status": "pending",
+        "message": "Analysis task created"
     }
-    return descriptions.get(analysis_type, "Unknown analysis type")
+    
+    # Start analysis task in the background
+    background_tasks.add_task(
+        analyze_codebase_task,
+        analysis_id,
+        request.repo_url,
+        request.branch,
+        request.include_visualizations
+    )
+    
+    # Return response
+    return AnalysisResponse(
+        analysis_id=analysis_id,
+        status="pending",
+        message="Analysis task created"
+    )
 
-@app.get("/health")
-async def health_check():
-    """Health check endpoint."""
-    return {"status": "healthy", "version": "3.0.0", "features": ["analysis", "visualization", "insights"]}
+@app.get("/api/analysis/{analysis_id}/status")
+async def get_analysis_status(analysis_id: str):
+    """
+    Get the status of an analysis task.
+    
+    Args:
+        analysis_id: ID of the analysis task
+        
+    Returns:
+        Status of the analysis task
+    """
+    # Check if analysis task exists
+    if analysis_id not in analysis_tasks:
+        raise HTTPException(status_code=404, detail="Analysis task not found")
+    
+    # Return status
+    return {
+        "analysis_id": analysis_id,
+        "status": analysis_tasks[analysis_id]["status"],
+        "message": analysis_tasks[analysis_id]["message"]
+    }
 
-# ============================================================================
-# MODAL DEPLOYMENT
-# ============================================================================
+@app.get("/api/analysis/{analysis_id}/result", response_model=AnalysisResult)
+async def get_analysis_result(analysis_id: str):
+    """
+    Get the result of an analysis task.
+    
+    Args:
+        analysis_id: ID of the analysis task
+        
+    Returns:
+        Result of the analysis task
+    """
+    # Check if analysis task exists
+    if analysis_id not in analysis_tasks:
+        raise HTTPException(status_code=404, detail="Analysis task not found")
+    
+    # Check if analysis task is completed
+    if analysis_tasks[analysis_id]["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Analysis task not completed")
+    
+    # Return result
+    return analysis_tasks[analysis_id]["result"]
 
-# Create Modal app and image for deployment
-modal_app = modal.App("codebase-analytics")
+@app.get("/api/analysis/{analysis_id}/report")
+async def get_analysis_report(analysis_id: str):
+    """
+    Get the HTML report for an analysis task.
+    
+    Args:
+        analysis_id: ID of the analysis task
+        
+    Returns:
+        HTML report for the analysis task
+    """
+    # Check if analysis task exists
+    if analysis_id not in analysis_tasks:
+        raise HTTPException(status_code=404, detail="Analysis task not found")
+    
+    # Check if analysis task is completed
+    if analysis_tasks[analysis_id]["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Analysis task not completed")
+    
+    # Check if visualizations were generated
+    if "visualizations" not in analysis_tasks[analysis_id]["result"] or analysis_tasks[analysis_id]["result"]["visualizations"] is None:
+        raise HTTPException(status_code=400, detail="Visualizations not generated for this analysis")
+    
+    # Get HTML report path
+    html_report_path = os.path.join(VISUALIZATIONS_DIR, analysis_id, "report.html")
+    
+    # Check if HTML report exists
+    if not os.path.exists(html_report_path):
+        raise HTTPException(status_code=404, detail="HTML report not found")
+    
+    # Return HTML report
+    return FileResponse(html_report_path, media_type="text/html")
 
-image = modal.Image.debian_slim().pip_install([
-    "fastapi",
-    "uvicorn",
-    "requests",
-    "pydantic",
-    "networkx",
-    "codegen"
-])
+@app.get("/api/visualizations/{analysis_id}/{visualization_file}")
+async def get_visualization(analysis_id: str, visualization_file: str):
+    """
+    Get a visualization file for an analysis task.
+    
+    Args:
+        analysis_id: ID of the analysis task
+        visualization_file: Name of the visualization file
+        
+    Returns:
+        Visualization file
+    """
+    # Check if analysis task exists
+    if analysis_id not in analysis_tasks:
+        raise HTTPException(status_code=404, detail="Analysis task not found")
+    
+    # Check if analysis task is completed
+    if analysis_tasks[analysis_id]["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Analysis task not completed")
+    
+    # Check if visualizations were generated
+    if "visualizations" not in analysis_tasks[analysis_id]["result"] or analysis_tasks[analysis_id]["result"]["visualizations"] is None:
+        raise HTTPException(status_code=400, detail="Visualizations not generated for this analysis")
+    
+    # Get visualization file path
+    visualization_path = os.path.join(VISUALIZATIONS_DIR, analysis_id, visualization_file)
+    
+    # Check if visualization file exists
+    if not os.path.exists(visualization_path):
+        raise HTTPException(status_code=404, detail="Visualization file not found")
+    
+    # Determine media type
+    media_type = "image/png"
+    if visualization_file.endswith(".html"):
+        media_type = "text/html"
+    elif visualization_file.endswith(".json"):
+        media_type = "application/json"
+    
+    # Return visualization file
+    return FileResponse(visualization_path, media_type=media_type)
 
-@modal_app.function(image=image)
-@modal.asgi_app()
-def fastapi_app():
-    return app
+@app.post("/api/upload")
+async def upload_codebase(background_tasks: BackgroundTasks, file: UploadFile = File(...), include_visualizations: bool = Form(True)):
+    """
+    Upload and analyze a codebase.
+    
+    Args:
+        background_tasks: BackgroundTasks object
+        file: Uploaded file (zip or tar.gz)
+        include_visualizations: Whether to include visualizations
+        
+    Returns:
+        AnalysisResponse object
+    """
+    # Generate analysis ID
+    import uuid
+    analysis_id = str(uuid.uuid4())
+    
+    # Create analysis task
+    analysis_tasks[analysis_id] = {
+        "status": "pending",
+        "message": "Analysis task created"
+    }
+    
+    # Create upload directory
+    upload_dir = os.path.join(UPLOADS_DIR, analysis_id)
+    os.makedirs(upload_dir, exist_ok=True)
+    
+    # Save uploaded file
+    file_path = os.path.join(upload_dir, file.filename)
+    with open(file_path, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    
+    # Extract uploaded file
+    extract_dir = os.path.join(upload_dir, "extracted")
+    os.makedirs(extract_dir, exist_ok=True)
+    
+    # Update task status
+    analysis_tasks[analysis_id] = {
+        "status": "running",
+        "message": "Extracting uploaded file..."
+    }
+    
+    # Extract based on file type
+    if file.filename.endswith(".zip"):
+        import zipfile
+        with zipfile.ZipFile(file_path, "r") as zip_ref:
+            zip_ref.extractall(extract_dir)
+    elif file.filename.endswith(".tar.gz") or file.filename.endswith(".tgz"):
+        import tarfile
+        with tarfile.open(file_path, "r:gz") as tar_ref:
+            tar_ref.extractall(extract_dir)
+    else:
+        # Update task status with error
+        analysis_tasks[analysis_id] = {
+            "status": "failed",
+            "message": "Unsupported file format. Please upload a zip or tar.gz file."
+        }
+        return AnalysisResponse(
+            analysis_id=analysis_id,
+            status="failed",
+            message="Unsupported file format. Please upload a zip or tar.gz file."
+        )
+    
+    # Start analysis task in the background
+    background_tasks.add_task(
+        analyze_uploaded_codebase_task,
+        analysis_id,
+        extract_dir,
+        include_visualizations
+    )
+    
+    # Return response
+    return AnalysisResponse(
+        analysis_id=analysis_id,
+        status="pending",
+        message="Analysis task created"
+    )
 
+# Background task for analyzing an uploaded codebase
+def analyze_uploaded_codebase_task(analysis_id: str, extract_dir: str, include_visualizations: bool):
+    """
+    Background task for analyzing an uploaded codebase.
+    
+    Args:
+        analysis_id: ID of the analysis task
+        extract_dir: Directory containing the extracted codebase
+        include_visualizations: Whether to include visualizations
+    """
+    try:
+        # Update task status
+        analysis_tasks[analysis_id] = {
+            "status": "running",
+            "message": "Analyzing codebase..."
+        }
+        
+        # Create codebase object
+        codebase = Codebase.from_directory(extract_dir)
+        
+        # Analyze codebase
+        analysis_result = analyze_codebase(codebase)
+        
+        # Create result directory
+        result_dir = os.path.join(RESULTS_DIR, analysis_id)
+        os.makedirs(result_dir, exist_ok=True)
+        
+        # Save analysis result
+        with open(os.path.join(result_dir, "analysis.json"), "w") as f:
+            # Convert to serializable format
+            serializable_result = {
+                "summary": {
+                    "total_files": analysis_result["summary"].total_files,
+                    "total_lines": analysis_result["summary"].total_lines,
+                    "total_functions": analysis_result["summary"].total_functions,
+                    "total_classes": analysis_result["summary"].total_classes,
+                    "total_issues": analysis_result["summary"].total_issues,
+                    "issue_counts": analysis_result["summary"].issue_counts,
+                    "metrics": analysis_result["summary"].metrics,
+                    "recommendations": analysis_result["summary"].recommendations
+                },
+                "dependency_analysis": {
+                    "total_dependencies": analysis_result["dependency_analysis"].total_dependencies,
+                    "circular_dependencies": analysis_result["dependency_analysis"].circular_dependencies,
+                    "dependency_depth": analysis_result["dependency_analysis"].dependency_depth,
+                    "external_dependencies": analysis_result["dependency_analysis"].external_dependencies,
+                    "internal_dependencies": analysis_result["dependency_analysis"].internal_dependencies,
+                    "critical_dependencies": analysis_result["dependency_analysis"].critical_dependencies,
+                    "unused_dependencies": analysis_result["dependency_analysis"].unused_dependencies
+                },
+                "call_graph_analysis": {
+                    "total_functions": analysis_result["call_graph_analysis"].total_functions,
+                    "entry_points": analysis_result["call_graph_analysis"].entry_points,
+                    "leaf_functions": analysis_result["call_graph_analysis"].leaf_functions,
+                    "max_call_depth": analysis_result["call_graph_analysis"].max_call_depth
+                },
+                "code_quality_result": {
+                    "maintainability_index": analysis_result["code_quality_result"].maintainability_index,
+                    "cyclomatic_complexity": analysis_result["code_quality_result"].cyclomatic_complexity,
+                    "halstead_volume": analysis_result["code_quality_result"].halstead_volume,
+                    "source_lines_of_code": analysis_result["code_quality_result"].source_lines_of_code,
+                    "comment_density": analysis_result["code_quality_result"].comment_density,
+                    "duplication_percentage": analysis_result["code_quality_result"].duplication_percentage,
+                    "technical_debt_ratio": analysis_result["code_quality_result"].technical_debt_ratio
+                },
+                "issue_collection": {
+                    "total_issues": len(analysis_result["issue_collection"].issues),
+                    "by_severity": analysis_result["issue_collection"].count_by_severity(),
+                    "by_category": analysis_result["issue_collection"].count_by_category(),
+                    "by_status": analysis_result["issue_collection"].count_by_status()
+                },
+                "recommendations": analysis_result["recommendations"]
+            }
+            
+            json.dump(serializable_result, f, indent=2)
+        
+        # Generate visualizations if requested
+        if include_visualizations:
+            # Update task status
+            analysis_tasks[analysis_id] = {
+                "status": "running",
+                "message": "Generating visualizations..."
+            }
+            
+            # Create visualizations directory
+            vis_dir = os.path.join(VISUALIZATIONS_DIR, analysis_id)
+            os.makedirs(vis_dir, exist_ok=True)
+            
+            # Generate visualizations
+            visualization = visualize_codebase(codebase, vis_dir)
+            
+            # Generate HTML report
+            html_report = generate_html_report(analysis_result, os.path.join(vis_dir, "report.html"))
+        
+        # Update task status
+        analysis_tasks[analysis_id] = {
+            "status": "completed",
+            "message": "Analysis completed successfully",
+            "result": {
+                "analysis_id": analysis_id,
+                "summary": serializable_result["summary"],
+                "visualizations": {
+                    "html_report": f"/api/visualizations/{analysis_id}/report.html",
+                    "dependency_graph": f"/api/visualizations/{analysis_id}/dependency_graph.png",
+                    "call_graph": f"/api/visualizations/{analysis_id}/call_graph.png",
+                    "issues": f"/api/visualizations/{analysis_id}/issues.png",
+                    "issues_by_file": f"/api/visualizations/{analysis_id}/issues_by_file.png",
+                    "code_quality": f"/api/visualizations/{analysis_id}/code_quality.png"
+                } if include_visualizations else None
+            }
+        }
+    except Exception as e:
+        # Update task status with error
+        analysis_tasks[analysis_id] = {
+            "status": "failed",
+            "message": f"Analysis failed: {str(e)}"
+        }
+        
+        # Log the error
+        import traceback
+        print(f"Error analyzing codebase: {str(e)}")
+        print(traceback.format_exc())
+
+# Run the server
 if __name__ == "__main__":
-    import uvicorn
-    # Run on port 8000 to match frontend expectations
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
