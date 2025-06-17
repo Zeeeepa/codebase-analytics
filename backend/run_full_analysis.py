@@ -44,15 +44,8 @@ def main():
         
         print("Repository cloned successfully")
         
-        # Run comprehensive analysis using codegen SDK
+        # Run comprehensive analysis
         print("Running comprehensive analysis...")
-        
-        # Use codegen SDK to analyze the codebase
-        # Corrected import
-        from codegen.sdk.core import CodegenApp
-        
-        # Initialize the SDK
-        sdk = CodegenApp()
         
         # Start analysis
         print("Starting analysis...")
