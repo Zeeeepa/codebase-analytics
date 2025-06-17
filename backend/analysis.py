@@ -1021,6 +1021,9 @@ def is_recursive_function(function: Function) -> bool:
         return False
     
     code = function.code_block.source
+    if not code:  # Add check for None or empty code
+        return False
+        
     function_name = function.name
     
     # Simple check: look for function name in the code body
