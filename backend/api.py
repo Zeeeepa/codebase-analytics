@@ -156,7 +156,7 @@ class FileNode(BaseModel):
     type: str  # 'file' or 'directory'
     path: str
     issues: Optional[Dict[str, int]] = None
-    symbols: Optional[List[Symbol]] = None
+    symbols: Optional[List[Dict[str, Any]]] = None
     children: Optional[Dict[str, 'FileNode']] = None
 
 class AnalysisResponse(BaseModel):
@@ -197,6 +197,24 @@ class VisualizationResponse(BaseModel):
     config: Dict[str, Any]
 
 # Utility Functions
+
+def dict_to_file_node(data: Dict) -> FileNode:
+    """Convert dictionary structure to FileNode."""
+    children = None
+    if 'children' in data and data['children']:
+        children = {
+            name: dict_to_file_node(child_data) 
+            for name, child_data in data['children'].items()
+        }
+    
+    return FileNode(
+        name=data['name'],
+        type=data['type'],
+        path=data['path'],
+        issues=data.get('issues'),
+        symbols=data.get('symbols'),
+        children=children
+    )
 
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
     """Get the number of commits per month for the last 12 months."""
@@ -372,32 +390,33 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
                         'message': f'Incomplete implementation'
                     })
 
-            symbols.append(Symbol(
-                id=str(hash(func.name + file.filepath)),
-                name=func.name,
-                type='function',
-                filepath=file.filepath,
-                start_line=func.start_point[0] if hasattr(func, 'start_point') else 0,
-                end_line=func.end_point[0] if hasattr(func, 'end_point') else 0,
-                issues=issues if issues else None
-            ))
+            symbols.append({
+                'id': str(hash(func.name + file.filepath)),
+                'name': func.name,
+                'type': 'function',
+                'filepath': file.filepath,
+                'start_line': func.start_point[0] if hasattr(func, 'start_point') else 0,
+                'end_line': func.end_point[0] if hasattr(func, 'end_point') else 0,
+                'issues': issues if issues else None
+            })
         
         # Add classes as symbols
         for cls in file.classes:
-            symbols.append(Symbol(
-                id=str(hash(cls.name + file.filepath)),
-                name=cls.name,
-                type='class',
-                filepath=file.filepath,
-                start_line=cls.start_point[0] if hasattr(cls, 'start_point') else 0,
-                end_line=cls.end_point[0] if hasattr(cls, 'end_point') else 0
-            ))
+            symbols.append({
+                'id': str(hash(cls.name + file.filepath)),
+                'name': cls.name,
+                'type': 'class',
+                'filepath': file.filepath,
+                'start_line': cls.start_point[0] if hasattr(cls, 'start_point') else 0,
+                'end_line': cls.end_point[0] if hasattr(cls, 'end_point') else 0
+            })
         
         if symbols:
             file_symbols[file.filepath] = symbols
 
     # Build repository structure with symbols
-    repo_structure = build_repo_structure(codebase.files, file_issues, file_symbols)
+    repo_structure_dict = build_repo_structure(codebase.files, file_issues, file_symbols)
+    repo_structure = dict_to_file_node(repo_structure_dict)
 
     # Calculate metrics
     callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
