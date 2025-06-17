@@ -108,6 +108,8 @@ export default function RepoAnalyticsDashboard() {
   const [repoStructure, setRepoStructure] = useState<any>(null)
   const [selectedSymbol, setSelectedSymbol] = useState<any>(null)
   const [showSymbolContext, setShowSymbolContext] = useState(false)
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null)
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -235,33 +237,76 @@ export default function RepoAnalyticsDashboard() {
     }
   }
 
-  // Repository structure interaction handlers
+  // Enhanced Repository structure interaction handlers
   const handleFileClick = (path: string) => {
     console.log('File clicked:', path);
-    // Could expand to show file details
+    setSelectedFilePath(path);
+    
+    // Could fetch file details from API if needed
+    // For now, we'll just use the path to identify the file in the UI
   };
 
   const handleFolderClick = (path: string) => {
     console.log('Folder clicked:', path);
-    // Could expand to show folder contents
+    
+    // Toggle folder expansion state
+    setExpandedFolders(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(path)) {
+        newSet.delete(path);
+      } else {
+        newSet.add(path);
+      }
+      return newSet;
+    });
   };
 
-  const handleSymbolClick = (symbol: any) => {
+  const handleSymbolClick = async (symbol: any) => {
     console.log('Symbol clicked:', symbol);
-    setSelectedSymbol(symbol);
-    setShowSymbolContext(true);
+    
+    try {
+      // Try to fetch detailed symbol information if available
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/symbol/${symbol.id}/context`);
+      
+      if (response.ok) {
+        const symbolDetails = await response.json();
+        setSelectedSymbol(symbolDetails);
+      } else {
+        // If API fails, use the basic symbol info we already have
+        setSelectedSymbol(symbol);
+      }
+      
+      setShowSymbolContext(true);
+    } catch (error) {
+      console.error('Error fetching symbol details:', error);
+      // Fallback to basic info
+      setSelectedSymbol(symbol);
+      setShowSymbolContext(true);
+    }
   };
 
   const handleViewCallChain = async (symbolId: string) => {
     console.log('View call chain for symbol:', symbolId);
-    // Could fetch call chain data from API
+    
     try {
       const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/function/${symbolId}/call-chain`);
+      
       if (response.ok) {
-        const callChain = await response.json();
-        console.log('Call chain:', callChain);
-        // Could show call chain in a modal or side panel
+        const callChainData = await response.json();
+        
+        // Update the selected symbol with call chain data
+        setSelectedSymbol(prev => ({
+          ...prev,
+          function_info: {
+            ...(prev.function_info || {}),
+            call_chain: callChainData.call_chain
+          }
+        }));
+        
+        // Show the symbol context modal if not already shown
+        setShowSymbolContext(true);
       }
     } catch (error) {
       console.error('Error fetching call chain:', error);
@@ -270,18 +315,43 @@ export default function RepoAnalyticsDashboard() {
 
   const handleViewContext = async (symbolId: string) => {
     console.log('View context for symbol:', symbolId);
-    // Could fetch symbol context from API
+    
     try {
       const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/symbol/${symbolId}/context`);
+      
       if (response.ok) {
         const context = await response.json();
-        console.log('Symbol context:', context);
         setSelectedSymbol(context);
         setShowSymbolContext(true);
       }
     } catch (error) {
       console.error('Error fetching symbol context:', error);
+      
+      // Try to find the symbol in the repo structure as fallback
+      if (repoStructure) {
+        const findSymbolInNode = (node: any): any => {
+          if (node.symbols) {
+            const symbol = node.symbols.find((s: any) => s.id === symbolId);
+            if (symbol) return symbol;
+          }
+          
+          if (node.children) {
+            for (const childKey in node.children) {
+              const result = findSymbolInNode(node.children[childKey]);
+              if (result) return result;
+            }
+          }
+          
+          return null;
+        };
+        
+        const symbol = findSymbolInNode(repoStructure);
+        if (symbol) {
+          setSelectedSymbol(symbol);
+          setShowSymbolContext(true);
+        }
+      }
     }
   };
 
@@ -302,11 +372,8 @@ function calculateCodebaseGrade(data: RepoData) {
   return 'F';
 }
 
-
-
-
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen bg-gray-50">
       {isLandingPage ? (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
           <div className="text-center mb-8">
@@ -347,7 +414,7 @@ function calculateCodebaseGrade(data: RepoData) {
         </div>
       ) : (
         <div className="flex flex-col min-h-screen">
-          <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <header className="sticky top-0 z-10 bg-white border-b">
             <div className="w-full px-8 py-4">
               <div className="flex items-center justify-between">
                 <div className="flex-shrink-0">
@@ -376,7 +443,7 @@ function calculateCodebaseGrade(data: RepoData) {
               </div>
             </div>
           </header>
-          <main className="p-6 flex-grow">
+          <main className="flex-1 container mx-auto py-6 px-4 md:px-6">
             <div className="grid mb-5 gap-6 grid-cols-1">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -609,20 +676,31 @@ function calculateCodebaseGrade(data: RepoData) {
             </div>
           </main>
           
-          {/* Symbol Context Modal */}
+          {/* Symbol Context Modal - Enhanced */}
           {showSymbolContext && selectedSymbol && (
             <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-background rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
+              <div className="bg-background rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto w-full">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-xl font-bold">Symbol Details</h2>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowSymbolContext(false)}
-                  >
-                    Close
-                  </Button>
+                  <div className="flex gap-2">
+                    {selectedSymbol.type === 'function' && (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => handleViewCallChain(selectedSymbol.id)}
+                        className="text-sm"
+                      >
+                        View Call Chain
+                      </Button>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowSymbolContext(false)}
+                    >
+                      Close
+                    </Button>
+                  </div>
                 </div>
-                <SymbolContext symbol={selectedSymbol} />
+                <SymbolContext {...selectedSymbol} />
               </div>
             </div>
           )}
