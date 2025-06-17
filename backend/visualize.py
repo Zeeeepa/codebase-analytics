@@ -443,7 +443,7 @@ def create_blast_radius(codebase: Codebase, symbol_name: str, max_depth: int = 2
         "config": config.__dict__
     }
 
-def _build_blast_radius_recursive(graph: nx.DiGraph, symbol: Symbol, codebase: Codebase, max_depth: int, current_depth: int, colors: Dict):
+def _build_blast_radius_recursive(graph, symbol: Symbol, codebase: Codebase, max_depth: int, current_depth: int, colors: Dict):
     """Recursively build blast radius graph."""
     if current_depth >= max_depth:
         return
