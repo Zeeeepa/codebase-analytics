@@ -21,10 +21,12 @@ from typing import Dict, List, Any, Optional, Set, Tuple, Union
 from collections import Counter, defaultdict, deque
 from pathlib import Path
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, auto
 from datetime import datetime
 import uuid
 import inspect
+import time
+import json
 
 # Import from Codegen SDK
 from codegen.sdk.core.codebase import Codebase
@@ -867,3 +869,497 @@ def analyze_codebase(
 # ============================================================================
 # SECTION 7: COMPREHENSIVE ANALYSIS FUNCTIONS
 # ============================================================================
+
+class IssueType(Enum):
+    """Types of issues that can be detected in code analysis."""
+    UNUSED_FUNCTION = auto()
+    UNUSED_CLASS = auto()
+    UNUSED_IMPORT = auto()
+    UNUSED_PARAMETER = auto()
+    PARAMETER_MISMATCH = auto()
+    MISSING_TYPE_ANNOTATION = auto()
+    CIRCULAR_DEPENDENCY = auto()
+    EMPTY_FUNCTION = auto()
+    IMPLEMENTATION_ERROR = auto()
+
+class ComprehensiveAnalyzer:
+    """
+    Comprehensive analyzer for codebases using the Codegen SDK.
+    Implements deep analysis of code issues, dependencies, and metrics.
+    """
+    
+    def __init__(self, repo_path_or_url: str):
+        """
+        Initialize the analyzer with a repository path or URL.
+        
+        Args:
+            repo_path_or_url: Path to local repo or URL to GitHub repo
+        """
+        self.repo_path_or_url = repo_path_or_url
+        self.issues: List[Issue] = []
+        self.start_time = time.time()
+        self.codebase = None
+        
+    def analyze(self) -> Dict[str, Any]:
+        """
+        Perform a comprehensive analysis of the codebase.
+        
+        Returns:
+            Dictionary with analysis results
+        """
+        print(f"Starting comprehensive analysis of {self.repo_path_or_url}...")
+        
+        # Initialize codebase
+        try:
+            print(f"Initializing codebase from {self.repo_path_or_url}")
+            if self.repo_path_or_url.startswith(("http://", "https://")):
+                # Extract repo name for GitHub URLs
+                parts = self.repo_path_or_url.rstrip('/').split('/')
+                repo_name = f"{parts[-2]}/{parts[-1]}"
+                try:
+                    self.codebase = Codebase.from_repo(repo_full_name=repo_name)
+                    print(f"Successfully initialized codebase from GitHub repository: {repo_name}")
+                except Exception as e:
+                    print(f"Error initializing codebase from GitHub: {e}")
+                    self.issues.append(Issue(
+                        self.repo_path_or_url,
+                        "Initialization Error",
+                        f"Failed to initialize codebase from GitHub: {e}",
+                        IssueSeverity.ERROR,
+                        suggestion="Check your network connection and GitHub access permissions."
+                    ))
+                    return {
+                        "error": f"Failed to initialize codebase: {str(e)}",
+                        "success": False
+                    }
+            else:
+                # Local path
+                try:
+                    self.codebase = Codebase.from_local(self.repo_path_or_url)
+                    print(f"Successfully initialized codebase from local path: {self.repo_path_or_url}")
+                except Exception as e:
+                    print(f"Error initializing codebase from local path: {e}")
+                    self.issues.append(Issue(
+                        self.repo_path_or_url,
+                        "Initialization Error",
+                        f"Failed to initialize codebase from local path: {e}",
+                        IssueSeverity.ERROR,
+                        suggestion="Check if the path exists and is a valid repository."
+                    ))
+                    return {
+                        "error": f"Failed to initialize codebase: {str(e)}",
+                        "success": False
+                    }
+        except Exception as e:
+            print(f"Unexpected error initializing codebase: {e}")
+            return {
+                "error": f"Failed to initialize codebase: {str(e)}",
+                "success": False
+            }
+            
+        # Run analysis
+        try:
+            print("Running dead code analysis...")
+            self._analyze_dead_code()
+            
+            print("Running parameter issues analysis...")
+            self._analyze_parameter_issues()
+            
+            print("Running type annotation analysis...")
+            self._analyze_type_annotations()
+            
+            print("Running circular dependency analysis...")
+            self._analyze_circular_dependencies()
+            
+            print("Running implementation issues analysis...")
+            self._analyze_implementation_issues()
+            
+            # Generate report
+            report = self._generate_report()
+            
+            # Print report
+            self._print_report(report)
+            
+            # Save report
+            self._save_report(report)
+            
+            # Save detailed summaries
+            self._save_detailed_summaries("detailed_analysis.txt")
+            
+            return report
+            
+        except Exception as e:
+            print(f"Error during analysis: {e}")
+            return {
+                "error": f"Analysis failed: {str(e)}",
+                "success": False
+            }
+    
+    def _analyze_dead_code(self):
+        """Find and log unused code (functions, classes, imports)."""
+        # Find unused functions
+        for func in self.codebase.functions:
+            if not func.usages:
+                self.issues.append(Issue(
+                    func, 
+                    IssueType.UNUSED_FUNCTION,
+                    f"Unused function: {func.name}",
+                    IssueSeverity.WARNING,
+                    suggestion="Consider removing this unused function or documenting why it's needed"
+                ))
+        
+        # Find unused classes
+        for cls in self.codebase.classes:
+            if not cls.usages:
+                self.issues.append(Issue(
+                    cls,
+                    IssueType.UNUSED_CLASS,
+                    f"Unused class: {cls.name}",
+                    IssueSeverity.WARNING,
+                    suggestion="Consider removing this unused class or documenting why it's needed"
+                ))
+        
+        # Find unused imports
+        for file in self.codebase.files:
+            for imp in file.imports:
+                if not imp.usages:
+                    self.issues.append(Issue(
+                        imp,
+                        IssueType.UNUSED_IMPORT,
+                        f"Unused import: {imp.name} in {file.path}",
+                        IssueSeverity.INFO,
+                        suggestion="Remove the unused import to clean up the code"
+                    ))
+    
+    def _analyze_parameter_issues(self):
+        """Find and log parameter issues (unused, mismatches)."""
+        for func in self.codebase.functions:
+            # Check for unused parameters
+            for param in func.parameters:
+                # Skip 'self' in methods
+                if param.name == 'self' and func.is_method:
+                    continue
+                    
+                # Check if parameter is used in function body
+                param_dependencies = [dep.name for dep in func.dependencies if hasattr(dep, 'name')]
+                if param.name not in param_dependencies:
+                    self.issues.append(Issue(
+                        func,
+                        IssueType.UNUSED_PARAMETER,
+                        f"Function '{func.name}' has unused parameter: {param.name}",
+                        IssueSeverity.INFO,
+                        suggestion=f"Consider removing the unused parameter '{param.name}' if it's not needed"
+                    ))
+            
+            # Check call sites for parameter mismatches
+            for call in func.call_sites:
+                if hasattr(call, 'args') and hasattr(func, 'parameters'):
+                    expected_params = set(p.name for p in func.parameters if not p.is_optional and p.name != 'self')
+                    actual_params = set()
+                    
+                    # Extract parameter names from call arguments
+                    if hasattr(call, 'args'):
+                        for arg in call.args:
+                            if hasattr(arg, 'parameter_name') and arg.parameter_name:
+                                actual_params.add(arg.parameter_name)
+                    
+                    # Check for missing required parameters
+                    missing_params = expected_params - actual_params
+                    if missing_params:
+                        self.issues.append(Issue(
+                            call,
+                            IssueType.PARAMETER_MISMATCH,
+                            f"Call to '{func.name}' is missing required parameters: {', '.join(missing_params)}",
+                            IssueSeverity.ERROR,
+                            suggestion=f"Add the missing parameters to the function call"
+                        ))
+    
+    def _analyze_type_annotations(self):
+        """Find and log missing type annotations."""
+        for func in self.codebase.functions:
+            # Skip if function is in a type-annotated file
+            file_path = str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else ''
+            if any(file_ext in file_path for file_ext in ['.pyi']):
+                continue
+                
+            # Check return type
+            if not func.return_type and not func.name.startswith('__'):
+                self.issues.append(Issue(
+                    func,
+                    IssueType.MISSING_TYPE_ANNOTATION,
+                    f"Function '{func.name}' is missing return type annotation",
+                    IssueSeverity.INFO,
+                    suggestion="Add a return type annotation to improve type safety"
+                ))
+            
+            # Check parameter types
+            params_without_type = [p.name for p in func.parameters 
+                                 if not p.type and p.name != 'self' and not p.name.startswith('*')]
+            if params_without_type:
+                self.issues.append(Issue(
+                    func,
+                    IssueType.MISSING_TYPE_ANNOTATION,
+                    f"Function '{func.name}' has parameters without type annotations: {', '.join(params_without_type)}",
+                    IssueSeverity.INFO,
+                    suggestion="Add type annotations to all parameters"
+                ))
+    
+    def _analyze_circular_dependencies(self):
+        """Find and log circular dependencies."""
+        circular_deps = {}
+        
+        # Basic implementation to detect file-level circular dependencies
+        for file in self.codebase.files:
+            visited = set()
+            path = []
+            self._check_circular_deps(file, visited, path, circular_deps)
+        
+        # Log circular dependencies
+        for file_path, cycles in circular_deps.items():
+            for cycle in cycles:
+                cycle_str = " -> ".join([f.path for f in cycle])
+                self.issues.append(Issue(
+                    file_path,
+                    IssueType.CIRCULAR_DEPENDENCY,
+                    f"Circular dependency detected: {cycle_str}",
+                    IssueSeverity.ERROR,
+                    suggestion="Refactor the code to break the circular dependency"
+                ))
+    
+    def _check_circular_deps(self, file, visited, path, circular_deps):
+        """Helper method to check for circular dependencies using DFS."""
+        if file in path:
+            # Found a cycle
+            cycle = path[path.index(file):] + [file]
+            if file.path not in circular_deps:
+                circular_deps[file.path] = []
+            circular_deps[file.path].append(cycle)
+            return
+        
+        if file in visited:
+            return
+            
+        visited.add(file)
+        path.append(file)
+        
+        # Check dependencies
+        for dep in file.dependencies:
+            if hasattr(dep, 'file') and dep.file:
+                self._check_circular_deps(dep.file, visited, path.copy(), circular_deps)
+        
+        path.pop()
+    
+    def _analyze_implementation_issues(self):
+        """Find and log implementation issues (empty functions, etc.)."""
+        for func in self.codebase.functions:
+            # Skip dunder methods and abstract methods
+            if func.name.startswith('__') and func.name.endswith('__'):
+                continue
+            
+            # Check for empty function bodies
+            if not func.body or not func.body.strip():
+                # Skip if it's a method overridden from parent class
+                is_override = False
+                if hasattr(func, 'parent') and hasattr(func.parent, 'parents'):
+                    for parent_class in func.parent.parents:
+                        if any(m.name == func.name for m in parent_class.methods):
+                            is_override = True
+                            break
+                
+                if not is_override:
+                    self.issues.append(Issue(
+                        func,
+                        IssueType.EMPTY_FUNCTION,
+                        f"Function '{func.name}' has an empty body",
+                        IssueSeverity.WARNING,
+                        suggestion="Implement the function or remove it if it's not needed"
+                    ))
+    
+    def _generate_report(self) -> Dict[str, Any]:
+        """
+        Generate a comprehensive report of the analysis results.
+        
+        Returns:
+            Dictionary with analysis results
+        """
+        # Calculate analysis time
+        analysis_time = time.time() - self.start_time
+        
+        # Count issues by type and severity
+        issue_counts = defaultdict(int)
+        severity_counts = defaultdict(int)
+        
+        for issue in self.issues:
+            issue_type = issue.issue_type if hasattr(issue, 'issue_type') else "Unknown"
+            severity = issue.severity if hasattr(issue, 'severity') else "Unknown"
+            
+            issue_counts[str(issue_type)] += 1
+            severity_counts[str(severity)] += 1
+        
+        # Generate summary statistics
+        total_files = len(self.codebase.files) if self.codebase else 0
+        total_functions = len(self.codebase.functions) if self.codebase else 0
+        total_classes = len(self.codebase.classes) if self.codebase else 0
+        total_issues = len(self.issues)
+        
+        # Calculate issue density
+        issue_density = total_issues / total_files if total_files > 0 else 0
+        
+        # Generate report
+        report = {
+            "summary": {
+                "repo": self.repo_path_or_url,
+                "analysis_time_seconds": analysis_time,
+                "total_files": total_files,
+                "total_functions": total_functions,
+                "total_classes": total_classes,
+                "total_issues": total_issues,
+                "issue_density": issue_density
+            },
+            "issues_by_type": dict(issue_counts),
+            "issues_by_severity": dict(severity_counts),
+            "success": True
+        }
+        
+        return report
+    
+    def _print_report(self, report: Dict[str, Any]):
+        """Print a summary of the analysis report to the console."""
+        summary = report["summary"]
+        
+        print("\n" + "="*80)
+        print(f"ANALYSIS REPORT FOR: {summary['repo']}")
+        print("="*80)
+        
+        print(f"\nAnalysis completed in {summary['analysis_time_seconds']:.2f} seconds")
+        print(f"Files analyzed: {summary['total_files']}")
+        print(f"Functions analyzed: {summary['total_functions']}")
+        print(f"Classes analyzed: {summary['total_classes']}")
+        print(f"Total issues found: {summary['total_issues']}")
+        print(f"Issue density: {summary['issue_density']:.2f} issues per file")
+        
+        print("\nIssues by type:")
+        for issue_type, count in report["issues_by_type"].items():
+            print(f"  - {issue_type}: {count}")
+        
+        print("\nIssues by severity:")
+        for severity, count in report["issues_by_severity"].items():
+            print(f"  - {severity}: {count}")
+        
+        print("\nTop issues:")
+        for i, issue in enumerate(self.issues[:10]):
+            print(f"  {i+1}. {issue}")
+        
+        if len(self.issues) > 10:
+            print(f"  ... and {len(self.issues) - 10} more issues")
+        
+        print("\n" + "="*80)
+    
+    def _save_report(self, report: Dict[str, Any]):
+        """Save the analysis report to a JSON file."""
+        try:
+            # Create output directory if it doesn't exist
+            output_dir = Path("analysis_reports")
+            output_dir.mkdir(exist_ok=True)
+            
+            # Generate filename based on repo name
+            repo_name = self.repo_path_or_url.split('/')[-1].replace('.', '_')
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            filename = output_dir / f"analysis_{repo_name}_{timestamp}.json"
+            
+            # Save report
+            with open(filename, 'w') as f:
+                json.dump(report, f, indent=2)
+                
+            print(f"\nReport saved to: {filename}")
+            
+        except Exception as e:
+            print(f"Error saving report: {e}")
+    
+    def _save_detailed_summaries(self, filename: str):
+        """Save detailed summaries of the codebase to a text file."""
+        try:
+            # Create output directory if it doesn't exist
+            output_dir = Path("analysis_reports")
+            output_dir.mkdir(exist_ok=True)
+            
+            # Generate full path
+            filepath = output_dir / filename
+            
+            with open(filepath, 'w') as f:
+                f.write("="*80 + "\n")
+                f.write(f"DETAILED ANALYSIS SUMMARY FOR: {self.repo_path_or_url}\n")
+                f.write("="*80 + "\n\n")
+                
+                # Write file summaries
+                f.write("FILE SUMMARIES\n")
+                f.write("-"*80 + "\n")
+                
+                for file in self.codebase.files:
+                    try:
+                        f.write(f"File: {file.path}\n")
+                        f.write(f"  Size: {file.size} bytes\n")
+                        f.write(f"  Lines: {len(file.content.splitlines())}\n")
+                        f.write(f"  Functions: {len(file.functions)}\n")
+                        f.write(f"  Classes: {len(file.classes)}\n")
+                        f.write(f"  Imports: {len(file.imports)}\n")
+                        f.write("\n")
+                    except Exception as e:
+                        f.write(f"Error generating file summary: {str(e)}\n\n")
+                
+                # Write function summaries
+                f.write("\nFUNCTION SUMMARIES\n")
+                f.write("-"*80 + "\n")
+                
+                for func in self.codebase.functions:
+                    try:
+                        f.write(f"Function: {func.name}\n")
+                        f.write(f"  File: {func.file.path if hasattr(func, 'file') else 'Unknown'}\n")
+                        f.write(f"  Parameters: {', '.join(p.name for p in func.parameters)}\n")
+                        f.write(f"  Return type: {func.return_type if func.return_type else 'None'}\n")
+                        f.write(f"  Usages: {len(func.usages)}\n")
+                        f.write(f"  Dependencies: {len(func.dependencies)}\n")
+                        f.write("\n")
+                    except Exception as e:
+                        f.write(f"Error generating function summary: {str(e)}\n\n")
+                
+                # Write class summaries
+                f.write("\nCLASS SUMMARIES\n")
+                f.write("-"*80 + "\n")
+                
+                for cls in self.codebase.classes:
+                    try:
+                        f.write(f"Class: {cls.name}\n")
+                        f.write(f"  File: {cls.file.path if hasattr(cls, 'file') else 'Unknown'}\n")
+                        f.write(f"  Methods: {len(cls.methods)}\n")
+                        f.write(f"  Attributes: {len(cls.attributes)}\n")
+                        f.write(f"  Parents: {', '.join(p.name for p in cls.parents) if hasattr(cls, 'parents') else 'None'}\n")
+                        f.write(f"  Usages: {len(cls.usages)}\n")
+                        f.write("\n")
+                    except Exception as e:
+                        f.write(f"Error generating class summary: {str(e)}\n\n")
+                
+                # Write issue summaries
+                f.write("\nISSUE SUMMARIES\n")
+                f.write("-"*80 + "\n")
+                
+                for issue in self.issues:
+                    f.write(f"{issue}\n\n")
+                
+            print(f"\nDetailed summaries saved to: {filepath}")
+            
+        except Exception as e:
+            print(f"Error saving detailed summaries: {e}")
+
+def analyze_comprehensive(repo_path_or_url: str) -> Dict[str, Any]:
+    """
+    Perform a comprehensive analysis of a codebase.
+    
+    Args:
+        repo_path_or_url: Path to local repo or URL to GitHub repo
+        
+    Returns:
+        Dictionary with analysis results
+    """
+    analyzer = ComprehensiveAnalyzer(repo_path_or_url)
+    return analyzer.analyze()
