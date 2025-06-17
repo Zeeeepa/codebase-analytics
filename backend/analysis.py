@@ -981,8 +981,10 @@ def analyze_inheritance_patterns(codebase: Codebase) -> InheritanceAnalysis:
             current = cls
             while current.superclasses:
                 # Take the first superclass for simplicity
-                parent_name = current.superclasses[0] if current.superclasses else None
-                if parent_name:
+                parent_obj = current.superclasses[0] if current.superclasses else None
+                if parent_obj:
+                    # Convert to string to avoid serialization issues
+                    parent_name = str(parent_obj) if hasattr(parent_obj, '__str__') else getattr(parent_obj, 'name', str(parent_obj))
                     chain.append(parent_name)
                     # Find parent class in codebase
                     parent_cls = next((c for c in codebase.classes if c.name == parent_name), None)
