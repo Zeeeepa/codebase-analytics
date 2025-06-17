@@ -198,7 +198,23 @@ export default function RepoAnalyticsDashboard() {
       setCommitData(transformedCommitData);
     } catch (error) {
       console.error('Error fetching repo data:', error);
-      alert('Error fetching repository data. Please check the URL and try again.');
+      
+      // Handle different types of errors
+      let errorMessage = 'Error fetching repository data. Please check the URL and try again.';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('status: 408')) {
+          errorMessage = 'Repository analysis timed out. The repository may be too large. Please try with a smaller repository.';
+        } else if (error.message.includes('status: 404')) {
+          errorMessage = 'Repository not found. Please check the URL and make sure the repository exists.';
+        } else if (error.message.includes('status: 5')) {
+          errorMessage = 'Server error occurred. Please try again later.';
+        } else if (error.message.includes('fetch')) {
+          errorMessage = 'Cannot connect to backend server. Please make sure the backend is running on port 8000.';
+        }
+      }
+      
+      alert(errorMessage);
       setIsLandingPage(true);
     } finally {
       setIsLoading(false);

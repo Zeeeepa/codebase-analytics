@@ -463,7 +463,17 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
     repo_url = f"{parts[0]}/{parts[1]}"
     
     try:
-        codebase = Codebase.from_repo(repo_url)
+        # Add timeout for large repositories (60 seconds)
+        import asyncio
+        codebase = await asyncio.wait_for(
+            asyncio.to_thread(Codebase.from_repo, repo_url),
+            timeout=60.0
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=408, 
+            detail=f"Repository analysis timed out after 60 seconds. The repository '{repo_url}' may be too large. Please try with a smaller repository."
+        )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
 
