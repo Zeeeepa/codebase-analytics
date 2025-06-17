@@ -44,7 +44,9 @@ from analysis import (
     calculate_halstead_volume,
     count_lines,
     calculate_maintainability_index,
-    get_maintainability_rank
+    get_maintainability_rank,
+    get_operators_and_operands,
+    calculate_doi
 )
 
 from visualization import (
