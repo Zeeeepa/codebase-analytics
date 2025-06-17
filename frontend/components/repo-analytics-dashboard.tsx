@@ -129,8 +129,8 @@ export default function RepoAnalyticsDashboard() {
     
     // In development, try local backend first
     if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      // Backend runs on port 8001
-      return 'http://localhost:8001';
+      // Backend runs on port 8000
+      return 'http://localhost:8000';
     }
     
     // Fallback to Modal deployment for production
