@@ -142,12 +142,12 @@ print_success "Frontend dependencies installed!"
 print_step "Starting backend server..."
 cd ../backend
 
-print_status "Starting backend on port 8001..."
+print_status "Starting backend on port 8000..."
 if [ -f "api.py" ]; then
     python3 api.py &
     BACKEND_PID=$!
 elif command_exists uvicorn; then
-    uvicorn api:fastapi_app --host 0.0.0.0 --port 8001 --reload &
+    uvicorn api:fastapi_app --host 0.0.0.0 --port 8000 --reload &
     BACKEND_PID=$!
 else
     print_error "Cannot start backend server"
@@ -187,7 +187,7 @@ echo ""
 echo "=================================================================="
 print_success "🎉 CODEBASE ANALYTICS IS RUNNING!"
 echo "=================================================================="
-print_status "📊 Backend API: http://localhost:8001"
+print_status "📊 Backend API: http://localhost:8000"
 print_status "🌐 Frontend App: http://localhost:3000"
 print_status "📂 Project Directory: $(pwd)/.."
 print_status "🌿 Branch: $(git branch --show-current)"
