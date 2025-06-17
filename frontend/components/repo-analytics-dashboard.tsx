@@ -1,13 +1,16 @@
 "use client"
 
-import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, TreePine, RotateCcw } from "lucide-react"
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
-
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle } from "lucide-react"
 import RepoStructure from "@/components/RepoStructure"
+import EnhancedRepoStructure from "@/components/EnhancedRepoStructure"
 import SymbolContext from "@/components/SymbolContext"
 
 const mockRepoData = {
@@ -556,7 +559,7 @@ function calculateCodebaseGrade(data: RepoData) {
                   <CardDescription>Interactive file tree with issue counts and symbol information</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <RepoStructure
+                  <EnhancedRepoStructure
                     data={repoStructure}
                     onFileClick={handleFileClick}
                     onFolderClick={handleFolderClick}
