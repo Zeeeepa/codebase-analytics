@@ -22,10 +22,12 @@ try:
     import networkx as nx
     from matplotlib.colors import LinearSegmentedColormap
     import matplotlib.patches as mpatches
+    HAS_VIZ_DEPS = True
 except ImportError:
     print("Visualization dependencies not found. Please install them with: pip install networkx matplotlib")
     plt = None
     nx = None
+    HAS_VIZ_DEPS = False
 
 # Import from Codegen SDK
 from codegen.sdk.core.codebase import Codebase
@@ -100,8 +102,12 @@ COLOR_SCHEMES = {
 
 def create_call_graph(codebase: Codebase, function_name: str = None, max_depth: int = 3, config: VisualizationConfig = None) -> Dict[str, Any]:
     """Create a call graph visualization."""
-    if not nx:
-        raise ImportError("NetworkX is required for call graph visualization")
+    if not HAS_VIZ_DEPS:
+        return {
+            "error": "Visualization dependencies not available. Please install: pip install networkx matplotlib",
+            "type": "call_graph",
+            "config": config.__dict__ if config else {}
+        }
     
     config = config or VisualizationConfig()
     colors = COLOR_SCHEMES[config.color_scheme]
@@ -164,7 +170,7 @@ def create_call_graph(codebase: Codebase, function_name: str = None, max_depth: 
         "config": config.__dict__
     }
 
-def _build_call_graph_recursive(graph: nx.DiGraph, function: Function, codebase: Codebase, max_depth: int, current_depth: int):
+def _build_call_graph_recursive(graph, function: Function, codebase: Codebase, max_depth: int, current_depth: int):
     """Recursively build call graph."""
     if current_depth >= max_depth:
         return
@@ -181,8 +187,12 @@ def _build_call_graph_recursive(graph: nx.DiGraph, function: Function, codebase:
 
 def create_dependency_graph(codebase: Codebase, module_path: str = None, config: VisualizationConfig = None) -> Dict[str, Any]:
     """Create a dependency graph visualization."""
-    if not nx:
-        raise ImportError("NetworkX is required for dependency graph visualization")
+    if not HAS_VIZ_DEPS:
+        return {
+            "error": "Visualization dependencies not available. Please install: pip install networkx matplotlib",
+            "type": "dependency_graph",
+            "config": config.__dict__ if config else {}
+        }
     
     config = config or VisualizationConfig()
     colors = COLOR_SCHEMES[config.color_scheme]
@@ -236,8 +246,12 @@ def create_dependency_graph(codebase: Codebase, module_path: str = None, config:
 
 def create_class_hierarchy(codebase: Codebase, config: VisualizationConfig = None) -> Dict[str, Any]:
     """Create a class hierarchy visualization."""
-    if not nx:
-        raise ImportError("NetworkX is required for class hierarchy visualization")
+    if not HAS_VIZ_DEPS:
+        return {
+            "error": "Visualization dependencies not available. Please install: pip install networkx matplotlib",
+            "type": "class_hierarchy",
+            "config": config.__dict__ if config else {}
+        }
     
     config = config or VisualizationConfig()
     colors = COLOR_SCHEMES[config.color_scheme]
@@ -285,6 +299,12 @@ def create_class_hierarchy(codebase: Codebase, config: VisualizationConfig = Non
 
 def create_complexity_heatmap(codebase: Codebase, config: VisualizationConfig = None) -> Dict[str, Any]:
     """Create a complexity heatmap visualization."""
+    if not HAS_VIZ_DEPS:
+        return {
+            "error": "Visualization dependencies not available. Please install: pip install networkx matplotlib",
+            "type": "complexity_heatmap",
+            "config": config.__dict__ if config else {}
+        }
     from .analysis import calculate_cyclomatic_complexity
     
     config = config or VisualizationConfig()
@@ -314,6 +334,12 @@ def create_complexity_heatmap(codebase: Codebase, config: VisualizationConfig = 
 
 def create_issues_heatmap(file_issues: Dict[str, Dict], config: VisualizationConfig = None) -> Dict[str, Any]:
     """Create an issues heatmap visualization."""
+    if not HAS_VIZ_DEPS:
+        return {
+            "error": "Visualization dependencies not available. Please install: pip install networkx matplotlib",
+            "type": "issues_heatmap",
+            "config": config.__dict__ if config else {}
+        }
     config = config or VisualizationConfig()
     colors = COLOR_SCHEMES[config.color_scheme]
     
@@ -360,8 +386,12 @@ def create_issues_heatmap(file_issues: Dict[str, Dict], config: VisualizationCon
 
 def create_blast_radius(codebase: Codebase, symbol_name: str, max_depth: int = 2, config: VisualizationConfig = None) -> Dict[str, Any]:
     """Create a blast radius visualization showing impact of changes to a symbol."""
-    if not nx:
-        raise ImportError("NetworkX is required for blast radius visualization")
+    if not HAS_VIZ_DEPS:
+        return {
+            "error": "Visualization dependencies not available. Please install: pip install networkx matplotlib",
+            "type": "blast_radius",
+            "config": config.__dict__ if config else {}
+        }
     
     config = config or VisualizationConfig()
     colors = COLOR_SCHEMES[config.color_scheme]
@@ -563,4 +593,3 @@ def _get_recommended_visualizations(codebase: Codebase) -> List[str]:
         recommendations.append("complexity_heatmap")
     
     return recommendations
-
