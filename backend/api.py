@@ -767,6 +767,9 @@ async def health_check():
 # MODAL DEPLOYMENT
 # ============================================================================
 
+# Create Modal app and image for deployment
+modal_app = modal.App("codebase-analytics")
+
 image = modal.Image.debian_slim().pip_install([
     "fastapi",
     "uvicorn",
@@ -776,9 +779,9 @@ image = modal.Image.debian_slim().pip_install([
     "codegen"
 ])
 
-@app.function(image=image)
+@modal_app.function(image=image)
 @modal.asgi_app()
-def modal_app():
+def fastapi_app():
     return app
 
 if __name__ == "__main__":
