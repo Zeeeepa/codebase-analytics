@@ -285,8 +285,17 @@ def analyze_functions_comprehensive(codebase) -> FunctionAnalysis:
     for file in codebase.files[:3]:
         if hasattr(file, 'imports') and file.imports:
             for imp in file.imports[:2]:
-                module_name = getattr(imp, 'module', getattr(imp, 'name', 'unknown'))
-                if module_name not in sample_imports:
+                # Handle different import object types
+                if hasattr(imp, 'source'):
+                    module_name = str(imp.source)
+                elif hasattr(imp, 'module'):
+                    module_name = str(imp.module)
+                elif hasattr(imp, 'name'):
+                    module_name = str(imp.name)
+                else:
+                    module_name = str(imp)
+                
+                if module_name and module_name not in sample_imports:
                     sample_imports.append(module_name)
     
     return FunctionAnalysis(
