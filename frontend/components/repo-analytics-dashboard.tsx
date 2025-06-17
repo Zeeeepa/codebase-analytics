@@ -8,7 +8,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Github } from "lucide-react"
 import RepoStructure from "@/components/RepoStructure"
 import EnhancedRepoStructure from "@/components/EnhancedRepoStructure"
 import SymbolContext from "@/components/SymbolContext"
