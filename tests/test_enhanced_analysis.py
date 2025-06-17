@@ -14,7 +14,11 @@ from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, List, Any
 
 # Import modules to test
-from advanced_analysis import (
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'backend'))
+
+from analysis import (
     DependencyAnalysis,
     CallGraphAnalysis,
     CodeQualityMetrics,
@@ -37,13 +41,11 @@ from advanced_analysis import (
     identify_refactoring_opportunities
 )
 
-from enhanced_visualizations import (
+from visualization import (
     create_enhanced_dependency_graph,
     create_call_flow_diagram,
     create_quality_heatmap,
     create_architectural_overview,
-    create_security_risk_map,
-    create_performance_hotspot_map,
     create_comprehensive_dashboard_data
 )
 
@@ -480,4 +482,3 @@ if __name__ == '__main__':
     print(f"Errors: {len(result.errors)}")
     print(f"Success rate: {((result.testsRun - len(result.failures) - len(result.errors)) / result.testsRun * 100):.1f}%")
     print(f"{'='*50}")
-
