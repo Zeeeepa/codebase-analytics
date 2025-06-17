@@ -197,6 +197,9 @@ class AnalysisResponse(BaseModel):
     # Repository structure with symbols
     repo_structure: FileNode
 
+class GitHubUrlRequest(BaseModel):
+    github_url: str
+
 class VisualizationRequest(BaseModel):
     repo_url: str
     visualization_type: VisualizationType
@@ -517,6 +520,70 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
         recursion_analysis=recursion_analysis,
         repo_structure=repo_structure
     )
+
+@fastapi_app.post("/analyze_github_url")
+async def analyze_github_url(request: GitHubUrlRequest) -> AnalysisResponse:
+    """CLI-compatible endpoint for analyzing GitHub repositories by full URL.
+    
+    Example usage:
+    curl -X POST "http://localhost:8001/analyze_github_url" \
+         -H "Content-Type: application/json" \
+         -d '{"github_url": "https://github.com/Zeeeepa/codege"}'
+    """
+    github_url = request.github_url.strip()
+    
+    # Validate GitHub URL format
+    if not github_url.startswith('https://github.com/'):
+        raise HTTPException(
+            status_code=400, 
+            detail="URL must be a valid GitHub repository URL (https://github.com/owner/repo)"
+        )
+    
+    # Extract owner/repo from GitHub URL
+    try:
+        # Remove GitHub prefix
+        repo_path = github_url.replace('https://github.com/', '')
+        
+        # Remove .git suffix if present
+        if repo_path.endswith('.git'):
+            repo_path = repo_path[:-4]
+        
+        # Remove trailing slash if present
+        repo_path = repo_path.rstrip('/')
+        
+        # Validate format
+        parts = repo_path.split('/')
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise ValueError("Invalid repository path")
+        
+        owner, repo = parts
+        repo_url = f"{owner}/{repo}"
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid GitHub URL format. Expected: https://github.com/owner/repo"
+        )
+    
+    # Create a RepoRequest and delegate to the existing analyze_repo function
+    repo_request = RepoRequest(repo_url=repo_url)
+    
+    # Call the existing analysis logic
+    return await analyze_repo(repo_request)
+
+@fastapi_app.get("/analyze_github")
+async def analyze_github_get(url: str) -> AnalysisResponse:
+    """GET endpoint for CLI analysis of GitHub repositories.
+    
+    Example usage:
+    curl "http://localhost:8001/analyze_github?url=https://github.com/Zeeeepa/codege"
+    
+    Or with URL encoding:
+    curl "http://localhost:8001/analyze_github?url=https%3A//github.com/Zeeeepa/codege"
+    """
+    # Create a GitHubUrlRequest and delegate to the POST endpoint
+    request = GitHubUrlRequest(github_url=url)
+    return await analyze_github_url(request)
 
 @fastapi_app.post("/visualize")
 async def create_visualization(request: VisualizationRequest) -> VisualizationResponse:
