@@ -264,7 +264,8 @@ def get_github_repo_description(repo_url: str) -> str:
         response = requests.get(api_url)
         if response.status_code == 200:
             data = response.json()
-            return data.get("description", "No description available")
+            description = data.get("description")
+            return description if description is not None else "No description available"
         else:
             return "Description not available"
     except Exception as e:
@@ -422,6 +423,9 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
         total_doi += doi
 
     desc = get_github_repo_description(repo_url)
+    # Ensure description is never None
+    if desc is None:
+        desc = "Repository analysis completed"
     
     # Perform new analysis features
     inheritance_analysis = analyze_inheritance_patterns(codebase)
