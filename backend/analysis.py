@@ -605,7 +605,7 @@ def calculate_maintainability_index(func: Function) -> float:
     CC = calculate_cyclomatic_complexity(func)
     
     # Calculate Lines of Code
-    LOC = func.end_line - func.start_line + 1
+    LOC = int(func.end_line) - int(func.start_line) + 1
     
     # Calculate Maintainability Index
     if V <= 0 or LOC <= 0:
@@ -814,8 +814,8 @@ def find_issues_in_file(file: SourceFile, codebase: Codebase = None) -> List[Iss
                 id=str(uuid.uuid4()),
                 location=CodeLocation(
                     file_path=file.path,
-                    line_start=func.start_line,
-                    line_end=func.end_line
+                    line_start=int(func.start_line),
+                    line_end=int(func.end_line)
                 ),
                 message=f"Unused parameter '{param}' in function '{func.name}'",
                 severity=IssueSeverity.MINOR,
@@ -829,8 +829,8 @@ def find_issues_in_file(file: SourceFile, codebase: Codebase = None) -> List[Iss
                 id=str(uuid.uuid4()),
                 location=CodeLocation(
                     file_path=file.path,
-                    line_start=func.start_line,
-                    line_end=func.end_line
+                    line_start=int(func.start_line),
+                    line_end=int(func.end_line)
                 ),
                 message=f"Function '{func.name}' has high cyclomatic complexity ({complexity})",
                 severity=IssueSeverity.MAJOR if complexity > 25 else IssueSeverity.MINOR,
@@ -921,14 +921,14 @@ def find_improper_exception_handling(func: Function) -> List[Dict[str, Any]]:
         for handler in stmt.handlers:
             if handler.type is None or handler.type == "Exception":
                 improper_exceptions.append({
-                    "line": handler.start_line,
+                    "line": int(handler.start_line),
                     "message": "Bare except or catching Exception is too broad"
                 })
             
             # Check for pass in except block
             if "pass" in handler.body:
                 improper_exceptions.append({
-                    "line": handler.start_line,
+                    "line": int(handler.start_line),
                     "message": "Empty except block (pass) silently ignores exceptions"
                 })
     
@@ -1784,7 +1784,7 @@ def find_unreachable_code(func: Function) -> List[Dict[str, Any]]:
     # Check for code after return statements
     for match in return_statements:
         # Get the line number
-        line_number = body_text[:match.start()].count('\n') + func.start_line
+        line_number = body_text[:match.start()].count('\n') + int(func.start_line)
         
         # Check if there's code after this return statement
         lines_after_return = body_text[match.end():].strip()
@@ -1821,7 +1821,7 @@ def find_infinite_loops(func: Function) -> List[Dict[str, Any]]:
             # Check if there's a break statement in the loop
             if "break" not in stmt.body:
                 infinite_loops.append({
-                    "line": stmt.start_line,
+                    "line": int(stmt.start_line),
                     "message": "While loop with condition that is always true and no break statement"
                 })
     
@@ -1834,7 +1834,7 @@ def find_infinite_loops(func: Function) -> List[Dict[str, Any]]:
         loop_var = stmt.target if hasattr(stmt, 'target') else None
         if loop_var and loop_var not in stmt.body:
             infinite_loops.append({
-                "line": stmt.start_line,
+                "line": int(stmt.start_line),
                 "message": f"For loop where loop variable '{loop_var}' is not modified in the loop body"
             })
     
@@ -1867,7 +1867,7 @@ def find_off_by_one_errors(func: Function) -> List[Dict[str, Any]]:
         # Check if the index is suspicious (very high or exactly at common boundaries)
         if index > 1000 or index == 0:
             # Get the line number
-            line_number = body_text[:match.start()].count('\n') + func.start_line
+            line_number = body_text[:match.start()].count('\n') + int(func.start_line)
             
             off_by_one_errors.append({
                 "line": line_number,
@@ -1888,7 +1888,7 @@ def find_off_by_one_errors(func: Function) -> List[Dict[str, Any]]:
             continue
         
         # Get the line number
-        line_number = body_text[:match.start()].count('\n') + func.start_line
+        line_number = body_text[:match.start()].count('\n') + int(func.start_line)
         
         # Check if there's a comparison with the range variable
         # This is a heuristic and may produce false positives

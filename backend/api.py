@@ -262,14 +262,14 @@ def build_symbol_details_map(codebase: Codebase, issues, call_graph, dependencie
     
     # Process functions
     for func in codebase.functions:
-        func_issues = [issue for issue in issues.issues if str(issue.location.file_path) == func.filepath and issue.location.line_start >= func.start_line and issue.location.line_start <= func.end_line]
+        func_issues = [issue for issue in issues.issues if str(issue.location.file_path) == func.filepath and issue.location.line_start >= int(func.start_line) and issue.location.line_start <= int(func.end_line)]
         
         symbol_details[f"function:{func.name}"] = {
             "type": "function",
             "name": func.name,
             "filepath": func.filepath,
-            "start_line": func.start_line,
-            "end_line": func.end_line,
+            "start_line": int(func.start_line),
+            "end_line": int(func.end_line),
             "parameters": [param.name for param in func.parameters] if hasattr(func, 'parameters') else [],
             "issues": [
                 {
@@ -287,14 +287,14 @@ def build_symbol_details_map(codebase: Codebase, issues, call_graph, dependencie
     
     # Process classes
     for cls in codebase.classes:
-        cls_issues = [issue for issue in issues.issues if str(issue.location.file_path) == cls.filepath and issue.location.line_start >= cls.start_line and issue.location.line_start <= cls.end_line]
+        cls_issues = [issue for issue in issues.issues if str(issue.location.file_path) == cls.filepath and issue.location.line_start >= int(cls.start_line) and issue.location.line_start <= int(cls.end_line)]
         
         symbol_details[f"class:{cls.name}"] = {
             "type": "class",
             "name": cls.name,
             "filepath": cls.filepath,
-            "start_line": cls.start_line,
-            "end_line": cls.end_line,
+            "start_line": int(cls.start_line),
+            "end_line": int(cls.end_line),
             "methods": [method.name for method in cls.methods] if hasattr(cls, 'methods') else [],
             "issues": [
                 {
