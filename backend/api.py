@@ -196,7 +196,10 @@ async def analyze_repository(repo_owner: str, repo_name: str):
         return JSONResponse(content=response)
         
     except Exception as e:
+        import traceback
         print(f"❌ Error analyzing repository: {e}")
+        print(f"🔍 Full traceback:")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 def build_interactive_repository_structure(codebase: Codebase, issues) -> Dict[str, Any]:
