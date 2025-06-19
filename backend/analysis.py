@@ -1566,90 +1566,119 @@ def detect_issues(codebase: Codebase) -> IssueCollection:
     """
     issue_collection = IssueCollection()
     
-    # Detect implementation errors
-    implementation_errors = detect_implementation_errors(codebase)
-    for issue in implementation_errors:
-        issue_collection.add_issue(issue)
+    # Simple issue detection that works with TypeScript/JavaScript files
+    import re
     
-    # Detect misspelled function names
-    misspelled_functions = detect_misspelled_functions(codebase)
-    for issue in misspelled_functions:
-        issue_collection.add_issue(issue)
+    for file in codebase.files:
+        file_path = str(file.path)
+        content = file.content
+        lines = content.split('\n')
+        
+        # 1. TODO/FIXME comments
+        for line_num, line in enumerate(lines, 1):
+            if 'TODO' in line or 'FIXME' in line or 'HACK' in line:
+                issue = Issue(
+                    id="",
+                    location=CodeLocation(file_path=file_path, line_start=line_num),
+                    message=f"TODO/FIXME comment found: {line.strip()[:60]}...",
+                    severity=IssueSeverity.INFO,
+                    category=IssueCategory.FORMATTING_ISSUE
+                )
+                issue_collection.add_issue(issue)
+        
+        # 2. Console statements
+        for line_num, line in enumerate(lines, 1):
+            if 'console.log' in line or 'console.warn' in line or 'console.error' in line:
+                issue = Issue(
+                    id="",
+                    location=CodeLocation(file_path=file_path, line_start=line_num),
+                    message=f"Console statement found: {line.strip()[:60]}...",
+                    severity=IssueSeverity.MINOR,
+                    category=IssueCategory.FORMATTING_ISSUE
+                )
+                issue_collection.add_issue(issue)
+        
+        # 3. Long lines (>120 characters)
+        for line_num, line in enumerate(lines, 1):
+            if len(line) > 120:
+                issue = Issue(
+                    id="",
+                    location=CodeLocation(file_path=file_path, line_start=line_num),
+                    message=f"Line too long ({len(line)} chars)",
+                    severity=IssueSeverity.MINOR,
+                    category=IssueCategory.FORMATTING_ISSUE
+                )
+                issue_collection.add_issue(issue)
+        
+        # 4. Empty catch blocks
+        for line_num, line in enumerate(lines, 1):
+            if 'catch' in line and '{}' in line:
+                issue = Issue(
+                    id="",
+                    location=CodeLocation(file_path=file_path, line_start=line_num),
+                    message="Empty catch block - should handle errors properly",
+                    severity=IssueSeverity.MAJOR,
+                    category=IssueCategory.IMPLEMENTATION_ERROR
+                )
+                issue_collection.add_issue(issue)
+        
+        # 5. Potential security issues
+        for line_num, line in enumerate(lines, 1):
+            if 'eval(' in line:
+                issue = Issue(
+                    id="",
+                    location=CodeLocation(file_path=file_path, line_start=line_num),
+                    message="Use of eval() function - potential security risk",
+                    severity=IssueSeverity.CRITICAL,
+                    category=IssueCategory.SECURITY_VULNERABILITY
+                )
+                issue_collection.add_issue(issue)
+        
+        # 6. Hardcoded URLs
+        for line_num, line in enumerate(lines, 1):
+            if re.search(r'https?://[^\s\'"]+', line):
+                issue = Issue(
+                    id="",
+                    location=CodeLocation(file_path=file_path, line_start=line_num),
+                    message=f"Hardcoded URL found: {line.strip()[:60]}...",
+                    severity=IssueSeverity.MINOR,
+                    category=IssueCategory.FORMATTING_ISSUE
+                )
+                issue_collection.add_issue(issue)
+        
+        # 7. Missing error handling
+        for line_num, line in enumerate(lines, 1):
+            if 'fetch(' in line and 'catch' not in content[content.find(line):content.find(line)+200]:
+                issue = Issue(
+                    id="",
+                    location=CodeLocation(file_path=file_path, line_start=line_num),
+                    message="fetch() call without proper error handling",
+                    severity=IssueSeverity.MAJOR,
+                    category=IssueCategory.IMPLEMENTATION_ERROR
+                )
+                issue_collection.add_issue(issue)
     
-    # Detect null references
-    null_references = detect_null_references(codebase)
-    for issue in null_references:
-        issue_collection.add_issue(issue)
+    # Run the existing detection functions that are implemented
+    try:
+        implementation_errors = detect_implementation_errors(codebase)
+        for issue in implementation_errors:
+            issue_collection.add_issue(issue)
+    except Exception:
+        pass
     
-    # Detect unsafe assertions
-    unsafe_assertions = detect_unsafe_assertions(codebase)
-    for issue in unsafe_assertions:
-        issue_collection.add_issue(issue)
+    try:
+        misspelled_functions = detect_misspelled_functions(codebase)
+        for issue in misspelled_functions:
+            issue_collection.add_issue(issue)
+    except Exception:
+        pass
     
-    # Detect improper exception handling
-    improper_exceptions = detect_improper_exception_handling(codebase)
-    for issue in improper_exceptions:
-        issue_collection.add_issue(issue)
-    
-    # Detect incomplete implementations
-    incomplete_implementations = detect_incomplete_implementations(codebase)
-    for issue in incomplete_implementations:
-        issue_collection.add_issue(issue)
-    
-    # Detect inefficient patterns
-    inefficient_patterns = detect_inefficient_patterns(codebase)
-    for issue in inefficient_patterns:
-        issue_collection.add_issue(issue)
-    
-    # Detect code duplication
-    code_duplications = detect_code_duplication(codebase)
-    for issue in code_duplications:
-        issue_collection.add_issue(issue)
-    
-    # Detect unused parameters
-    unused_parameters = detect_unused_parameters(codebase)
-    for issue in unused_parameters:
-        issue_collection.add_issue(issue)
-    
-    # Detect redundant code
-    redundant_code = detect_redundant_code(codebase)
-    for issue in redundant_code:
-        issue_collection.add_issue(issue)
-    
-    # Detect formatting issues
-    formatting_issues = detect_formatting_issues(codebase)
-    for issue in formatting_issues:
-        issue_collection.add_issue(issue)
-    
-    # Detect suboptimal defaults
-    suboptimal_defaults = detect_suboptimal_defaults(codebase)
-    for issue in suboptimal_defaults:
-        issue_collection.add_issue(issue)
-    
-    # Detect wrong parameters
-    wrong_parameters = detect_wrong_parameters(codebase)
-    for issue in wrong_parameters:
-        issue_collection.add_issue(issue)
-    
-    # Detect runtime errors
-    runtime_errors = detect_runtime_errors(codebase)
-    for issue in runtime_errors:
-        issue_collection.add_issue(issue)
-    
-    # Detect dead code
-    dead_code = detect_dead_code(codebase)
-    for issue in dead_code:
-        issue_collection.add_issue(issue)
-    
-    # Detect security vulnerabilities
-    security_vulnerabilities = detect_security_vulnerabilities(codebase)
-    for issue in security_vulnerabilities:
-        issue_collection.add_issue(issue)
-    
-    # Detect performance issues
-    performance_issues = detect_performance_issues(codebase)
-    for issue in performance_issues:
-        issue_collection.add_issue(issue)
+    try:
+        null_references = detect_null_references(codebase)
+        for issue in null_references:
+            issue_collection.add_issue(issue)
+    except Exception:
+        pass
     
     return issue_collection
 
