@@ -3118,6 +3118,12 @@ def detect_comprehensive_issues(codebase: Codebase) -> Dict[str, Any]:
     # Create detailed issue report
     detailed_issues = []
     for i, issue in enumerate(all_issues, 1):
+        # Extract line and column information
+        line_start = issue.get("line_number", 1)
+        line_end = issue.get("line_end", line_start)
+        col_start = issue.get("column_start", 1)
+        col_end = issue.get("column_end", col_start + 10)
+        
         detailed_issue = {
             'id': i,
             'file_path': issue['file_path'],
@@ -3554,7 +3560,7 @@ def get_advanced_codebase_statistics(codebase: Codebase) -> Dict[str, Any]:
     stats['inheritance_analysis'] = analyze_inheritance_patterns(codebase)
     
     # Complexity analysis
-    stats['complexity_analysis'] = analyze_complexity_patterns(codebase)
+    # Skip complexity analysis as requested
     
     # Architectural insights
     stats['architectural_insights'] = generate_architectural_insights(codebase)
@@ -3994,3 +4000,75 @@ def build_interactive_repository_structure(codebase: Codebase) -> Dict[str, Any]
             'total_classes': len(list(codebase.classes))
         }
     }
+
+# Import enhanced issue detection
+try:
+    from enhanced_issues import detect_comprehensive_issues_enhanced
+except ImportError:
+    def detect_comprehensive_issues_enhanced(codebase):
+        return detect_comprehensive_issues(codebase)
+
+
+def extract_classes_from_content(content: str, file_path: str) -> List[Any]:
+    """Extract class definitions from file content using AST parsing."""
+    classes = []
+    
+    try:
+        # Try to parse Python files
+        if file_path.endswith('.py'):
+            tree = ast.parse(content)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    # Create a simple class-like object
+                    class SimpleClass:
+                        def __init__(self, name, filepath):
+                            self.name = name
+                            self.filepath = filepath
+                            self.superclasses = []
+                            self.methods = []
+                            self.attributes = []
+                    
+                    cls = SimpleClass(node.name, file_path)
+                    
+                    # Extract superclasses
+                    for base in node.bases:
+                        if isinstance(base, ast.Name):
+                            cls.superclasses.append(SimpleClass(base.id, file_path))
+                    
+                    # Extract methods
+                    for item in node.body:
+                        if isinstance(item, ast.FunctionDef):
+                            cls.methods.append(item.name)
+                    
+                    classes.append(cls)
+        
+        # Try to parse JavaScript/TypeScript files
+        elif file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+            # Simple regex-based class extraction for JS/TS
+            class_pattern = r'class\s+(\w+)(?:\s+extends\s+(\w+))?'
+            matches = re.findall(class_pattern, content)
+            
+            for match in matches:
+                class_name = match[0]
+                parent_class = match[1] if match[1] else None
+                
+                class SimpleClass:
+                    def __init__(self, name, filepath):
+                        self.name = name
+                        self.filepath = filepath
+                        self.superclasses = []
+                        self.methods = []
+                        self.attributes = []
+                
+                cls = SimpleClass(class_name, file_path)
+                if parent_class:
+                    cls.superclasses.append(SimpleClass(parent_class, file_path))
+                
+                classes.append(cls)
+    
+    except Exception as e:
+        # If parsing fails, continue without classes from this file
+        pass
+    
+    return classes
+

@@ -35,7 +35,7 @@ from analysis import (
     get_advanced_codebase_statistics,
     build_interactive_repository_structure
 )
-from visualization import visualize_codebase, generate_html_report, run_visualization_analysis
+from visualize import visualize_codebase, generate_html_report, run_visualization_analysis
 from codegen.sdk.core.codebase import Codebase
 
 # Create FastAPI app
@@ -230,6 +230,12 @@ async def analyze_repository(repo_owner: str, repo_name: str):
                 "halstead_metrics": halstead_analysis,
                 "inheritance_analysis": inheritance_analysis,
                 "entry_points": entry_points_analysis,
+                "most_important_entry_points": {
+                    "top_10_by_heat": entry_points_analysis.get('entry_points', [])[:10],
+                    "main_functions": [ep for ep in entry_points_analysis.get('entry_points', []) if hasattr(ep, 'function_type') and ep.function_type == 'main'],
+                    "api_endpoints": [ep for ep in entry_points_analysis.get('entry_points', []) if hasattr(ep, 'function_type') and ep.function_type == 'api_endpoint'],
+                    "high_usage_functions": [ep for ep in entry_points_analysis.get('entry_points', []) if hasattr(ep, 'function_type') and ep.function_type == 'high_usage']
+                },
                 "advanced_statistics": advanced_stats,
                 "code_quality": {
                     "maintainability_index": code_quality.maintainability_index,
@@ -662,7 +668,7 @@ if __name__ == "__main__":
     print("=" * 50)
     print("📊 Example usage:")
     print("   • UI: http://localhost:8000/ui")
-    print("   • API: http://localhost:8000/analyze/Zeeeepa/codebase-analytics")
+    print("   �� API: http://localhost:8000/analyze/Zeeeepa/codebase-analytics")
     print("   • CLI: curl http://localhost:8000/cli/Zeeeepa/codebase-analytics")
     print("=" * 50)
     print("🔄 Starting server... (Press Ctrl+C to stop)")
