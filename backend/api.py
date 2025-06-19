@@ -423,6 +423,77 @@ async def get_visualization(analysis_id: str, visualization_name: str):
     
     return FileResponse(visualization_path)
 
+@app.get("/cli/{repo_owner}/{repo_name}")
+async def cli_analysis(repo_owner: str, repo_name: str):
+    """
+    CLI-friendly analysis endpoint that returns simplified text output.
+    
+    Args:
+        repo_owner: GitHub repository owner
+        repo_name: GitHub repository name
+        
+    Returns:
+        Text-based analysis summary
+    """
+    try:
+        # Get comprehensive analysis
+        result = await analyze_repository(repo_owner, repo_name)
+        
+        # Extract data from JSONResponse
+        import json
+        if hasattr(result, 'body'):
+            analysis_data = json.loads(result.body.decode())
+        else:
+            analysis_data = result
+        
+        repo = analysis_data["repository"]
+        analysis = analysis_data["analysis"]
+        
+        cli_output = f"""
+🔍 CODEBASE ANALYSIS REPORT
+{'=' * 50}
+📊 Repository: {repo["owner"]}/{repo["name"]}
+🌐 URL: {repo["url"]}
+
+📈 OVERVIEW:
+- Files: {repo["total_files"]}
+- Functions: {repo["total_functions"]}
+- Classes: {repo["total_classes"]}
+- Symbols: {repo["total_symbols"]}
+
+🚨 ISSUES SUMMARY:
+- Total Issues: {analysis["issues"]["total"]}
+- Critical: {analysis["issues"]["by_severity"].get("critical", 0)}
+- Major: {analysis["issues"]["by_severity"].get("major", 0)}
+- Minor: {analysis["issues"]["by_severity"].get("minor", 0)}
+
+📊 CODE QUALITY:
+- Maintainability Index: {analysis["code_quality"]["maintainability_index"]:.1f}
+- Cyclomatic Complexity: {analysis["code_quality"]["cyclomatic_complexity"]:.1f}
+- Comment Density: {analysis["code_quality"]["comment_density"]:.2f}
+- Source Lines of Code: {analysis["code_quality"]["source_lines_of_code"]}
+- Technical Debt Ratio: {analysis["code_quality"]["technical_debt_ratio"]:.2f}
+
+🔗 DEPENDENCIES:
+- Total Dependencies: {analysis["dependencies"]["total"]}
+- Circular Dependencies: {analysis["dependencies"]["circular"]}
+- External Dependencies: {analysis["dependencies"]["external"]}
+- Dependency Depth: {analysis["dependencies"]["depth"]}
+
+📞 CALL GRAPH:
+- Total Functions: {analysis["call_graph"]["total_functions"]}
+- Entry Points: {analysis["call_graph"]["entry_points"]}
+- Leaf Functions: {analysis["call_graph"]["leaf_functions"]}
+- Max Call Depth: {analysis["call_graph"]["max_call_depth"]}
+
+🎯 ANALYSIS COMPLETE!
+"""
+        
+        return {"cli_output": cli_output}
+        
+    except Exception as e:
+        return {"error": f"CLI analysis failed: {str(e)}"}
+
 @app.get("/endpoint/{repo_name}/")
 async def cli_analyze_endpoint(repo_name: str, background_tasks: BackgroundTasks, branch: Optional[str] = None):
     """
