@@ -2576,7 +2576,7 @@ def generate_repository_structure_visualization(codebase: Codebase) -> Dict[str,
         "tree": tree,
         "total_files": len(files),
         "total_directories": count_directories(tree),
-        "total_size": sum(file.content for file in files)
+        "total_size": sum(len(file.content) if file.content else 0 for file in files)
     }
     
     return visualization
