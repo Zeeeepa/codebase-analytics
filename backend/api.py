@@ -7,6 +7,7 @@ import os
 import tempfile
 import subprocess
 import json
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +16,7 @@ import uvicorn
 from typing import Optional, Dict, Any, List
 
 # Import analysis modules
-from analysis import analyze_codebase
+from simple_analysis import analyze_codebase
 from visualize import visualize_codebase, generate_html_report
 
 # Create FastAPI app
@@ -169,6 +170,66 @@ async def get_visualization(analysis_id: str, visualization_name: str):
     
     return FileResponse(visualization_path)
 
+@app.get("/endpoint/{repo_name}/")
+async def cli_analyze_endpoint(repo_name: str, background_tasks: BackgroundTasks, branch: Optional[str] = None):
+    """
+    CLI endpoint for codebase analysis.
+    
+    Args:
+        repo_name: Repository name (format: owner/repo or just repo for GitHub)
+        branch: Optional branch name (defaults to main/master)
+        background_tasks: BackgroundTasks object
+        
+    Returns:
+        Analysis results or analysis ID for background processing
+    """
+    # Generate analysis ID
+    import uuid
+    analysis_id = str(uuid.uuid4())
+    
+    # Construct GitHub URL if not a full URL
+    if not repo_name.startswith(('http://', 'https://')):
+        if '/' not in repo_name:
+            # Assume it's a repo under current user/org context
+            repo_url = f"https://github.com/Zeeeepa/{repo_name}"
+        else:
+            # Assume it's owner/repo format
+            repo_url = f"https://github.com/{repo_name}"
+    else:
+        repo_url = repo_name
+    
+    # Create output directory
+    output_dir = os.path.join("output", analysis_id)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Store analysis request
+    analysis_results[analysis_id] = {
+        "status": "pending",
+        "message": "CLI analysis started",
+        "repo_url": repo_url,
+        "repo_name": repo_name,
+        "branch": branch,
+        "output_dir": output_dir,
+    }
+    
+    # Run analysis in background
+    background_tasks.add_task(
+        run_analysis,
+        analysis_id,
+        repo_url,
+        branch,
+        output_dir,
+    )
+    
+    return {
+        "status": "pending",
+        "message": f"CLI analysis started for {repo_name}",
+        "analysis_id": analysis_id,
+        "repo_url": repo_url,
+        "check_status_url": f"/analysis/{analysis_id}",
+        "report_url": f"/analysis/{analysis_id}/report"
+    }
+
 def run_analysis(analysis_id: str, repo_url: str, branch: Optional[str], output_dir: str):
     """
     Run analysis in background.
@@ -197,41 +258,44 @@ def run_analysis(analysis_id: str, repo_url: str, branch: Optional[str], output_
             analysis_results[analysis_id]["status"] = "running"
             analysis_results[analysis_id]["message"] = "Analyzing codebase"
             
-            # Run analysis
-            # Note: This is a simplified version that doesn't use the Codegen SDK
-            # In a real implementation, you would use the Codegen SDK to analyze the codebase
-            
-            # Get all files in the repository
-            all_files = []
-            for root, dirs, files in os.walk(temp_dir):
-                for file in files:
-                    if file.endswith(('.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.c', '.cpp', '.h', '.hpp')):
-                        file_path = os.path.join(root, file)
-                        all_files.append(file_path)
-            
-            # Create visualizations directory
-            vis_dir = os.path.join(output_dir, "visualizations")
-            os.makedirs(vis_dir, exist_ok=True)
-            
-            # Run full analysis script
-            subprocess.run(
-                [
-                    "python",
-                    "run_full_analysis.py",
-                    repo_url,
-                    "--output-dir",
-                    output_dir,
-                ],
-                check=True,
-            )
-            
-            # Update status
-            analysis_results[analysis_id]["status"] = "completed"
-            analysis_results[analysis_id]["message"] = "Analysis completed"
-            
-            # Load analysis results
-            with open(os.path.join(output_dir, "analysis.json"), "r") as f:
-                analysis_results[analysis_id]["results"] = json.load(f)
+            # Run analysis using the analysis module
+            try:
+                # Use the analyze_codebase function from analysis.py
+                results = analyze_codebase(temp_dir)
+                
+                # Save analysis results
+                with open(os.path.join(output_dir, "analysis.json"), "w") as f:
+                    json.dump(results, f, indent=2, default=str)
+                
+                # Generate visualizations
+                visualizations = visualize_codebase(temp_dir, output_dir)
+                
+                # Generate HTML report
+                report_path = generate_html_report(results, visualizations, output_dir)
+                
+                # Update status
+                analysis_results[analysis_id]["status"] = "completed"
+                analysis_results[analysis_id]["message"] = "Analysis completed"
+                analysis_results[analysis_id]["results"] = results
+                analysis_results[analysis_id]["visualizations"] = visualizations
+                analysis_results[analysis_id]["report_path"] = report_path
+                
+            except Exception as analysis_error:
+                # If analysis fails, create a basic report
+                error_results = {
+                    "error": str(analysis_error),
+                    "status": "analysis_failed",
+                    "repo_url": repo_url,
+                    "branch": branch,
+                    "timestamp": str(datetime.now())
+                }
+                
+                with open(os.path.join(output_dir, "analysis.json"), "w") as f:
+                    json.dump(error_results, f, indent=2)
+                
+                analysis_results[analysis_id]["status"] = "completed_with_errors"
+                analysis_results[analysis_id]["message"] = f"Analysis completed with errors: {str(analysis_error)}"
+                analysis_results[analysis_id]["results"] = error_results
     
     except Exception as e:
         # Update status
@@ -240,4 +304,3 @@ def run_analysis(analysis_id: str, repo_url: str, branch: Optional[str], output_
 
 if __name__ == "__main__":
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
-
