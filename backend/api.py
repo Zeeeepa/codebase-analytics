@@ -16,7 +16,7 @@ import uvicorn
 from typing import Optional, Dict, Any, List
 
 # Import analysis modules
-from simple_analysis import analyze_codebase
+from analysis import analyze_codebase
 from visualize import visualize_codebase, generate_html_report
 
 # Create FastAPI app
