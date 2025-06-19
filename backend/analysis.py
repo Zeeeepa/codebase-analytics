@@ -633,12 +633,12 @@ def calculate_code_duplication(codebase: Codebase, min_lines: int = 6) -> Dict[s
     Returns:
         Dictionary containing duplication metrics and duplicated blocks
     """
-    files = codebase.get_files()
+    files = codebase.files
     
     # Extract content from all files
     file_contents = {}
     for file in files:
-        if file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             file_contents[file.path] = file.content.split('\n')
     
     # Find duplicated blocks
@@ -726,7 +726,7 @@ def calculate_technical_debt_ratio(codebase: Codebase) -> float:
         total_remediation_cost += remediation_costs[issue.severity]
     
     # Estimate development cost based on codebase size and complexity
-    files = codebase.get_files()
+    files = codebase.files
     total_lines = sum(len(file.content.split('\n')) for file in files)
     
     # Rough estimate: 10 lines of code per hour
@@ -772,12 +772,12 @@ def find_issues(codebase: Codebase) -> List[Issue]:
     issues = []
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Analyze each file
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
         # Find issues in the file
@@ -799,7 +799,7 @@ def find_issues_in_file(file: SourceFile) -> List[Issue]:
     issues = []
     
     # Get all functions in the file
-    functions = file.get_functions()
+    functions = [f for f in codebase.functions if f.filepath == str(file.path)]
     
     # Analyze each function
     for func in functions:
@@ -1043,16 +1043,16 @@ def build_dependency_graph(codebase: Codebase) -> Dict[str, List[str]]:
     dependency_graph = {}
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Build the graph
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
         # Get imports
-        imports = file.get_imports()
+        imports = [i for i in codebase.imports if str(i.file.path) == str(file.path)]
         
         # Map imports to file paths
         dependencies = []
@@ -1154,16 +1154,16 @@ def find_external_dependencies(codebase: Codebase) -> List[str]:
     external_deps = set()
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Find external imports
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
         # Get imports
-        imports = file.get_imports()
+        imports = [i for i in codebase.imports if str(i.file.path) == str(file.path)]
         
         # Find external imports
         for imp in imports:
@@ -1185,16 +1185,16 @@ def find_internal_dependencies(codebase: Codebase) -> List[Dict[str, str]]:
     internal_deps = []
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Find internal imports
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
         # Get imports
-        imports = file.get_imports()
+        imports = [i for i in codebase.imports if str(i.file.path) == str(file.path)]
         
         # Find internal imports
         for imp in imports:
@@ -1246,16 +1246,16 @@ def find_unused_dependencies(codebase: Codebase) -> List[Dict[str, Any]]:
     unused_deps = []
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Find unused imports
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
         # Get imports
-        imports = file.get_imports()
+        imports = [i for i in codebase.imports if str(i.file.path) == str(file.path)]
         
         # Check each import
         for imp in imports:
@@ -1337,8 +1337,8 @@ def build_call_graph(codebase: Codebase) -> Dict[str, List[str]]:
     
     # Get all functions
     functions = []
-    for file in codebase.get_files():
-        functions.extend(file.get_functions())
+    for file in codebase.files:
+        functions.extend([f for f in codebase.functions if f.filepath == str(file.path)])
     
     # Build the graph
     for func in functions:
@@ -1668,19 +1668,19 @@ def detect_implementation_errors(codebase: Codebase) -> List[Issue]:
     issues = []
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Analyze each file
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
-        # Get all functions
-        functions = file.get_functions()
+        # Get all functions from codebase ([f for f in codebase.functions if f.filepath == str(file.path)] not available)
+        file_functions = [f for f in codebase.functions if f.filepath == str(file.path)]
         
         # Analyze each function
-        for func in functions:
+        for func in file_functions:
             # Check for common implementation errors
             
             # Check for unreachable code
@@ -1881,19 +1881,19 @@ def detect_misspelled_functions(codebase: Codebase) -> List[Issue]:
     
     # Get all functions
     all_functions = []
-    for file in codebase.get_files():
-        all_functions.extend(file.get_functions())
+    for file in codebase.files:
+        all_functions.extend([f for f in codebase.functions if f.filepath == str(file.path)])
     
     # Create a dictionary of function names
     function_names = {func.name: func for func in all_functions}
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Analyze each file
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
         # Get file content
@@ -1987,12 +1987,12 @@ def detect_null_references(codebase: Codebase) -> List[Issue]:
     issues = []
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Analyze each file
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
         # Get file content
@@ -2081,7 +2081,7 @@ def analyze_code_quality(codebase: Codebase) -> CodeQualityResult:
     result = CodeQualityResult()
     
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Calculate metrics for each file
     total_maintainability = 0
@@ -2093,13 +2093,13 @@ def analyze_code_quality(codebase: Codebase) -> CodeQualityResult:
     
     for file in files:
         # Skip non-code files
-        if not file.path.endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
+        if not str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
             continue
         
         file_count += 1
         
         # Calculate maintainability index
-        maintainability = calculate_file_maintainability_index(file)
+        maintainability = calculate_file_maintainability_index(file, codebase)
         total_maintainability += maintainability
         
         # Calculate cyclomatic complexity
@@ -2138,18 +2138,19 @@ def analyze_code_quality(codebase: Codebase) -> CodeQualityResult:
     
     return result
 
-def calculate_file_maintainability_index(file: SourceFile) -> float:
+def calculate_file_maintainability_index(file: SourceFile, codebase: Codebase) -> float:
     """
     Calculate the maintainability index for a file.
     
     Args:
         file: The file to analyze
+        codebase: The codebase containing the file
         
     Returns:
         Maintainability index (0-100, higher is better)
     """
     # Get all functions in the file
-    functions = file.get_functions()
+    functions = [f for f in codebase.functions if f.filepath == str(file.path)]
     
     # Calculate maintainability index for each function
     total_maintainability = 0
@@ -2174,7 +2175,7 @@ def calculate_file_cyclomatic_complexity(file: SourceFile) -> float:
         Average cyclomatic complexity
     """
     # Get all functions in the file
-    functions = file.get_functions()
+    functions = [f for f in codebase.functions if f.filepath == str(file.path)]
     
     # Calculate cyclomatic complexity for each function
     total_complexity = 0
@@ -2199,7 +2200,7 @@ def calculate_file_halstead_volume(file: SourceFile) -> float:
         Average Halstead volume
     """
     # Get all functions in the file
-    functions = file.get_functions()
+    functions = [f for f in codebase.functions if f.filepath == str(file.path)]
     
     # Calculate Halstead volume for each function
     total_volume = 0
@@ -2472,7 +2473,7 @@ def generate_repository_structure_visualization(codebase: Codebase) -> Dict[str,
         Dictionary containing visualization data
     """
     # Get all files
-    files = codebase.get_files()
+    files = codebase.files
     
     # Create a tree structure
     tree = {"name": "root", "children": []}
@@ -2581,16 +2582,13 @@ def analyze_codebase(codebase: Codebase) -> Dict[str, Any]:
     summary = AnalysisSummary()
     
     # Count files and lines
-    files = codebase.get_files()
+    files = codebase.files
     summary.total_files = len(files)
     summary.total_lines = sum(len(file.content.split('\n')) for file in files)
     
     # Count functions and classes
-    functions = []
-    classes = []
-    for file in files:
-        functions.extend(file.get_functions())
-        classes.extend(file.get_classes())
+    functions = codebase.functions
+    classes = codebase.classes
     
     summary.total_functions = len(functions)
     summary.total_classes = len(classes)
