@@ -15,9 +15,9 @@ from pydantic import BaseModel
 import uvicorn
 from typing import Optional, Dict, Any, List
 
-# Import analysis modules
-from analysis import analyze_codebase
-from visualize import visualize_codebase, generate_html_report
+# Import consolidated analysis and visualization modules
+from analysis import analyze_codebase, get_codebase_summary, get_dependency_graph, get_symbol_references
+from visualization import visualize_codebase, generate_html_report, run_visualization_analysis, CodebaseVisualizer
 
 # Create FastAPI app
 app = FastAPI(

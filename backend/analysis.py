@@ -2691,4 +2691,107 @@ def generate_recommendations(dependency_analysis: DependencyAnalysis, call_graph
     return recommendations
 
 
+# =============================================================================
+# ADDITIONAL FUNCTIONS FROM ANALYZER.PY
+# =============================================================================
 
+def get_codebase_summary(codebase: Codebase) -> str:
+    """
+    Generate a comprehensive summary of a codebase.
+    
+    Args:
+        codebase: The Codebase object to summarize
+        
+    Returns:
+        A formatted string containing a summary of the codebase's nodes and edges
+    """
+    node_summary = f"""Contains {len(codebase.ctx.get_nodes())} nodes
+- {len(list(codebase.files))} files
+- {len(list(codebase.imports))} imports
+- {len(list(codebase.external_modules))} external_modules
+- {len(list(codebase.symbols))} symbols
+\t- {len(list(codebase.classes))} classes
+\t- {len(list(codebase.functions))} functions
+\t- {len(list(codebase.global_vars))} global_vars
+\t- {len(list(codebase.interfaces))} interfaces
+"""
+    edge_summary = f"""Contains {len(codebase.ctx.edges)} edges
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.SYMBOL_USAGE])} symbol -> used symbol
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.IMPORT_SYMBOL_RESOLUTION])} import -> used symbol
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.EXPORT])} export -> exported symbol
+    """
+
+    return f"{node_summary}\n{edge_summary}"
+
+
+def get_dependency_graph(codebase: Codebase, file_path: Optional[str] = None) -> Dict[str, List[str]]:
+    """
+    Generate a dependency graph for a codebase or specific file.
+    
+    Args:
+        codebase: The Codebase object to analyze
+        file_path: Optional path to a specific file to analyze
+        
+    Returns:
+        A dictionary mapping file paths to lists of dependencies
+    """
+    dependency_graph = {}
+    
+    files_to_analyze = [f for f in codebase.files if not file_path or f.file_path == file_path]
+    
+    for file in files_to_analyze:
+        dependencies = []
+        
+        # Get imports for this file
+        for import_stmt in file.imports:
+            if import_stmt.resolved_symbol:
+                # If the import resolves to a symbol in our codebase
+                if hasattr(import_stmt.resolved_symbol, 'file') and import_stmt.resolved_symbol.file:
+                    dep_file_path = import_stmt.resolved_symbol.file.file_path
+                    if dep_file_path != file.file_path:
+                        dependencies.append(dep_file_path)
+            elif import_stmt.external_module:
+                # External dependency
+                dependencies.append(f"external:{import_stmt.external_module.name}")
+        
+        dependency_graph[file.file_path] = list(set(dependencies))
+    
+    return dependency_graph
+
+
+def get_symbol_references(codebase: Codebase, symbol_name: str) -> List[Dict[str, Any]]:
+    """
+    Find all references to a specific symbol in the codebase.
+    
+    Args:
+        codebase: The Codebase object to search
+        symbol_name: Name of the symbol to find references for
+        
+    Returns:
+        List of dictionaries containing reference information
+    """
+    references = []
+    
+    # Find the symbol first
+    target_symbols = [s for s in codebase.symbols if s.name == symbol_name]
+    
+    for target_symbol in target_symbols:
+        # Find all edges where this symbol is used
+        usage_edges = [
+            edge for edge in codebase.ctx.edges 
+            if edge[2].type == EdgeType.SYMBOL_USAGE and edge[1] == target_symbol.id
+        ]
+        
+        for edge in usage_edges:
+            source_node = codebase.ctx.get_node(edge[0])
+            if source_node:
+                reference_info = {
+                    'symbol_name': symbol_name,
+                    'used_in': source_node.name if hasattr(source_node, 'name') else str(source_node),
+                    'file_path': source_node.file.file_path if hasattr(source_node, 'file') and source_node.file else 'unknown',
+                    'line_number': source_node.start_line if hasattr(source_node, 'start_line') else None,
+                    'usage_type': 'symbol_usage'
+                }
+                references.append(reference_info)
+    
+    return references
