@@ -781,17 +781,18 @@ def find_issues(codebase: Codebase) -> List[Issue]:
             continue
         
         # Find issues in the file
-        file_issues = find_issues_in_file(file)
+        file_issues = find_issues_in_file(file, codebase)
         issues.extend(file_issues)
     
     return issues
 
-def find_issues_in_file(file: SourceFile) -> List[Issue]:
+def find_issues_in_file(file: SourceFile, codebase: Codebase = None) -> List[Issue]:
     """
     Find issues in a file.
     
     Args:
         file: The file to analyze
+        codebase: The codebase containing the file (optional)
         
     Returns:
         List of issues found in the file
@@ -799,7 +800,10 @@ def find_issues_in_file(file: SourceFile) -> List[Issue]:
     issues = []
     
     # Get all functions in the file
-    functions = [f for f in codebase.functions if f.filepath == str(file.path)]
+    if codebase:
+        functions = [f for f in codebase.functions if f.filepath == str(file.path)]
+    else:
+        functions = []
     
     # Analyze each function
     for func in functions:
@@ -2132,11 +2136,11 @@ def analyze_code_quality(codebase: Codebase) -> CodeQualityResult:
         total_maintainability += maintainability
         
         # Calculate cyclomatic complexity
-        complexity = calculate_file_cyclomatic_complexity(file)
+        complexity = calculate_file_cyclomatic_complexity(file, codebase)
         total_complexity += complexity
         
         # Calculate Halstead volume
-        halstead = calculate_file_halstead_volume(file)
+        halstead = calculate_file_halstead_volume(file, codebase)
         total_halstead += halstead
         
         # Calculate source lines of code
@@ -2163,7 +2167,8 @@ def analyze_code_quality(codebase: Codebase) -> CodeQualityResult:
     result.technical_debt_ratio = calculate_technical_debt_ratio(codebase)
     
     # Find issues
-    result.issues = IssueCollection(find_issues(codebase))
+    issues = detect_issues(codebase)
+    result.issues = issues
     
     return result
 
@@ -2193,18 +2198,22 @@ def calculate_file_maintainability_index(file: SourceFile, codebase: Codebase) -
     else:
         return 100  # Perfect score for files with no functions
     
-def calculate_file_cyclomatic_complexity(file: SourceFile) -> float:
+def calculate_file_cyclomatic_complexity(file: SourceFile, codebase: Codebase = None) -> float:
     """
     Calculate the average cyclomatic complexity for a file.
     
     Args:
         file: The file to analyze
+        codebase: The codebase containing the file (optional)
         
     Returns:
         Average cyclomatic complexity
     """
     # Get all functions in the file
-    functions = [f for f in codebase.functions if f.filepath == str(file.path)]
+    if codebase:
+        functions = [f for f in codebase.functions if f.filepath == str(file.path)]
+    else:
+        functions = []
     
     # Calculate cyclomatic complexity for each function
     total_complexity = 0
@@ -2218,18 +2227,22 @@ def calculate_file_cyclomatic_complexity(file: SourceFile) -> float:
     else:
         return 1  # Minimum complexity for files with no functions
 
-def calculate_file_halstead_volume(file: SourceFile) -> float:
+def calculate_file_halstead_volume(file: SourceFile, codebase: Codebase = None) -> float:
     """
     Calculate the average Halstead volume for a file.
     
     Args:
         file: The file to analyze
+        codebase: The codebase containing the file (optional)
         
     Returns:
         Average Halstead volume
     """
     # Get all functions in the file
-    functions = [f for f in codebase.functions if f.filepath == str(file.path)]
+    if codebase:
+        functions = [f for f in codebase.functions if f.filepath == str(file.path)]
+    else:
+        functions = []
     
     # Calculate Halstead volume for each function
     total_volume = 0
