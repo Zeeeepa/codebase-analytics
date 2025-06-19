@@ -2527,7 +2527,7 @@ def generate_repository_structure_visualization(codebase: Codebase) -> Dict[str,
             continue
         
         # Split the path into components
-        path_components = file.path.split('/')
+        path_components = str(file.path).split('/')
         
         # Start at the root
         current_node = tree

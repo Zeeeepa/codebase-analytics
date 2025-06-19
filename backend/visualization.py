@@ -536,7 +536,7 @@ class CodeVisualizer(BaseVisualizer):
         """Build file structure representation."""
         structure = {}
         for file in codebase.files:
-            path_parts = file.file_path.split('/')
+            path_parts = str(file.file_path).split('/')
             current = structure
             for part in path_parts[:-1]:
                 if part not in current:
@@ -755,4 +755,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
