@@ -605,7 +605,7 @@ def calculate_maintainability_index(func: Function) -> float:
     CC = calculate_cyclomatic_complexity(func)
     
     # Calculate Lines of Code
-    LOC = int(func.end_line) - int(func.start_line) + 1
+    LOC = func.line_range.stop - 1 - func.line_range.start + 1
     
     # Calculate Maintainability Index
     if V <= 0 or LOC <= 0:
@@ -639,7 +639,7 @@ def calculate_code_duplication(codebase: Codebase, min_lines: int = 6) -> Dict[s
     file_contents = {}
     for file in files:
         if str(file.path).endswith(('.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.hpp')):
-            file_contents[file.path] = file.content.split('\n')
+            file_contents[str(file.path)] = file.content.split('\n')
     
     # Find duplicated blocks
     duplicated_blocks = []
@@ -813,9 +813,9 @@ def find_issues_in_file(file: SourceFile, codebase: Codebase = None) -> List[Iss
             issues.append(Issue(
                 id=str(uuid.uuid4()),
                 location=CodeLocation(
-                    file_path=file.path,
-                    line_start=int(func.start_line),
-                    line_end=int(func.end_line)
+                    file_path=str(file.path),
+                    line_start=func.line_range.start,
+                    line_end=func.line_range.stop - 1
                 ),
                 message=f"Unused parameter '{param}' in function '{func.name}'",
                 severity=IssueSeverity.MINOR,
@@ -828,9 +828,9 @@ def find_issues_in_file(file: SourceFile, codebase: Codebase = None) -> List[Iss
             issues.append(Issue(
                 id=str(uuid.uuid4()),
                 location=CodeLocation(
-                    file_path=file.path,
-                    line_start=int(func.start_line),
-                    line_end=int(func.end_line)
+                    file_path=str(file.path),
+                    line_start=func.line_range.start,
+                    line_end=func.line_range.stop - 1
                 ),
                 message=f"Function '{func.name}' has high cyclomatic complexity ({complexity})",
                 severity=IssueSeverity.MAJOR if complexity > 25 else IssueSeverity.MINOR,
@@ -843,7 +843,7 @@ def find_issues_in_file(file: SourceFile, codebase: Codebase = None) -> List[Iss
             issues.append(Issue(
                 id=str(uuid.uuid4()),
                 location=CodeLocation(
-                    file_path=file.path,
+                    file_path=str(file.path),
                     line_start=exception["line"],
                     line_end=exception["line"]
                 ),
@@ -858,7 +858,7 @@ def find_issues_in_file(file: SourceFile, codebase: Codebase = None) -> List[Iss
         issues.append(Issue(
             id=str(uuid.uuid4()),
             location=CodeLocation(
-                file_path=file.path,
+                file_path=str(file.path),
                 line_start=duplication["start_line"],
                 line_end=duplication["end_line"]
             ),
@@ -1067,10 +1067,10 @@ def build_dependency_graph(codebase: Codebase) -> Dict[str, List[str]]:
             
             # Add the dependency
             if hasattr(imp, 'source_file') and imp.source_file:
-                dependencies.append(imp.source_file.path)
+                dependencies.append(str(imp.source_file.path))
         
         # Add to graph
-        dependency_graph[file.path] = dependencies
+        dependency_graph[str(file.path)] = dependencies
     
     return dependency_graph
 
@@ -1204,8 +1204,8 @@ def find_internal_dependencies(codebase: Codebase) -> List[Dict[str, str]]:
         for imp in imports:
             if not isinstance(imp, ExternalModule) and hasattr(imp, 'source_file') and imp.source_file:
                 internal_deps.append({
-                    "from": file.path,
-                    "to": imp.source_file.path
+                    "from": str(file.path),
+                    "to": str(imp.source_file.path)
                 })
     
     return internal_deps
@@ -1277,7 +1277,7 @@ def find_unused_dependencies(codebase: Codebase) -> List[Dict[str, Any]]:
                 # Check if the symbol is used
                 if symbol.name not in content or symbol.name + "." not in content:
                     unused_deps.append({
-                        "file": file.path,
+                        "file": str(file.path),
                         "import": symbol.name,
                         "line": imp.line if hasattr(imp, 'line') else None
                     })
@@ -1722,7 +1722,7 @@ def detect_implementation_errors(codebase: Codebase) -> List[Issue]:
                 issues.append(Issue(
                     id=str(uuid.uuid4()),
                     location=CodeLocation(
-                        file_path=file.path,
+                        file_path=str(file.path),
                         line_start=code["line"],
                         line_end=code["line"]
                     ),
@@ -1737,7 +1737,7 @@ def detect_implementation_errors(codebase: Codebase) -> List[Issue]:
                 issues.append(Issue(
                     id=str(uuid.uuid4()),
                     location=CodeLocation(
-                        file_path=file.path,
+                        file_path=str(file.path),
                         line_start=loop["line"],
                         line_end=loop["line"]
                     ),
@@ -1752,7 +1752,7 @@ def detect_implementation_errors(codebase: Codebase) -> List[Issue]:
                 issues.append(Issue(
                     id=str(uuid.uuid4()),
                     location=CodeLocation(
-                        file_path=file.path,
+                        file_path=str(file.path),
                         line_start=error["line"],
                         line_end=error["line"]
                     ),
@@ -1784,7 +1784,7 @@ def find_unreachable_code(func: Function) -> List[Dict[str, Any]]:
     # Check for code after return statements
     for match in return_statements:
         # Get the line number
-        line_number = body_text[:match.start()].count('\n') + int(func.start_line)
+        line_number = body_text[:match.start()].count('\n') + func.line_range.start
         
         # Check if there's code after this return statement
         lines_after_return = body_text[match.end():].strip()
@@ -1867,7 +1867,7 @@ def find_off_by_one_errors(func: Function) -> List[Dict[str, Any]]:
         # Check if the index is suspicious (very high or exactly at common boundaries)
         if index > 1000 or index == 0:
             # Get the line number
-            line_number = body_text[:match.start()].count('\n') + int(func.start_line)
+            line_number = body_text[:match.start()].count('\n') + func.line_range.start
             
             off_by_one_errors.append({
                 "line": line_number,
@@ -1888,7 +1888,7 @@ def find_off_by_one_errors(func: Function) -> List[Dict[str, Any]]:
             continue
         
         # Get the line number
-        line_number = body_text[:match.start()].count('\n') + int(func.start_line)
+        line_number = body_text[:match.start()].count('\n') + func.line_range.start
         
         # Check if there's a comparison with the range variable
         # This is a heuristic and may produce false positives
@@ -1961,7 +1961,7 @@ def detect_misspelled_functions(codebase: Codebase) -> List[Issue]:
                     issues.append(Issue(
                         id=str(uuid.uuid4()),
                         location=CodeLocation(
-                            file_path=file.path,
+                            file_path=str(file.path),
                             line_start=line_number,
                             line_end=line_number
                         ),
@@ -2075,7 +2075,7 @@ def detect_null_references(codebase: Codebase) -> List[Issue]:
             issues.append(Issue(
                 id=str(uuid.uuid4()),
                 location=CodeLocation(
-                    file_path=file.path,
+                    file_path=str(file.path),
                     line_start=ref["line"],
                     line_end=ref["line"]
                 ),

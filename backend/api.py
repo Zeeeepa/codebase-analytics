@@ -8,6 +8,7 @@ import tempfile
 import subprocess
 import json
 from datetime import datetime
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -128,6 +129,18 @@ async def analyze_repository(repo_owner: str, repo_name: str):
         # 7. Get symbol details for interactive features
         symbol_details = build_symbol_details_map(codebase, issues, call_graph, dependencies)
         
+        # Helper function to convert PosixPath objects to strings
+        def convert_paths_to_strings(obj):
+            """Recursively convert PosixPath objects to strings."""
+            if isinstance(obj, Path):
+                return str(obj)
+            elif isinstance(obj, dict):
+                return {key: convert_paths_to_strings(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_paths_to_strings(item) for item in obj]
+            else:
+                return obj
+        
         # Compile comprehensive response
         response = {
             "repository": {
@@ -193,6 +206,9 @@ async def analyze_repository(repo_owner: str, repo_name: str):
             "timestamp": datetime.now().isoformat()
         }
         
+        # Convert all PosixPath objects to strings before JSON serialization
+        response = convert_paths_to_strings(response)
+        
         return JSONResponse(content=response)
         
     except Exception as e:
@@ -240,9 +256,9 @@ def build_interactive_repository_structure(codebase: Codebase, issues) -> Dict[s
             "type": "file",
             "path": file_path,
             "issues": issue_counts,
-            "functions": [f.name for f in codebase.functions if f.filepath == file_path],
-            "classes": [c.name for c in codebase.classes if c.filepath == file_path],
-            "symbols": [s.name for s in codebase.symbols if s.filepath == file_path]
+            "functions": [f.name for f in codebase.functions if str(f.filepath) == file_path],
+            "classes": [c.name for c in codebase.classes if str(c.filepath) == file_path],
+            "symbols": [s.name for s in codebase.symbols if str(s.filepath) == file_path]
         }
         
         # Propagate issue counts up the directory tree
@@ -270,7 +286,7 @@ def build_symbol_details_map(codebase: Codebase, issues, call_graph, dependencie
         symbol_details[f"function:{func.name}"] = {
             "type": "function",
             "name": func.name,
-            "filepath": func.filepath,
+            "filepath": str(func.filepath),
             "start_line": func.line_range.start,
             "end_line": func.line_range.stop - 1,
             "parameters": [param.name for param in func.parameters] if hasattr(func, 'parameters') else [],
@@ -295,7 +311,7 @@ def build_symbol_details_map(codebase: Codebase, issues, call_graph, dependencie
         symbol_details[f"class:{cls.name}"] = {
             "type": "class",
             "name": cls.name,
-            "filepath": cls.filepath,
+            "filepath": str(cls.filepath),
             "start_line": cls.line_range.start,
             "end_line": cls.line_range.stop - 1,
             "methods": [method.name for method in cls.methods] if hasattr(cls, 'methods') else [],
@@ -453,7 +469,7 @@ async def cli_analysis(repo_owner: str, repo_name: str):
         analysis = analysis_data["analysis"]
         
         cli_output = f"""
-🔍 CODEBASE ANALYSIS REPORT
+�� CODEBASE ANALYSIS REPORT
 {'=' * 50}
 📊 Repository: {repo["owner"]}/{repo["name"]}
 🌐 URL: {repo["url"]}

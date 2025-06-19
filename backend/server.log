@@ -1,0 +1,77 @@
+🚀 Starting Codebase Analytics API Server...
+==================================================
+🌐 Server will be available at:
+   • Root API: http://localhost:8000/
+   • Interactive UI: http://localhost:8000/ui
+   • Analysis API: http://localhost:8000/analyze/{owner}/{repo}
+   • CLI API: http://localhost:8000/cli/{owner}/{repo}
+==================================================
+📊 Example usage:
+   • UI: http://localhost:8000/ui
+   • API: http://localhost:8000/analyze/Zeeeepa/codebase-analytics
+   • CLI: curl http://localhost:8000/cli/Zeeeepa/codebase-analytics
+==================================================
+🔄 Starting server... (Press Ctrl+C to stop)
+
+INFO:     Will watch for changes in these directories: ['/tmp/Zeeeepa/codebase-analytics/backend']
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     Started reloader process [21913] using WatchFiles
+INFO:     Started server process [21920]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+[37m2025-06-19 07:48:12,191 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mFetching codebase for Zeeeepa/codebase-analytics[0m
+[37m2025-06-19 07:48:12,192 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mUsing directory: /tmp/codegen[0m
+[37m2025-06-19 07:48:12,192 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mWill clone https://github.com/Zeeeepa/codebase-analytics.git to /tmp/codegen/codebase-analytics[0m
+[37m2025-06-19 07:48:12,192 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCloning repository...[0m
+[37m2025-06-19 07:48:12,597 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mClone completed successfully[0m
+[37m2025-06-19 07:48:12,597 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mInitializing Codebase...[0m
+[37m2025-06-19 07:48:12,664 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 60 files in ALL subdirectories with ['.tsx', '.ts', '.jsx', '.js'] extensions[0m
+[37m2025-06-19 07:48:13,086 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-19 07:48:13,098 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 298 imports[0m
+[37m2025-06-19 07:48:13,241 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing export dependencies for 279 exports[0m
+[37m2025-06-19 07:48:13,257 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-19 07:48:13,260 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2579 nodes[0m
+[37m2025-06-19 07:48:14,079 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 145 nodes[0m
+[37m2025-06-19 07:48:14,081 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 60 files[0m
+[37m2025-06-19 07:48:14,082 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 2724 nodes and 10036 edges[0m
+[37m2025-06-19 07:48:14,082 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 1 second and 428.04 milliseconds to execute.[0m
+[37m2025-06-19 07:48:14,087 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCodebase initialization complete[0m
+🔍 Analyzing repository: Zeeeepa/codebase-analytics
+📊 Issues detected: 169
+📈 Code quality analyzed
+🔗 Dependencies analyzed
+📞 Call graph analyzed
+INFO:     127.0.0.1:19294 - "GET /analyze/Zeeeepa/codebase-analytics HTTP/1.1" 200 OK
+[37m2025-06-19 07:48:24,346 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mFetching codebase for Zeeeepa/codebase-analytics[0m
+[37m2025-06-19 07:48:24,346 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mUsing directory: /tmp/codegen[0m
+[37m2025-06-19 07:48:24,346 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mWill clone https://github.com/Zeeeepa/codebase-analytics.git to /tmp/codegen/codebase-analytics[0m
+[37m2025-06-19 07:48:24,347 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCloning repository...[0m
+[37m2025-06-19 07:48:24,715 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mClone completed successfully[0m
+[37m2025-06-19 07:48:24,715 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mInitializing Codebase...[0m
+[37m2025-06-19 07:48:24,751 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 60 files in ALL subdirectories with ['.tsx', '.ts', '.jsx', '.js'] extensions[0m
+[37m2025-06-19 07:48:25,177 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-19 07:48:25,197 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 298 imports[0m
+[37m2025-06-19 07:48:25,340 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing export dependencies for 279 exports[0m
+[37m2025-06-19 07:48:25,356 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-19 07:48:25,366 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2579 nodes[0m
+[37m2025-06-19 07:48:26,319 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 145 nodes[0m
+[37m2025-06-19 07:48:26,323 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 60 files[0m
+[37m2025-06-19 07:48:26,323 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 2724 nodes and 10036 edges[0m
+[37m2025-06-19 07:48:26,324 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 1 second and 581.19 milliseconds to execute.[0m
+[37m2025-06-19 07:48:26,329 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCodebase initialization complete[0m
+🔍 Analyzing repository: Zeeeepa/codebase-analytics
+📊 Issues detected: 169
+📈 Code quality analyzed
+🔗 Dependencies analyzed
+📞 Call graph analyzed
+INFO:     127.0.0.1:63007 - "GET /cli/Zeeeepa/codebase-analytics HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32475 - "GET /endpoint/codebase-analytics/ HTTP/1.1" 200 OK
+Cloning into '/tmp/tmph2x_w2gp'...
+WARNING:  WatchFiles detected changes in 'test_json.py'. Reloading...
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [21920]
+INFO:     Started server process [23623]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
