@@ -23,7 +23,17 @@ from analysis import (
     detect_issues, get_codebase_summary, get_dependency_graph, get_symbol_references,
     generate_dependency_graph_visualization, generate_call_graph_visualization,
     generate_issue_visualization, generate_code_quality_visualization,
-    generate_repository_structure_visualization
+    generate_repository_structure_visualization,
+    # New advanced analysis functions
+    get_operators_and_operands,
+    calculate_halstead_volume,
+    calculate_halstead_metrics,
+    analyze_inheritance_hierarchy,
+    detect_entry_points,
+    detect_comprehensive_issues,
+    get_function_context,
+    get_advanced_codebase_statistics,
+    build_interactive_repository_structure
 )
 from visualization import visualize_codebase, generate_html_report, run_visualization_analysis
 from codegen.sdk.core.codebase import Codebase
@@ -116,30 +126,76 @@ async def analyze_repository(repo_owner: str, repo_name: str):
         call_graph = analyze_call_graph(codebase)
         print(f"📞 Call graph analyzed")
         
-        # 5. Generate visualizations
+        # 5. Advanced analysis features
+        print("🧮 Running Halstead metrics analysis...")
+        halstead_analysis = {}
+        for func in codebase.functions:
+            if hasattr(func, 'source') and func.source:
+                halstead_analysis[func.name] = calculate_halstead_metrics(func)
+        
+        print("🏗️ Analyzing inheritance hierarchy...")
+        inheritance_analysis = analyze_inheritance_hierarchy(codebase)
+        
+        print("🎯 Detecting entry points...")
+        entry_points_analysis = detect_entry_points(codebase)
+        
+        print("🚨 Running comprehensive issue detection...")
+        comprehensive_issues = detect_comprehensive_issues(codebase)
+        
+        print("📊 Gathering advanced statistics...")
+        advanced_stats = get_advanced_codebase_statistics(codebase)
+        
+        # 6. Generate visualizations
         dependency_viz = generate_dependency_graph_visualization(dependencies)
         call_graph_viz = generate_call_graph_visualization(call_graph)
         issue_viz = generate_issue_visualization(issues)
         quality_viz = generate_code_quality_visualization(code_quality)
         repo_structure_viz = generate_repository_structure_visualization(codebase)
         
-        # 6. Build interactive repository structure with issue counts
-        interactive_structure = build_interactive_repository_structure(codebase, issues)
+        # 7. Build interactive repository structure with issue counts (using new advanced function)
+        interactive_structure = build_interactive_repository_structure(codebase)
         
         # 7. Get symbol details for interactive features
         symbol_details = build_symbol_details_map(codebase, issues, call_graph, dependencies)
         
-        # Helper function to convert PosixPath objects to strings
-        def convert_paths_to_strings(obj):
-            """Recursively convert PosixPath objects to strings."""
-            if isinstance(obj, Path):
-                return str(obj)
-            elif isinstance(obj, dict):
-                return {key: convert_paths_to_strings(value) for key, value in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_paths_to_strings(item) for item in obj]
-            else:
+        # Helper function to convert PosixPath objects and dataclasses to JSON-serializable format
+        def convert_paths_to_strings(obj, visited=None):
+            """Recursively convert PosixPath objects and dataclasses to strings."""
+            from dataclasses import is_dataclass, asdict
+            
+            if visited is None:
+                visited = set()
+            
+            # Prevent infinite recursion
+            obj_id = id(obj)
+            if obj_id in visited:
+                return str(obj) if hasattr(obj, '__str__') else f"<circular reference: {type(obj).__name__}>"
+            
+            if isinstance(obj, (str, int, float, bool, type(None))):
                 return obj
+            elif isinstance(obj, Path):
+                return str(obj)
+            elif is_dataclass(obj):
+                visited.add(obj_id)
+                result = convert_paths_to_strings(asdict(obj), visited)
+                visited.remove(obj_id)
+                return result
+            elif isinstance(obj, dict):
+                visited.add(obj_id)
+                result = {key: convert_paths_to_strings(value, visited) for key, value in obj.items()}
+                visited.remove(obj_id)
+                return result
+            elif isinstance(obj, list):
+                visited.add(obj_id)
+                result = [convert_paths_to_strings(item, visited) for item in obj]
+                visited.remove(obj_id)
+                return result
+            elif hasattr(obj, 'name') and isinstance(obj.name, str):
+                # Handle objects with a name attribute
+                return str(obj.name)
+            else:
+                # Fallback to string representation
+                return str(obj)
         
         # Compile comprehensive response
         response = {
@@ -170,6 +226,11 @@ async def analyze_repository(repo_owner: str, repo_name: str):
                         for issue in issues.issues
                     ]
                 },
+                "comprehensive_issues": comprehensive_issues,
+                "halstead_metrics": halstead_analysis,
+                "inheritance_analysis": inheritance_analysis,
+                "entry_points": entry_points_analysis,
+                "advanced_statistics": advanced_stats,
                 "code_quality": {
                     "maintainability_index": code_quality.maintainability_index,
                     "cyclomatic_complexity": code_quality.cyclomatic_complexity,
@@ -218,62 +279,7 @@ async def analyze_repository(repo_owner: str, repo_name: str):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
-def build_interactive_repository_structure(codebase: Codebase, issues) -> Dict[str, Any]:
-    """Build interactive repository structure with issue counts."""
-    from pathlib import Path
-    from collections import defaultdict
-    
-    # Group issues by file path
-    issues_by_file = defaultdict(list)
-    for issue in issues.issues:
-        file_path = str(issue.location.file_path)
-        issues_by_file[file_path].append(issue)
-    
-    # Build directory structure
-    structure = {}
-    
-    for file in codebase.files:
-        file_path = str(file.path)
-        path_parts = Path(file_path).parts
-        
-        current = structure
-        for part in path_parts[:-1]:  # All parts except filename
-            if part not in current:
-                current[part] = {"type": "directory", "children": {}, "issues": {"critical": 0, "major": 0, "minor": 0, "info": 0}}
-            current = current[part]["children"]
-        
-        # Add file
-        filename = path_parts[-1]
-        file_issues = issues_by_file.get(file_path, [])
-        issue_counts = {"critical": 0, "major": 0, "minor": 0, "info": 0}
-        
-        for issue in file_issues:
-            severity = issue.severity.value.lower()
-            if severity in issue_counts:
-                issue_counts[severity] += 1
-        
-        current[filename] = {
-            "type": "file",
-            "path": file_path,
-            "issues": issue_counts,
-            "functions": [f.name for f in codebase.functions if str(f.filepath) == file_path],
-            "classes": [c.name for c in codebase.classes if str(c.filepath) == file_path],
-            "symbols": [s.name for s in codebase.symbols if str(s.filepath) == file_path]
-        }
-        
-        # Propagate issue counts up the directory tree
-        propagate_issue_counts(structure, path_parts[:-1], issue_counts)
-    
-    return structure
-
-def propagate_issue_counts(structure: Dict, path_parts: tuple, issue_counts: Dict):
-    """Propagate issue counts up the directory tree."""
-    current = structure
-    for part in path_parts:
-        if part in current and "issues" in current[part]:
-            for severity, count in issue_counts.items():
-                current[part]["issues"][severity] += count
-        current = current[part]["children"]
+# Note: build_interactive_repository_structure is now imported from analysis.py
 
 def build_symbol_details_map(codebase: Codebase, issues, call_graph, dependencies) -> Dict[str, Any]:
     """Build detailed symbol information for interactive features."""

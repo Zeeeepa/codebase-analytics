@@ -15,63 +15,453 @@
 
 INFO:     Will watch for changes in these directories: ['/tmp/Zeeeepa/codebase-analytics/backend']
 INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [21913] using WatchFiles
-INFO:     Started server process [21920]
+INFO:     Started reloader process [24022] using WatchFiles
+INFO:     Started server process [24029]
 INFO:     Waiting for application startup.
 INFO:     Application startup complete.
-[37m2025-06-19 07:48:12,191 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mFetching codebase for Zeeeepa/codebase-analytics[0m
-[37m2025-06-19 07:48:12,192 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mUsing directory: /tmp/codegen[0m
-[37m2025-06-19 07:48:12,192 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mWill clone https://github.com/Zeeeepa/codebase-analytics.git to /tmp/codegen/codebase-analytics[0m
-[37m2025-06-19 07:48:12,192 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCloning repository...[0m
-[37m2025-06-19 07:48:12,597 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mClone completed successfully[0m
-[37m2025-06-19 07:48:12,597 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mInitializing Codebase...[0m
-[37m2025-06-19 07:48:12,664 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 60 files in ALL subdirectories with ['.tsx', '.ts', '.jsx', '.js'] extensions[0m
-[37m2025-06-19 07:48:13,086 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
-[37m2025-06-19 07:48:13,098 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 298 imports[0m
-[37m2025-06-19 07:48:13,241 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing export dependencies for 279 exports[0m
-[37m2025-06-19 07:48:13,257 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
-[37m2025-06-19 07:48:13,260 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2579 nodes[0m
-[37m2025-06-19 07:48:14,079 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 145 nodes[0m
-[37m2025-06-19 07:48:14,081 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 60 files[0m
-[37m2025-06-19 07:48:14,082 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 2724 nodes and 10036 edges[0m
-[37m2025-06-19 07:48:14,082 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 1 second and 428.04 milliseconds to execute.[0m
-[37m2025-06-19 07:48:14,087 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCodebase initialization complete[0m
+[37m2025-06-19 08:34:16,717 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mFetching codebase for Zeeeepa/codebase-analytics[0m
+[37m2025-06-19 08:34:16,718 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mUsing directory: /tmp/codegen[0m
+[37m2025-06-19 08:34:16,718 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mWill clone https://github.com/Zeeeepa/codebase-analytics.git to /tmp/codegen/codebase-analytics[0m
+[37m2025-06-19 08:34:16,718 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCloning repository...[0m
+[37m2025-06-19 08:34:17,125 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mClone completed successfully[0m
+[37m2025-06-19 08:34:17,125 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mInitializing Codebase...[0m
+[37m2025-06-19 08:34:17,254 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 60 files in ALL subdirectories with ['.tsx', '.ts', '.jsx', '.js'] extensions[0m
+[37m2025-06-19 08:34:17,781 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-19 08:34:17,800 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 298 imports[0m
+[37m2025-06-19 08:34:17,970 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing export dependencies for 279 exports[0m
+[37m2025-06-19 08:34:17,993 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-19 08:34:17,996 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2579 nodes[0m
+[37m2025-06-19 08:34:18,870 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 145 nodes[0m
+[37m2025-06-19 08:34:18,873 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 60 files[0m
+[37m2025-06-19 08:34:18,874 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 2724 nodes and 10036 edges[0m
+[37m2025-06-19 08:34:18,874 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 1 second and 639.68 milliseconds to execute.[0m
+[37m2025-06-19 08:34:18,883 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCodebase initialization complete[0m
 🔍 Analyzing repository: Zeeeepa/codebase-analytics
 📊 Issues detected: 169
 📈 Code quality analyzed
 🔗 Dependencies analyzed
 📞 Call graph analyzed
-INFO:     127.0.0.1:19294 - "GET /analyze/Zeeeepa/codebase-analytics HTTP/1.1" 200 OK
-[37m2025-06-19 07:48:24,346 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mFetching codebase for Zeeeepa/codebase-analytics[0m
-[37m2025-06-19 07:48:24,346 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mUsing directory: /tmp/codegen[0m
-[37m2025-06-19 07:48:24,346 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mWill clone https://github.com/Zeeeepa/codebase-analytics.git to /tmp/codegen/codebase-analytics[0m
-[37m2025-06-19 07:48:24,347 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCloning repository...[0m
-[37m2025-06-19 07:48:24,715 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mClone completed successfully[0m
-[37m2025-06-19 07:48:24,715 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mInitializing Codebase...[0m
-[37m2025-06-19 07:48:24,751 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 60 files in ALL subdirectories with ['.tsx', '.ts', '.jsx', '.js'] extensions[0m
-[37m2025-06-19 07:48:25,177 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
-[37m2025-06-19 07:48:25,197 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 298 imports[0m
-[37m2025-06-19 07:48:25,340 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing export dependencies for 279 exports[0m
-[37m2025-06-19 07:48:25,356 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
-[37m2025-06-19 07:48:25,366 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2579 nodes[0m
-[37m2025-06-19 07:48:26,319 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 145 nodes[0m
-[37m2025-06-19 07:48:26,323 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 60 files[0m
-[37m2025-06-19 07:48:26,323 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 2724 nodes and 10036 edges[0m
-[37m2025-06-19 07:48:26,324 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 1 second and 581.19 milliseconds to execute.[0m
-[37m2025-06-19 07:48:26,329 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCodebase initialization complete[0m
+🧮 Running Halstead metrics analysis...
+Error parsing function Skeleton: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function cn: invalid syntax (<unknown>, line 1)
+Error parsing function ThemeProvider: invalid syntax (<unknown>, line 1)
+Error parsing function Drawer: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function ResizablePanelGroup: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function Pagination: invalid syntax (<unknown>, line 1)
+Error parsing function Page: invalid syntax (<unknown>, line 1)
+Error parsing function Calendar: invalid syntax (<unknown>, line 1)
+Error parsing function RootLayout: invalid syntax (<unknown>, line 1)
+Error parsing function ResizableHandle: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function useChart: invalid syntax (<unknown>, line 1)
+Error parsing function FormField: invalid syntax (<unknown>, line 1)
+Error parsing function CommandDialog: invalid syntax (<unknown>, line 1)
+Error parsing function Badge: invalid syntax (<unknown>, line 1)
+Error parsing function useCarousel: invalid syntax (<unknown>, line 1)
+Error parsing function useFormField: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationLink: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function useSidebar: invalid syntax (<unknown>, line 1)
+Error parsing function getFileIcon: invalid syntax (<unknown>, line 1)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function PaginationPrevious: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerFooter: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbSeparator: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationNext: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function MetricsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function IssueTag: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function ChartStyle: invalid syntax (<unknown>, line 1)
+Error parsing function DialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function SheetHeader: invalid syntax (<unknown>, line 1)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function Stats: invalid character '📄' (U+1F4C4) (<unknown>, line 6)
+Error parsing function SheetFooter: invalid syntax (<unknown>, line 1)
+Error parsing function RepoAnalyticsDashboard: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolList: invalid syntax (<unknown>, line 1)
+Error parsing function CommandShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function UsageStatsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function FunctionInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function FileTreeNode: invalid syntax (<unknown>, line 1)
+Error parsing function ContextMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function DropdownMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function MenubarShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function ClassInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function RepoStructure: invalid character '📂' (U+1F4C2) (<unknown>, line 12)
+Error parsing function getPayloadConfigFromPayload: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolContext: invalid syntax (<unknown>, line 1)
+🏗️ Analyzing inheritance hierarchy...
+🎯 Detecting entry points...
+🚨 Running comprehensive issue detection...
+📊 Gathering advanced statistics...
+Error parsing function getFileIcon: invalid syntax (<unknown>, line 1)
+Error parsing function getFileIcon: invalid syntax (<unknown>, line 1)
+Error parsing function IssueTag: invalid syntax (<unknown>, line 1)
+Error parsing function IssueTag: invalid syntax (<unknown>, line 1)
+Error parsing function Stats: invalid character '📄' (U+1F4C4) (<unknown>, line 6)
+Error parsing function Stats: invalid character '📄' (U+1F4C4) (<unknown>, line 6)
+Error parsing function SymbolList: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolList: invalid syntax (<unknown>, line 1)
+Error parsing function FileTreeNode: invalid syntax (<unknown>, line 1)
+Error parsing function FileTreeNode: invalid syntax (<unknown>, line 1)
+Error parsing function RepoStructure: invalid character '📂' (U+1F4C2) (<unknown>, line 12)
+Error parsing function RepoStructure: invalid character '📂' (U+1F4C2) (<unknown>, line 12)
+Error parsing function MetricsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function MetricsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function UsageStatsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function UsageStatsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function FunctionInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function FunctionInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function ClassInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function ClassInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolContext: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolContext: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function Badge: invalid syntax (<unknown>, line 1)
+Error parsing function Badge: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbSeparator: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbSeparator: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function Calendar: invalid syntax (<unknown>, line 1)
+Error parsing function Calendar: invalid syntax (<unknown>, line 1)
+Error parsing function useCarousel: invalid syntax (<unknown>, line 1)
+Error parsing function useCarousel: invalid syntax (<unknown>, line 1)
+Error parsing function useChart: invalid syntax (<unknown>, line 1)
+Error parsing function useChart: invalid syntax (<unknown>, line 1)
+Error parsing function ChartStyle: invalid syntax (<unknown>, line 1)
+Error parsing function ChartStyle: invalid syntax (<unknown>, line 1)
+Error parsing function getPayloadConfigFromPayload: invalid syntax (<unknown>, line 1)
+Error parsing function getPayloadConfigFromPayload: invalid syntax (<unknown>, line 1)
+Error parsing function CommandDialog: invalid syntax (<unknown>, line 1)
+Error parsing function CommandDialog: invalid syntax (<unknown>, line 1)
+Error parsing function CommandShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function CommandShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function ContextMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function ContextMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function DialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function DialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function Drawer: invalid syntax (<unknown>, line 1)
+Error parsing function Drawer: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerFooter: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerFooter: invalid syntax (<unknown>, line 1)
+Error parsing function DropdownMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function DropdownMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function FormField: invalid syntax (<unknown>, line 1)
+Error parsing function FormField: invalid syntax (<unknown>, line 1)
+Error parsing function useFormField: invalid syntax (<unknown>, line 1)
+Error parsing function useFormField: invalid syntax (<unknown>, line 1)
+Error parsing function RootLayout: invalid syntax (<unknown>, line 1)
+Error parsing function RootLayout: invalid syntax (<unknown>, line 1)
+Error parsing function MenubarShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function MenubarShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function Page: invalid syntax (<unknown>, line 1)
+Error parsing function Page: invalid syntax (<unknown>, line 1)
+Error parsing function Pagination: invalid syntax (<unknown>, line 1)
+Error parsing function Pagination: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationLink: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationLink: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationPrevious: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationPrevious: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationNext: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationNext: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function RepoAnalyticsDashboard: invalid syntax (<unknown>, line 1)
+Error parsing function RepoAnalyticsDashboard: invalid syntax (<unknown>, line 1)
+Error parsing function ResizablePanelGroup: invalid syntax (<unknown>, line 1)
+Error parsing function ResizablePanelGroup: invalid syntax (<unknown>, line 1)
+Error parsing function ResizableHandle: invalid syntax (<unknown>, line 1)
+Error parsing function ResizableHandle: invalid syntax (<unknown>, line 1)
+Error parsing function SheetHeader: invalid syntax (<unknown>, line 1)
+Error parsing function SheetHeader: invalid syntax (<unknown>, line 1)
+Error parsing function SheetFooter: invalid syntax (<unknown>, line 1)
+Error parsing function SheetFooter: invalid syntax (<unknown>, line 1)
+Error parsing function useSidebar: invalid syntax (<unknown>, line 1)
+Error parsing function useSidebar: invalid syntax (<unknown>, line 1)
+Error parsing function Skeleton: invalid syntax (<unknown>, line 1)
+Error parsing function Skeleton: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function ThemeProvider: invalid syntax (<unknown>, line 1)
+Error parsing function ThemeProvider: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function cn: invalid syntax (<unknown>, line 1)
+Error parsing function cn: invalid syntax (<unknown>, line 1)
+INFO:     127.0.0.1:50884 - "GET /analyze/Zeeeepa/codebase-analytics HTTP/1.1" 200 OK
+[37m2025-06-19 08:34:31,437 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mFetching codebase for Zeeeepa/codebase-analytics[0m
+[37m2025-06-19 08:34:31,437 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mUsing directory: /tmp/codegen[0m
+[37m2025-06-19 08:34:31,438 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mWill clone https://github.com/Zeeeepa/codebase-analytics.git to /tmp/codegen/codebase-analytics[0m
+[37m2025-06-19 08:34:31,438 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCloning repository...[0m
+[37m2025-06-19 08:34:31,741 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mClone completed successfully[0m
+[37m2025-06-19 08:34:31,741 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mInitializing Codebase...[0m
+[37m2025-06-19 08:34:31,811 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Parsing 60 files in ALL subdirectories with ['.tsx', '.ts', '.jsx', '.js'] extensions[0m
+[37m2025-06-19 08:34:32,311 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Building directory tree[0m
+[37m2025-06-19 08:34:32,337 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing import resolution edges for 298 imports[0m
+[37m2025-06-19 08:34:32,521 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing export dependencies for 279 exports[0m
+[37m2025-06-19 08:34:32,538 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Computing superclass dependencies[0m
+[37m2025-06-19 08:34:32,550 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 2579 nodes[0m
+[37m2025-06-19 08:34:33,571 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Incrementally computing dependencies for 145 nodes[0m
+[37m2025-06-19 08:34:33,574 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 60 files[0m
+[37m2025-06-19 08:34:33,575 - codegen.sdk.codebase.codebase_context - [32mINFO[0m[37m - [37m> Found 2724 nodes and 10036 edges[0m
+[37m2025-06-19 08:34:33,576 - codegen.shared.performance.stopwatch_utils - [32mINFO[0m[37m - [37mFunction 'build_graph' took 1 second and 779.79 milliseconds to execute.[0m
+[37m2025-06-19 08:34:33,584 - codegen.sdk.core.codebase - [32mINFO[0m[37m - [37mCodebase initialization complete[0m
 🔍 Analyzing repository: Zeeeepa/codebase-analytics
 📊 Issues detected: 169
 📈 Code quality analyzed
 🔗 Dependencies analyzed
 📞 Call graph analyzed
-INFO:     127.0.0.1:63007 - "GET /cli/Zeeeepa/codebase-analytics HTTP/1.1" 200 OK
-INFO:     127.0.0.1:32475 - "GET /endpoint/codebase-analytics/ HTTP/1.1" 200 OK
-Cloning into '/tmp/tmph2x_w2gp'...
-WARNING:  WatchFiles detected changes in 'test_json.py'. Reloading...
-INFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [21920]
-INFO:     Started server process [23623]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
+🧮 Running Halstead metrics analysis...
+Error parsing function Skeleton: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function cn: invalid syntax (<unknown>, line 1)
+Error parsing function ThemeProvider: invalid syntax (<unknown>, line 1)
+Error parsing function Drawer: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function ResizablePanelGroup: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function Pagination: invalid syntax (<unknown>, line 1)
+Error parsing function Page: invalid syntax (<unknown>, line 1)
+Error parsing function Calendar: invalid syntax (<unknown>, line 1)
+Error parsing function RootLayout: invalid syntax (<unknown>, line 1)
+Error parsing function ResizableHandle: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function useChart: invalid syntax (<unknown>, line 1)
+Error parsing function FormField: invalid syntax (<unknown>, line 1)
+Error parsing function CommandDialog: invalid syntax (<unknown>, line 1)
+Error parsing function Badge: invalid syntax (<unknown>, line 1)
+Error parsing function useCarousel: invalid syntax (<unknown>, line 1)
+Error parsing function useFormField: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationLink: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function useSidebar: invalid syntax (<unknown>, line 1)
+Error parsing function getFileIcon: invalid syntax (<unknown>, line 1)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function PaginationPrevious: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerFooter: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbSeparator: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationNext: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function MetricsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function IssueTag: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function ChartStyle: invalid syntax (<unknown>, line 1)
+Error parsing function DialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function SheetHeader: invalid syntax (<unknown>, line 1)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function Stats: invalid character '📄' (U+1F4C4) (<unknown>, line 6)
+Error parsing function SheetFooter: invalid syntax (<unknown>, line 1)
+Error parsing function RepoAnalyticsDashboard: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolList: invalid syntax (<unknown>, line 1)
+Error parsing function CommandShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function UsageStatsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function FunctionInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function FileTreeNode: invalid syntax (<unknown>, line 1)
+Error parsing function ContextMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function DropdownMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function MenubarShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function ClassInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function RepoStructure: invalid character '📂' (U+1F4C2) (<unknown>, line 12)
+Error parsing function getPayloadConfigFromPayload: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolContext: invalid syntax (<unknown>, line 1)
+🏗️ Analyzing inheritance hierarchy...
+🎯 Detecting entry points...
+🚨 Running comprehensive issue detection...
+📊 Gathering advanced statistics...
+Error parsing function getFileIcon: invalid syntax (<unknown>, line 1)
+Error parsing function getFileIcon: invalid syntax (<unknown>, line 1)
+Error parsing function IssueTag: invalid syntax (<unknown>, line 1)
+Error parsing function IssueTag: invalid syntax (<unknown>, line 1)
+Error parsing function Stats: invalid character '📄' (U+1F4C4) (<unknown>, line 6)
+Error parsing function Stats: invalid character '📄' (U+1F4C4) (<unknown>, line 6)
+Error parsing function SymbolList: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolList: invalid syntax (<unknown>, line 1)
+Error parsing function FileTreeNode: invalid syntax (<unknown>, line 1)
+Error parsing function FileTreeNode: invalid syntax (<unknown>, line 1)
+Error parsing function RepoStructure: invalid character '📂' (U+1F4C2) (<unknown>, line 12)
+Error parsing function RepoStructure: invalid character '📂' (U+1F4C2) (<unknown>, line 12)
+Error parsing function MetricsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function MetricsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function UsageStatsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function UsageStatsDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function FunctionInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function FunctionInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function ClassInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function ClassInfoDisplay: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolContext: invalid syntax (<unknown>, line 1)
+Error parsing function SymbolContext: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function AlertDialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function Badge: invalid syntax (<unknown>, line 1)
+Error parsing function Badge: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbSeparator: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbSeparator: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function BreadcrumbEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function Calendar: invalid syntax (<unknown>, line 1)
+Error parsing function Calendar: invalid syntax (<unknown>, line 1)
+Error parsing function useCarousel: invalid syntax (<unknown>, line 1)
+Error parsing function useCarousel: invalid syntax (<unknown>, line 1)
+Error parsing function useChart: invalid syntax (<unknown>, line 1)
+Error parsing function useChart: invalid syntax (<unknown>, line 1)
+Error parsing function ChartStyle: invalid syntax (<unknown>, line 1)
+Error parsing function ChartStyle: invalid syntax (<unknown>, line 1)
+Error parsing function getPayloadConfigFromPayload: invalid syntax (<unknown>, line 1)
+Error parsing function getPayloadConfigFromPayload: invalid syntax (<unknown>, line 1)
+Error parsing function CommandDialog: invalid syntax (<unknown>, line 1)
+Error parsing function CommandDialog: invalid syntax (<unknown>, line 1)
+Error parsing function CommandShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function CommandShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function ContextMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function ContextMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function DialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DialogHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function DialogFooter: invalid syntax (<unknown>, line 1)
+Error parsing function Drawer: invalid syntax (<unknown>, line 1)
+Error parsing function Drawer: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerHeader: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerFooter: invalid syntax (<unknown>, line 1)
+Error parsing function DrawerFooter: invalid syntax (<unknown>, line 1)
+Error parsing function DropdownMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function DropdownMenuShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function FormField: invalid syntax (<unknown>, line 1)
+Error parsing function FormField: invalid syntax (<unknown>, line 1)
+Error parsing function useFormField: invalid syntax (<unknown>, line 1)
+Error parsing function useFormField: invalid syntax (<unknown>, line 1)
+Error parsing function RootLayout: invalid syntax (<unknown>, line 1)
+Error parsing function RootLayout: invalid syntax (<unknown>, line 1)
+Error parsing function MenubarShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function MenubarShortcut: invalid syntax (<unknown>, line 1)
+Error parsing function Page: invalid syntax (<unknown>, line 1)
+Error parsing function Page: invalid syntax (<unknown>, line 1)
+Error parsing function Pagination: invalid syntax (<unknown>, line 1)
+Error parsing function Pagination: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationLink: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationLink: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationPrevious: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationPrevious: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationNext: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationNext: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function PaginationEllipsis: invalid syntax (<unknown>, line 1)
+Error parsing function RepoAnalyticsDashboard: invalid syntax (<unknown>, line 1)
+Error parsing function RepoAnalyticsDashboard: invalid syntax (<unknown>, line 1)
+Error parsing function ResizablePanelGroup: invalid syntax (<unknown>, line 1)
+Error parsing function ResizablePanelGroup: invalid syntax (<unknown>, line 1)
+Error parsing function ResizableHandle: invalid syntax (<unknown>, line 1)
+Error parsing function ResizableHandle: invalid syntax (<unknown>, line 1)
+Error parsing function SheetHeader: invalid syntax (<unknown>, line 1)
+Error parsing function SheetHeader: invalid syntax (<unknown>, line 1)
+Error parsing function SheetFooter: invalid syntax (<unknown>, line 1)
+Error parsing function SheetFooter: invalid syntax (<unknown>, line 1)
+Error parsing function useSidebar: invalid syntax (<unknown>, line 1)
+Error parsing function useSidebar: invalid syntax (<unknown>, line 1)
+Error parsing function Skeleton: invalid syntax (<unknown>, line 1)
+Error parsing function Skeleton: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function ThemeProvider: invalid syntax (<unknown>, line 1)
+Error parsing function ThemeProvider: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function Toaster: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function useIsMobile: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function genId: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function addToRemoveQueue: invalid syntax (<unknown>, line 1)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function reducer: unterminated string literal (detected at line 21) (<unknown>, line 21)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function dispatch: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function toast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function useToast: invalid syntax (<unknown>, line 1)
+Error parsing function cn: invalid syntax (<unknown>, line 1)
+Error parsing function cn: invalid syntax (<unknown>, line 1)
+INFO:     127.0.0.1:37301 - "GET /cli/Zeeeepa/codebase-analytics HTTP/1.1" 200 OK

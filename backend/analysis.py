@@ -2732,6 +2732,674 @@ def generate_recommendations(dependency_analysis: DependencyAnalysis, call_graph
 
 
 # =============================================================================
+# HALSTEAD METRICS ENGINE
+# =============================================================================
+
+def get_operators_and_operands(func: Function) -> Tuple[List[str], List[str]]:
+    """
+    Extract operators and operands from a function for Halstead metrics.
+    
+    Args:
+        func: Function to analyze
+        
+    Returns:
+        Tuple of (operators, operands) lists
+    """
+    operators = []
+    operands = []
+    
+    try:
+        # Parse the function source code
+        if hasattr(func, 'source') and func.source:
+            tree = ast.parse(func.source)
+            
+            # Walk through AST nodes
+            for node in ast.walk(tree):
+                # Operators
+                if isinstance(node, ast.BinOp):
+                    operators.append(type(node.op).__name__)
+                elif isinstance(node, ast.UnaryOp):
+                    operators.append(type(node.op).__name__)
+                elif isinstance(node, ast.Compare):
+                    operators.extend([type(op).__name__ for op in node.ops])
+                elif isinstance(node, ast.BoolOp):
+                    operators.append(type(node.op).__name__)
+                elif isinstance(node, (ast.If, ast.For, ast.While, ast.Try, ast.With)):
+                    operators.append(type(node).__name__)
+                elif isinstance(node, ast.FunctionDef):
+                    operators.append('def')
+                elif isinstance(node, ast.ClassDef):
+                    operators.append('class')
+                elif isinstance(node, ast.Return):
+                    operators.append('return')
+                elif isinstance(node, ast.Assign):
+                    operators.append('=')
+                elif isinstance(node, ast.AugAssign):
+                    operators.append(type(node.op).__name__ + '=')
+                
+                # Operands
+                elif isinstance(node, ast.Name):
+                    operands.append(node.id)
+                elif isinstance(node, ast.Constant):
+                    operands.append(str(node.value))
+                elif isinstance(node, ast.Attribute):
+                    operands.append(node.attr)
+                elif isinstance(node, ast.Call) and hasattr(node.func, 'id'):
+                    operands.append(node.func.id)
+                    
+    except Exception as e:
+        print(f"Error parsing function {func.name}: {e}")
+    
+    return operators, operands
+
+def calculate_halstead_volume(operators: List[str], operands: List[str]) -> Tuple[float, int, int, int, int]:
+    """
+    Calculate Halstead complexity metrics.
+    
+    Args:
+        operators: List of operators
+        operands: List of operands
+        
+    Returns:
+        Tuple of (volume, n1, n2, N1, N2) where:
+        - volume: Halstead volume
+        - n1: Number of distinct operators
+        - n2: Number of distinct operands  
+        - N1: Total number of operators
+        - N2: Total number of operands
+    """
+    n1 = len(set(operators))  # Distinct operators
+    n2 = len(set(operands))   # Distinct operands
+    N1 = len(operators)       # Total operators
+    N2 = len(operands)        # Total operands
+    
+    # Calculate vocabulary and length
+    vocabulary = n1 + n2
+    length = N1 + N2
+    
+    # Calculate volume (V = N * log2(n))
+    if vocabulary > 0:
+        volume = length * math.log2(vocabulary)
+    else:
+        volume = 0
+    
+    return volume, n1, n2, N1, N2
+
+def calculate_halstead_metrics(func: Function) -> Dict[str, Any]:
+    """
+    Calculate comprehensive Halstead metrics for a function.
+    
+    Args:
+        func: Function to analyze
+        
+    Returns:
+        Dictionary containing all Halstead metrics
+    """
+    operators, operands = get_operators_and_operands(func)
+    volume, n1, n2, N1, N2 = calculate_halstead_volume(operators, operands)
+    
+    # Calculate additional metrics
+    vocabulary = n1 + n2
+    length = N1 + N2
+    
+    # Difficulty (D = (n1/2) * (N2/n2))
+    difficulty = (n1 / 2) * (N2 / n2) if n2 > 0 else 0
+    
+    # Effort (E = D * V)
+    effort = difficulty * volume
+    
+    # Time to program (T = E / 18 seconds)
+    time_to_program = effort / 18 if effort > 0 else 0
+    
+    # Bugs delivered (B = V / 3000)
+    bugs_delivered = volume / 3000
+    
+    return {
+        'function_name': func.name,
+        'operators': {
+            'distinct': n1,
+            'total': N1,
+            'list': list(set(operators))
+        },
+        'operands': {
+            'distinct': n2,
+            'total': N2,
+            'list': list(set(operands))
+        },
+        'vocabulary': vocabulary,
+        'length': length,
+        'volume': volume,
+        'difficulty': difficulty,
+        'effort': effort,
+        'time_to_program': time_to_program,
+        'bugs_delivered': bugs_delivered
+    }
+
+# =============================================================================
+# ADVANCED INHERITANCE ANALYSIS
+# =============================================================================
+
+@dataclass
+class InheritanceNode:
+    """Represents a class in the inheritance hierarchy."""
+    name: str
+    file_path: str
+    superclasses: List[str] = field(default_factory=list)
+    subclasses: List[str] = field(default_factory=list)
+    depth: int = 0
+    complexity_score: float = 0.0
+    is_top_level: bool = False
+    methods_count: int = 0
+    attributes_count: int = 0
+
+def analyze_inheritance_hierarchy(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Analyze inheritance patterns and create hierarchy mappings.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        Dictionary containing inheritance analysis results
+    """
+    inheritance_map = {}
+    class_nodes = {}
+    
+    # Build inheritance nodes
+    for cls in codebase.classes:
+        node = InheritanceNode(
+            name=cls.name,
+            file_path=str(cls.filepath),
+            superclasses=[sc.name for sc in cls.superclasses] if hasattr(cls, 'superclasses') else [],
+            methods_count=len(cls.methods) if hasattr(cls, 'methods') else 0,
+            attributes_count=len(cls.attributes) if hasattr(cls, 'attributes') else 0
+        )
+        class_nodes[cls.name] = node
+        inheritance_map[cls.name] = node
+    
+    # Calculate inheritance relationships
+    for class_name, node in class_nodes.items():
+        # Find subclasses
+        for other_name, other_node in class_nodes.items():
+            if class_name in other_node.superclasses:
+                node.subclasses.append(other_name)
+    
+    # Calculate inheritance depth and complexity
+    for node in class_nodes.values():
+        node.depth = len(node.superclasses)
+        node.is_top_level = len(node.subclasses) == 0 and len(node.superclasses) > 0
+        
+        # Calculate complexity score based on multiple factors
+        complexity_factors = [
+            node.depth * 2,  # Inheritance depth
+            len(node.subclasses),  # Number of subclasses
+            len(node.superclasses),  # Multiple inheritance
+            node.methods_count * 0.1,  # Method complexity
+            node.attributes_count * 0.05  # Attribute complexity
+        ]
+        node.complexity_score = sum(complexity_factors)
+    
+    # Find top-level inheritance parents
+    top_level_parents = [node for node in class_nodes.values() 
+                        if len(node.subclasses) > 0 and len(node.superclasses) == 0]
+    
+    # Sort by complexity score
+    top_level_parents.sort(key=lambda x: x.complexity_score, reverse=True)
+    
+    return {
+        'inheritance_map': inheritance_map,
+        'top_level_parents': top_level_parents[:10],  # Top 10
+        'total_classes': len(class_nodes),
+        'classes_with_inheritance': len([n for n in class_nodes.values() if n.superclasses]),
+        'max_inheritance_depth': max([n.depth for n in class_nodes.values()], default=0),
+        'multiple_inheritance_classes': [n for n in class_nodes.values() if len(n.superclasses) > 1]
+    }
+
+# =============================================================================
+# ENTRY POINTS DETECTION AND HEAT MAPPING
+# =============================================================================
+
+@dataclass
+class EntryPoint:
+    """Represents a critical entry point in the codebase."""
+    name: str
+    file_path: str
+    function_type: str  # 'main', 'api_endpoint', 'public_method', 'high_usage'
+    usage_count: int = 0
+    call_depth: int = 0
+    complexity_score: float = 0.0
+    heat_score: float = 0.0
+    dependencies: List[str] = field(default_factory=list)
+    dependents: List[str] = field(default_factory=list)
+
+def detect_entry_points(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Detect critical entry points and calculate usage heat maps.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        Dictionary containing entry point analysis
+    """
+    entry_points = []
+    function_usage = {}
+    
+    # Analyze all functions
+    for func in codebase.functions:
+        usage_count = len(func.call_sites) if hasattr(func, 'call_sites') else 0
+        calls_made = len(func.function_calls) if hasattr(func, 'function_calls') else 0
+        
+        function_usage[func.name] = {
+            'usage_count': usage_count,
+            'calls_made': calls_made,
+            'file_path': str(func.filepath)
+        }
+        
+        # Determine if this is an entry point
+        is_entry_point = False
+        entry_type = 'regular'
+        
+        # Check for main functions
+        if func.name in ['main', '__main__', 'run', 'start', 'execute']:
+            is_entry_point = True
+            entry_type = 'main'
+        
+        # Check for high usage functions
+        elif usage_count > 5:  # Threshold for high usage
+            is_entry_point = True
+            entry_type = 'high_usage'
+        
+        # Check for API endpoints (functions with decorators like @app.route)
+        elif hasattr(func, 'decorators') and any('route' in str(d) for d in func.decorators):
+            is_entry_point = True
+            entry_type = 'api_endpoint'
+        
+        # Check for public methods (not starting with _)
+        elif not func.name.startswith('_') and usage_count > 0:
+            is_entry_point = True
+            entry_type = 'public_method'
+        
+        if is_entry_point:
+            # Calculate heat score based on multiple factors
+            heat_score = (
+                usage_count * 2 +  # Usage frequency
+                calls_made * 0.5 +  # Complexity (how much it calls)
+                (10 if entry_type == 'main' else 0) +  # Main function bonus
+                (5 if entry_type == 'api_endpoint' else 0)  # API endpoint bonus
+            )
+            
+            entry_point = EntryPoint(
+                name=func.name,
+                file_path=str(func.filepath),
+                function_type=entry_type,
+                usage_count=usage_count,
+                call_depth=calls_made,
+                heat_score=heat_score,
+                dependencies=[call.name for call in func.function_calls] if hasattr(func, 'function_calls') else [],
+                dependents=[site.parent_function.name for site in func.call_sites] if hasattr(func, 'call_sites') else []
+            )
+            entry_points.append(entry_point)
+    
+    # Sort by heat score
+    entry_points.sort(key=lambda x: x.heat_score, reverse=True)
+    
+    # Create usage heat map
+    heat_map = {}
+    for func_name, data in function_usage.items():
+        heat_map[func_name] = {
+            'usage_intensity': min(data['usage_count'] / 10, 1.0),  # Normalize to 0-1
+            'file_path': data['file_path'],
+            'category': 'hot' if data['usage_count'] > 10 else 'warm' if data['usage_count'] > 3 else 'cold'
+        }
+    
+    return {
+        'entry_points': entry_points[:20],  # Top 20 entry points
+        'heat_map': heat_map,
+        'total_functions': len(function_usage),
+        'high_usage_functions': len([f for f in function_usage.values() if f['usage_count'] > 5]),
+        'unused_functions': len([f for f in function_usage.values() if f['usage_count'] == 0])
+    }
+
+# =============================================================================
+# COMPREHENSIVE ISSUE DETECTION SYSTEM
+# =============================================================================
+
+def detect_comprehensive_issues(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Detect comprehensive issues with full context.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        Dictionary containing all detected issues with context
+    """
+    all_issues = []
+    issue_categories = {
+        'implementation_error': [],
+        'misspelled_function': [],
+        'null_reference': [],
+        'unsafe_assertion': [],
+        'improper_exception': [],
+        'incomplete_implementation': [],
+        'inefficient_pattern': [],
+        'code_duplication': [],
+        'unused_parameter': [],
+        'redundant_code': [],
+        'formatting_issue': [],
+        'suboptimal_default': [],
+        'wrong_parameter': [],
+        'runtime_error': [],
+        'dead_code': [],
+        'security_vulnerability': [],
+        'performance_issue': []
+    }
+    
+    # Analyze each file
+    for file in codebase.files:
+        file_issues = analyze_file_issues(file)
+        all_issues.extend(file_issues)
+        
+        # Categorize issues
+        for issue in file_issues:
+            if issue['category'] in issue_categories:
+                issue_categories[issue['category']].append(issue)
+    
+    # Analyze functions for specific issues
+    for func in codebase.functions:
+        func_issues = analyze_function_issues(func)
+        all_issues.extend(func_issues)
+        
+        for issue in func_issues:
+            if issue['category'] in issue_categories:
+                issue_categories[issue['category']].append(issue)
+    
+    # Create detailed issue report
+    detailed_issues = []
+    for i, issue in enumerate(all_issues, 1):
+        detailed_issue = {
+            'id': i,
+            'file_path': issue['file_path'],
+            'function_name': issue.get('function_name', 'N/A'),
+            'parameter': issue.get('parameter', 'N/A'),
+            'line_number': issue.get('line_number', 0),
+            'category': issue['category'],
+            'severity': issue['severity'],
+            'message': issue['message'],
+            'context': issue.get('context', {}),
+            'suggestion': issue.get('suggestion', 'No suggestion available')
+        }
+        detailed_issues.append(detailed_issue)
+    
+    return {
+        'total_issues': len(all_issues),
+        'issues_by_category': {k: len(v) for k, v in issue_categories.items()},
+        'detailed_issues': detailed_issues,
+        'critical_issues': [i for i in detailed_issues if i['severity'] == 'critical'],
+        'major_issues': [i for i in detailed_issues if i['severity'] == 'major'],
+        'minor_issues': [i for i in detailed_issues if i['severity'] == 'minor']
+    }
+
+def analyze_file_issues(file: SourceFile) -> List[Dict[str, Any]]:
+    """Analyze issues in a specific file."""
+    issues = []
+    
+    try:
+        if hasattr(file, 'content') and file.content:
+            lines = file.content.split('\n')
+            
+            for line_num, line in enumerate(lines, 1):
+                # Check for formatting issues
+                if len(line) > 120:
+                    issues.append({
+                        'file_path': str(file.file_path),
+                        'line_number': line_num,
+                        'category': 'formatting_issue',
+                        'severity': 'minor',
+                        'message': f'Line too long ({len(line)} chars)',
+                        'context': {'line_content': line[:100] + '...' if len(line) > 100 else line}
+                    })
+                
+                # Check for potential null references
+                if 'None.' in line or '.None' in line:
+                    issues.append({
+                        'file_path': str(file.file_path),
+                        'line_number': line_num,
+                        'category': 'null_reference',
+                        'severity': 'major',
+                        'message': 'Potential null reference detected',
+                        'context': {'line_content': line.strip()}
+                    })
+                
+                # Check for TODO/FIXME comments (incomplete implementation)
+                if 'TODO' in line or 'FIXME' in line or 'HACK' in line:
+                    issues.append({
+                        'file_path': str(file.file_path),
+                        'line_number': line_num,
+                        'category': 'incomplete_implementation',
+                        'severity': 'minor',
+                        'message': 'Incomplete implementation detected',
+                        'context': {'line_content': line.strip()}
+                    })
+                
+                # Check for security vulnerabilities
+                if any(vuln in line.lower() for vuln in ['eval(', 'exec(', 'input(', '__import__']):
+                    issues.append({
+                        'file_path': str(file.file_path),
+                        'line_number': line_num,
+                        'category': 'security_vulnerability',
+                        'severity': 'critical',
+                        'message': 'Potential security vulnerability detected',
+                        'context': {'line_content': line.strip()}
+                    })
+    
+    except Exception as e:
+        print(f"Error analyzing file {file.file_path}: {e}")
+    
+    return issues
+
+def analyze_function_issues(func: Function) -> List[Dict[str, Any]]:
+    """Analyze issues in a specific function."""
+    issues = []
+    
+    try:
+        # Check for unused parameters
+        if hasattr(func, 'parameters') and hasattr(func, 'source'):
+            for param in func.parameters:
+                if param.name not in func.source:
+                    issues.append({
+                        'file_path': str(func.filepath),
+                        'function_name': func.name,
+                        'parameter': param.name,
+                        'line_number': func.line_range.start if hasattr(func, 'line_range') else 0,
+                        'category': 'unused_parameter',
+                        'severity': 'minor',
+                        'message': f'Unused parameter "{param.name}"',
+                        'context': {'function_signature': f"def {func.name}(...)"}
+                    })
+        
+        # Check for dead code (functions with no callers)
+        if hasattr(func, 'call_sites') and len(func.call_sites) == 0 and not func.name.startswith('_'):
+            issues.append({
+                'file_path': str(func.filepath),
+                'function_name': func.name,
+                'line_number': func.line_range.start if hasattr(func, 'line_range') else 0,
+                'category': 'dead_code',
+                'severity': 'minor',
+                'message': f'Function "{func.name}" appears to be unused',
+                'context': {'function_name': func.name}
+            })
+        
+        # Check for high complexity
+        if hasattr(func, 'source') and func.source:
+            complexity = calculate_cyclomatic_complexity(func.source)
+            if complexity > 10:
+                issues.append({
+                    'file_path': str(func.filepath),
+                    'function_name': func.name,
+                    'line_number': func.line_range.start if hasattr(func, 'line_range') else 0,
+                    'category': 'performance_issue',
+                    'severity': 'major',
+                    'message': f'High cyclomatic complexity ({complexity})',
+                    'context': {'complexity_score': complexity}
+                })
+    
+    except Exception as e:
+        print(f"Error analyzing function {func.name}: {e}")
+    
+    return issues
+
+def calculate_cyclomatic_complexity(source_code: str) -> int:
+    """Calculate cyclomatic complexity of source code."""
+    try:
+        tree = ast.parse(source_code)
+        complexity = 1  # Base complexity
+        
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.If, ast.While, ast.For, ast.AsyncFor)):
+                complexity += 1
+            elif isinstance(node, ast.Try):
+                complexity += len(node.handlers)
+            elif isinstance(node, ast.BoolOp):
+                complexity += len(node.values) - 1
+        
+        return complexity
+    except:
+        return 1
+
+# =============================================================================
+# FUNCTION CONTEXT ANALYSIS ENGINE
+# =============================================================================
+
+def get_function_context(func: Function, codebase: Codebase) -> Dict[str, Any]:
+    """
+    Get comprehensive context for a function including implementation, dependencies, and usages.
+    
+    Args:
+        func: Function to analyze
+        codebase: The codebase containing the function
+        
+    Returns:
+        Dictionary containing function context
+    """
+    context = {
+        "implementation": {
+            "source": func.source if hasattr(func, 'source') else '',
+            "filepath": str(func.filepath),
+            "line_start": func.line_range.start if hasattr(func, 'line_range') else 0,
+            "line_end": func.line_range.stop if hasattr(func, 'line_range') else 0,
+            "parameters": [param.name for param in func.parameters] if hasattr(func, 'parameters') else [],
+            "return_type": func.return_type if hasattr(func, 'return_type') else None
+        },
+        "dependencies": [],
+        "usages": [],
+        "metrics": {},
+        "issues": [],
+        "call_chain": [],
+        "impact_analysis": {}
+    }
+    
+    # Add dependencies (what this function calls)
+    if hasattr(func, 'function_calls'):
+        for call in func.function_calls:
+            dep_context = {
+                "name": call.name,
+                "type": "function_call",
+                "file_path": str(call.filepath) if hasattr(call, 'filepath') else 'unknown'
+            }
+            context["dependencies"].append(dep_context)
+    
+    # Add usages (what calls this function)
+    if hasattr(func, 'call_sites'):
+        for usage in func.call_sites:
+            usage_context = {
+                "caller": usage.parent_function.name if hasattr(usage, 'parent_function') else 'unknown',
+                "file_path": str(usage.filepath) if hasattr(usage, 'filepath') else 'unknown',
+                "line_number": usage.start_point[0] if hasattr(usage, 'start_point') else 0
+            }
+            context["usages"].append(usage_context)
+    
+    # Calculate Halstead metrics
+    try:
+        halstead_metrics = calculate_halstead_metrics(func)
+        context["metrics"] = halstead_metrics
+    except Exception as e:
+        context["metrics"] = {"error": str(e)}
+    
+    # Find issues related to this function
+    func_issues = analyze_function_issues(func)
+    context["issues"] = func_issues
+    
+    # Build call chain
+    context["call_chain"] = build_call_chain(func, codebase)
+    
+    # Impact analysis
+    context["impact_analysis"] = {
+        "direct_callers": len(context["usages"]),
+        "direct_calls": len(context["dependencies"]),
+        "complexity_score": context["metrics"].get("difficulty", 0),
+        "risk_level": determine_risk_level(func, context)
+    }
+    
+    return context
+
+def build_call_chain(func: Function, codebase: Codebase, max_depth: int = 5) -> List[Dict[str, Any]]:
+    """Build call chain for a function."""
+    call_chain = []
+    visited = set()
+    
+    def traverse_calls(current_func, depth):
+        if depth >= max_depth or current_func.name in visited:
+            return
+        
+        visited.add(current_func.name)
+        
+        if hasattr(current_func, 'function_calls'):
+            for call in current_func.function_calls:
+                call_info = {
+                    "function": call.name,
+                    "depth": depth,
+                    "file_path": str(call.filepath) if hasattr(call, 'filepath') else 'unknown'
+                }
+                call_chain.append(call_info)
+                
+                # Find the actual function object and recurse
+                called_func = next((f for f in codebase.functions if f.name == call.name), None)
+                if called_func:
+                    traverse_calls(called_func, depth + 1)
+    
+    traverse_calls(func, 0)
+    return call_chain
+
+def determine_risk_level(func: Function, context: Dict[str, Any]) -> str:
+    """Determine risk level of a function based on various factors."""
+    risk_score = 0
+    
+    # High usage increases risk
+    risk_score += len(context["usages"]) * 2
+    
+    # High complexity increases risk
+    complexity = context["metrics"].get("difficulty", 0)
+    if complexity > 10:
+        risk_score += 10
+    elif complexity > 5:
+        risk_score += 5
+    
+    # Issues increase risk
+    critical_issues = len([i for i in context["issues"] if i.get("severity") == "critical"])
+    major_issues = len([i for i in context["issues"] if i.get("severity") == "major"])
+    risk_score += critical_issues * 10 + major_issues * 5
+    
+    # Determine risk level
+    if risk_score > 20:
+        return "high"
+    elif risk_score > 10:
+        return "medium"
+    else:
+        return "low"
+
+# =============================================================================
 # ADDITIONAL FUNCTIONS FROM ANALYZER.PY
 # =============================================================================
 
@@ -2835,3 +3503,494 @@ def get_symbol_references(codebase: Codebase, symbol_name: str) -> List[Dict[str
                 references.append(reference_info)
     
     return references
+
+# =============================================================================
+# ADVANCED STATISTICS AND INSIGHTS
+# =============================================================================
+
+def get_advanced_codebase_statistics(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Get comprehensive statistics and insights about the codebase.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        Dictionary containing advanced statistics
+    """
+    stats = {
+        'overview': {},
+        'test_analysis': {},
+        'recursive_functions': [],
+        'most_called_functions': [],
+        'unused_functions': [],
+        'inheritance_analysis': {},
+        'complexity_analysis': {},
+        'architectural_insights': {}
+    }
+    
+    # Basic overview
+    stats['overview'] = {
+        'total_classes': len(list(codebase.classes)),
+        'total_functions': len(list(codebase.functions)),
+        'total_imports': len(list(codebase.imports)),
+        'total_files': len(list(codebase.files)),
+        'total_symbols': len(list(codebase.symbols))
+    }
+    
+    # Test analysis
+    stats['test_analysis'] = analyze_test_files(codebase)
+    
+    # Find recursive functions
+    stats['recursive_functions'] = find_recursive_functions(codebase)
+    
+    # Find most called functions
+    stats['most_called_functions'] = find_most_called_functions(codebase)
+    
+    # Find unused functions (dead code)
+    stats['unused_functions'] = find_unused_functions(codebase)
+    
+    # Inheritance analysis
+    stats['inheritance_analysis'] = analyze_inheritance_patterns(codebase)
+    
+    # Complexity analysis
+    stats['complexity_analysis'] = analyze_complexity_patterns(codebase)
+    
+    # Architectural insights
+    stats['architectural_insights'] = generate_architectural_insights(codebase)
+    
+    return stats
+
+def analyze_test_files(codebase: Codebase) -> Dict[str, Any]:
+    """Analyze test files and test coverage patterns."""
+    test_files = []
+    test_classes = []
+    test_functions = []
+    
+    # Identify test files
+    for file in codebase.files:
+        file_path = str(file.file_path).lower()
+        if any(pattern in file_path for pattern in ['test_', '_test', 'tests/', '/test']):
+            test_files.append({
+                'file_path': str(file.file_path),
+                'functions': len(file.functions) if hasattr(file, 'functions') else 0,
+                'classes': len(file.classes) if hasattr(file, 'classes') else 0,
+                'size': len(file.content) if hasattr(file, 'content') else 0
+            })
+    
+    # Identify test classes
+    for cls in codebase.classes:
+        if 'test' in cls.name.lower() or any('test' in method.name.lower() for method in cls.methods if hasattr(cls, 'methods')):
+            test_classes.append({
+                'name': cls.name,
+                'file_path': str(cls.filepath),
+                'methods': len(cls.methods) if hasattr(cls, 'methods') else 0
+            })
+    
+    # Identify test functions
+    for func in codebase.functions:
+        if func.name.startswith('test_') or 'test' in func.name.lower():
+            test_functions.append({
+                'name': func.name,
+                'file_path': str(func.filepath),
+                'complexity': calculate_cyclomatic_complexity(func.source) if hasattr(func, 'source') else 1
+            })
+    
+    # Calculate test coverage insights
+    file_test_counts = Counter([tf['file_path'] for tf in test_files])
+    top_test_files = sorted(file_test_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+    
+    return {
+        'total_test_files': len(test_files),
+        'total_test_classes': len(test_classes),
+        'total_test_functions': len(test_functions),
+        'top_test_files': [{'file_path': path, 'test_count': count} for path, count in top_test_files],
+        'test_coverage_ratio': len(test_functions) / max(len(list(codebase.functions)), 1),
+        'average_tests_per_file': len(test_functions) / max(len(test_files), 1) if test_files else 0
+    }
+
+def find_recursive_functions(codebase: Codebase) -> List[Dict[str, Any]]:
+    """Find functions that call themselves (recursive functions)."""
+    recursive_functions = []
+    
+    for func in codebase.functions:
+        if hasattr(func, 'function_calls'):
+            # Check if function calls itself
+            if any(call.name == func.name for call in func.function_calls):
+                recursive_functions.append({
+                    'name': func.name,
+                    'file_path': str(func.filepath),
+                    'recursion_type': 'direct',
+                    'complexity': calculate_cyclomatic_complexity(func.source) if hasattr(func, 'source') else 1
+                })
+    
+    return recursive_functions[:10]  # Top 10
+
+def find_most_called_functions(codebase: Codebase) -> List[Dict[str, Any]]:
+    """Find the most frequently called functions."""
+    function_call_counts = {}
+    
+    for func in codebase.functions:
+        call_count = len(func.call_sites) if hasattr(func, 'call_sites') else 0
+        function_call_counts[func.name] = {
+            'call_count': call_count,
+            'file_path': str(func.filepath),
+            'callers': [site.parent_function.name for site in func.call_sites] if hasattr(func, 'call_sites') else []
+        }
+    
+    # Sort by call count
+    sorted_functions = sorted(function_call_counts.items(), key=lambda x: x[1]['call_count'], reverse=True)
+    
+    return [
+        {
+            'name': name,
+            'call_count': data['call_count'],
+            'file_path': data['file_path'],
+            'unique_callers': len(set(data['callers'])),
+            'callers': data['callers'][:5]  # Top 5 callers
+        }
+        for name, data in sorted_functions[:10]  # Top 10 most called
+    ]
+
+def find_unused_functions(codebase: Codebase) -> List[Dict[str, Any]]:
+    """Find functions that are never called (dead code)."""
+    unused_functions = []
+    
+    for func in codebase.functions:
+        call_count = len(func.call_sites) if hasattr(func, 'call_sites') else 0
+        
+        # Consider a function unused if it has no callers and doesn't look like an entry point
+        if (call_count == 0 and 
+            not func.name.startswith('_') and  # Not private
+            func.name not in ['main', '__main__', 'run', 'start', 'execute'] and  # Not main functions
+            not func.name.startswith('test_')):  # Not test functions
+            
+            unused_functions.append({
+                'name': func.name,
+                'file_path': str(func.filepath),
+                'line_start': func.line_range.start if hasattr(func, 'line_range') else 0,
+                'complexity': calculate_cyclomatic_complexity(func.source) if hasattr(func, 'source') else 1,
+                'parameters': len(func.parameters) if hasattr(func, 'parameters') else 0
+            })
+    
+    return unused_functions
+
+def analyze_inheritance_patterns(codebase: Codebase) -> Dict[str, Any]:
+    """Analyze inheritance patterns in the codebase."""
+    if not list(codebase.classes):
+        return {
+            'deepest_inheritance_chain': None,
+            'classes_with_multiple_inheritance': [],
+            'inheritance_depth_distribution': {},
+            'total_inheritance_relationships': 0
+        }
+    
+    # Find class with deepest inheritance
+    deepest_class = None
+    max_depth = 0
+    
+    for cls in codebase.classes:
+        depth = len(cls.superclasses) if hasattr(cls, 'superclasses') else 0
+        if depth > max_depth:
+            max_depth = depth
+            deepest_class = cls
+    
+    # Find classes with multiple inheritance
+    multiple_inheritance = []
+    for cls in codebase.classes:
+        if hasattr(cls, 'superclasses') and len(cls.superclasses) > 1:
+            multiple_inheritance.append({
+                'name': cls.name,
+                'file_path': str(cls.filepath),
+                'superclasses': [sc.name for sc in cls.superclasses],
+                'inheritance_count': len(cls.superclasses)
+            })
+    
+    # Calculate inheritance depth distribution
+    depth_distribution = {}
+    for cls in codebase.classes:
+        depth = len(cls.superclasses) if hasattr(cls, 'superclasses') else 0
+        depth_distribution[depth] = depth_distribution.get(depth, 0) + 1
+    
+    return {
+        'deepest_inheritance_chain': {
+            'class_name': deepest_class.name,
+            'file_path': str(deepest_class.filepath),
+            'depth': max_depth,
+            'chain': [sc.name for sc in deepest_class.superclasses] if hasattr(deepest_class, 'superclasses') else []
+        } if deepest_class else None,
+        'classes_with_multiple_inheritance': multiple_inheritance,
+        'inheritance_depth_distribution': depth_distribution,
+        'total_inheritance_relationships': sum(len(cls.superclasses) if hasattr(cls, 'superclasses') else 0 for cls in codebase.classes)
+    }
+
+def analyze_complexity_patterns(codebase: Codebase) -> Dict[str, Any]:
+    """Analyze complexity patterns across the codebase."""
+    complexity_data = []
+    
+    for func in codebase.functions:
+        if hasattr(func, 'source') and func.source:
+            complexity = calculate_cyclomatic_complexity(func.source)
+            complexity_data.append({
+                'function_name': func.name,
+                'file_path': str(func.filepath),
+                'complexity': complexity,
+                'lines_of_code': len(func.source.split('\n'))
+            })
+    
+    if not complexity_data:
+        return {
+            'average_complexity': 0,
+            'max_complexity': 0,
+            'most_complex_functions': [],
+            'complexity_distribution': {}
+        }
+    
+    # Calculate statistics
+    complexities = [item['complexity'] for item in complexity_data]
+    average_complexity = sum(complexities) / len(complexities)
+    max_complexity = max(complexities)
+    
+    # Find most complex functions
+    most_complex = sorted(complexity_data, key=lambda x: x['complexity'], reverse=True)[:5]
+    
+    # Calculate complexity distribution
+    complexity_distribution = {}
+    for complexity in complexities:
+        if complexity <= 5:
+            category = 'low'
+        elif complexity <= 10:
+            category = 'medium'
+        elif complexity <= 20:
+            category = 'high'
+        else:
+            category = 'very_high'
+        
+        complexity_distribution[category] = complexity_distribution.get(category, 0) + 1
+    
+    return {
+        'average_complexity': average_complexity,
+        'max_complexity': max_complexity,
+        'most_complex_functions': most_complex,
+        'complexity_distribution': complexity_distribution,
+        'functions_needing_refactoring': len([c for c in complexities if c > 10])
+    }
+
+def generate_architectural_insights(codebase: Codebase) -> Dict[str, Any]:
+    """Generate high-level architectural insights."""
+    insights = {
+        'modularity_score': 0,
+        'coupling_analysis': {},
+        'cohesion_analysis': {},
+        'architectural_patterns': [],
+        'recommendations': []
+    }
+    
+    # Calculate modularity score based on file organization
+    files = list(codebase.files)
+    total_files = len(files)
+    
+    if total_files > 0:
+        # Simple modularity metric based on directory structure
+        directories = set()
+        for file in files:
+            path_parts = str(file.file_path).split('/')
+            if len(path_parts) > 1:
+                directories.add('/'.join(path_parts[:-1]))
+        
+        insights['modularity_score'] = min(len(directories) / total_files, 1.0)
+    
+    # Analyze coupling (how interconnected modules are)
+    import_graph = {}
+    for file in files:
+        file_imports = []
+        if hasattr(file, 'imports'):
+            for imp in file.imports:
+                if hasattr(imp, 'external_module') and imp.external_module:
+                    file_imports.append(imp.external_module.name)
+        import_graph[str(file.file_path)] = file_imports
+    
+    # Calculate average imports per file (coupling metric)
+    if import_graph:
+        avg_imports = sum(len(imports) for imports in import_graph.values()) / len(import_graph)
+        insights['coupling_analysis'] = {
+            'average_imports_per_file': avg_imports,
+            'highly_coupled_files': [
+                {'file': file, 'import_count': len(imports)} 
+                for file, imports in import_graph.items() 
+                if len(imports) > avg_imports * 1.5
+            ][:5]
+        }
+    
+    # Generate recommendations
+    recommendations = []
+    
+    if insights['modularity_score'] < 0.3:
+        recommendations.append("Consider organizing code into more modular directory structure")
+    
+    if insights['coupling_analysis'].get('average_imports_per_file', 0) > 10:
+        recommendations.append("High coupling detected - consider reducing dependencies between modules")
+    
+    complexity_analysis = analyze_complexity_patterns(codebase)
+    if complexity_analysis['functions_needing_refactoring'] > 5:
+        recommendations.append(f"{complexity_analysis['functions_needing_refactoring']} functions have high complexity and may need refactoring")
+    
+    insights['recommendations'] = recommendations
+    
+    return insights
+
+# =============================================================================
+# INTERACTIVE REPOSITORY STRUCTURE BUILDER
+# =============================================================================
+
+def build_interactive_repository_structure(codebase: Codebase) -> Dict[str, Any]:
+    """
+    Build an interactive repository structure with issue counts and clickable elements.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        Dictionary containing interactive repository structure
+    """
+    # Get comprehensive issues first
+    issues_analysis = detect_comprehensive_issues(codebase)
+    detailed_issues = issues_analysis['detailed_issues']
+    
+    # Group issues by file path
+    issues_by_file = {}
+    for issue in detailed_issues:
+        file_path = issue['file_path']
+        if file_path not in issues_by_file:
+            issues_by_file[file_path] = {
+                'critical': 0,
+                'major': 0,
+                'minor': 0,
+                'info': 0,
+                'issues': []
+            }
+        issues_by_file[file_path][issue['severity']] += 1
+        issues_by_file[file_path]['issues'].append(issue)
+    
+    # Build directory structure
+    structure = {}
+    
+    for file in codebase.files:
+        file_path = str(file.file_path)
+        path_parts = file_path.split('/')
+        
+        # Navigate through directory structure
+        current = structure
+        for i, part in enumerate(path_parts[:-1]):
+            if part not in current:
+                current[part] = {
+                    'type': 'directory',
+                    'children': {},
+                    'issues': {'critical': 0, 'major': 0, 'minor': 0, 'info': 0, 'total': 0}
+                }
+            current = current[part]['children']
+        
+        # Add file
+        filename = path_parts[-1]
+        file_issues = issues_by_file.get(file_path, {'critical': 0, 'major': 0, 'minor': 0, 'info': 0, 'issues': []})
+        
+        # Get symbols for this file
+        file_symbols = {
+            'classes': [],
+            'functions': []
+        }
+        
+        # Add classes
+        for cls in codebase.classes:
+            if str(cls.filepath) == file_path:
+                class_info = {
+                    'name': cls.name,
+                    'type': 'class',
+                    'methods': [],
+                    'attributes': [],
+                    'issues': []
+                }
+                
+                # Add methods
+                if hasattr(cls, 'methods'):
+                    for method in cls.methods:
+                        method_issues = [issue for issue in detailed_issues if issue['function_name'] == method.name]
+                        class_info['methods'].append({
+                            'name': method.name,
+                            'parameters': [param.name for param in method.parameters] if hasattr(method, 'parameters') else [],
+                            'issues': method_issues,
+                            'context': get_function_context(method, codebase) if hasattr(method, 'source') else {}
+                        })
+                
+                # Add attributes
+                if hasattr(cls, 'attributes'):
+                    class_info['attributes'] = [attr.name for attr in cls.attributes]
+                
+                # Add class-level issues
+                class_info['issues'] = [issue for issue in detailed_issues if cls.name in issue.get('context', {}).get('line_content', '')]
+                
+                file_symbols['classes'].append(class_info)
+        
+        # Add functions
+        for func in codebase.functions:
+            if str(func.filepath) == file_path:
+                func_issues = [issue for issue in detailed_issues if issue['function_name'] == func.name]
+                function_info = {
+                    'name': func.name,
+                    'type': 'function',
+                    'parameters': [param.name for param in func.parameters] if hasattr(func, 'parameters') else [],
+                    'issues': func_issues,
+                    'context': get_function_context(func, codebase),
+                    'halstead_metrics': calculate_halstead_metrics(func) if hasattr(func, 'source') else {}
+                }
+                file_symbols['functions'].append(function_info)
+        
+        current[filename] = {
+            'type': 'file',
+            'path': file_path,
+            'size': len(file.content) if hasattr(file, 'content') else 0,
+            'issues': {
+                'critical': file_issues['critical'],
+                'major': file_issues['major'],
+                'minor': file_issues['minor'],
+                'info': file_issues['info'],
+                'total': sum([file_issues['critical'], file_issues['major'], file_issues['minor'], file_issues['info']])
+            },
+            'symbols': file_symbols,
+            'detailed_issues': file_issues.get('issues', [])
+        }
+    
+    # Propagate issue counts up the directory tree
+    def propagate_issues(node):
+        if node['type'] == 'directory':
+            total_issues = {'critical': 0, 'major': 0, 'minor': 0, 'info': 0, 'total': 0}
+            for child in node['children'].values():
+                child_issues = propagate_issues(child)
+                for severity in total_issues:
+                    total_issues[severity] += child_issues[severity]
+            node['issues'] = total_issues
+            return total_issues
+        else:
+            return node['issues']
+    
+    # Apply issue propagation to root directories
+    for root_item in structure.values():
+        if root_item['type'] == 'directory':
+            propagate_issues(root_item)
+    
+    return {
+        'structure': structure,
+        'total_issues': len(detailed_issues),
+        'issues_by_severity': {
+            'critical': len([i for i in detailed_issues if i['severity'] == 'critical']),
+            'major': len([i for i in detailed_issues if i['severity'] == 'major']),
+            'minor': len([i for i in detailed_issues if i['severity'] == 'minor']),
+            'info': len([i for i in detailed_issues if i['severity'] == 'info'])
+        },
+        'summary': {
+            'total_files': len(list(codebase.files)),
+            'total_directories': len([item for item in structure.values() if item['type'] == 'directory']),
+            'total_functions': len(list(codebase.functions)),
+            'total_classes': len(list(codebase.classes))
+        }
+    }
