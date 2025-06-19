@@ -2829,7 +2829,7 @@ def get_symbol_references(codebase: Codebase, symbol_name: str) -> List[Dict[str
                     'symbol_name': symbol_name,
                     'used_in': source_node.name if hasattr(source_node, 'name') else str(source_node),
                     'file_path': source_node.file.file_path if hasattr(source_node, 'file') and source_node.file else 'unknown',
-                    'line_number': source_node.start_line if hasattr(source_node, 'start_line') else None,
+                    'line_number': int(source_node.start_line) if hasattr(source_node, 'start_line') and source_node.start_line else None,
                     'usage_type': 'symbol_usage'
                 }
                 references.append(reference_info)
