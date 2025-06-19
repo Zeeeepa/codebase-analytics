@@ -627,4 +627,20 @@ def run_analysis(analysis_id: str, repo_url: str, branch: Optional[str], output_
         analysis_results[analysis_id]["message"] = f"Analysis failed: {str(e)}"
 
 if __name__ == "__main__":
+    print("🚀 Starting Codebase Analytics API Server...")
+    print("=" * 50)
+    print("🌐 Server will be available at:")
+    print("   • Root API: http://localhost:8000/")
+    print("   • Interactive UI: http://localhost:8000/ui")
+    print("   • Analysis API: http://localhost:8000/analyze/{owner}/{repo}")
+    print("   • CLI API: http://localhost:8000/cli/{owner}/{repo}")
+    print("=" * 50)
+    print("📊 Example usage:")
+    print("   • UI: http://localhost:8000/ui")
+    print("   • API: http://localhost:8000/analyze/Zeeeepa/codebase-analytics")
+    print("   • CLI: curl http://localhost:8000/cli/Zeeeepa/codebase-analytics")
+    print("=" * 50)
+    print("🔄 Starting server... (Press Ctrl+C to stop)")
+    print()
+    
     uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)

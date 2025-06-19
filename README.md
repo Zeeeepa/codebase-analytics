@@ -1,67 +1,189 @@
-# Codebase Analytics
+# 🔍 Codebase Analytics
 
-A web application that provides comprehensive analytics for GitHub repositories.  The project combines a Modal-based FastAPI backend with a Next.js frontend to provide efficient and beautiful codebase metrics.
+Comprehensive repository analysis with interactive exploration and issue detection.
 
-Users submit a GitHub repository through the frontend. The Modal API processes the request using custom implementations of the metric calculations using the `codegen` library. Results are returned to the frontend for display.
+## 🚀 Quick Start
 
-## How it Works
-
-### Backend (Modal API)
-
-The backend is built using [Modal](https://modal.com/) and [FastAPI](https://fastapi.tiangolo.com/), providing a serverless API endpoint for code research.
-
-There is a main API endpoint that handles codebase analysis requests. It uses the `codegen` library for these operations.
-
-The following metrics are calculated:
-- `Maintainability Index`: Measures the maintainability of the codebase, on a scale of 0-100.
-- `Cyclomatic Complexity`: Measures the complexity of the codebase. Higher values indicate more complex code.
-- `Halstead Volume`: Quantifies the information content in the code based on operators and operands. Higher values indicate more complex code.
-- `Depth of Inheritance`: Measures the depth of inheritance of the codebase.
-- `Lines of Code (LOC, SLOC, LLOC)`: Measures the number of lines of code in the codebase. LOC, SLOC, and LLOC represent the total, source, and logical lines of code, respectively. 
-- `Comment Density`: Measures the density of comments in the codebase, given as a percentage of the total lines of code. More comments can indicate better documentation.
-
-```python
-complexity = calculate_cyclomatic_complexity(func)
-operators, operands = get_operators_and_operands(func)
-volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
-loc = len(func.code_block.source.splitlines())
-mi_score = calculate_maintainability_index(volume, complexity, loc)
+### Start the Backend Server
+```bash
+cd backend
+python api.py
 ```
 
-Monthly commit history is also pulled from the GitHub API and displayed in a chart.
+The server will start on `http://localhost:8000` with the following endpoints:
 
-The codebase is also graded on a scale of A-F for overall quality and maintainability. The complexity of the codebase is also given a qualitative rank.
+## 🌐 API Endpoints
 
-### Frontend (Next.js)
+### 🎨 Interactive UI
+```
+http://localhost:8000/ui
+```
+- Modern web interface for repository analysis
+- Interactive file tree with issue counts
+- Click on files to see functions/classes
+- Real-time analysis metrics
 
-The frontend provides an interface for users to submit a GitHub repository and research query. The components come from the [shadcn/ui](https://ui.shadcn.com/) library. This triggers the Modal API to perform the code research and returns the results to the frontend.
+### 📊 Comprehensive Analysis API
+```
+GET /analyze/{owner}/{repo}
+```
+**Example:**
+```bash
+curl http://localhost:8000/analyze/Zeeeepa/codebase-analytics
+```
 
-## Getting Started
+**Returns:**
+- Repository overview (files, functions, classes, symbols)
+- Issue detection with severity classification
+- Code quality metrics (maintainability, complexity, debt ratio)
+- Dependency analysis (circular deps, external/internal)
+- Call graph analysis (entry points, leaf functions, depth)
+- Interactive repository structure
+- Symbol details mapping
 
-1. Set up environment variables in an `.env` file:
-   ```
-   OPENAI_API_KEY=your_key_here
-   ```
+### 🖥️ CLI-Friendly Endpoint
+```
+GET /cli/{owner}/{repo}
+```
+**Example:**
+```bash
+curl http://localhost:8000/cli/Zeeeepa/codebase-analytics
+```
 
-2. Deploy or serve the Modal API:
-   ```bash
-   modal serve backend/api.py
-   ```
-   `modal serve` runs the API locally for development, creating a temporary endpoint that's active only while the command is running.
-   ```bash
-   modal deploy backend/api.py
-   ```
-   `modal deploy` creates a persistent Modal app and deploys the FastAPI app to it, generating a permanent API endpoint.
-   
-   After deployment, you'll need to update the API endpoint in the frontend configuration to point to your deployed Modal app URL.
+**Returns formatted text output:**
+```
+🔍 CODEBASE ANALYSIS REPORT
+==================================================
+📊 Repository: Zeeeepa/codebase-analytics
+🌐 URL: https://github.com/Zeeeepa/codebase-analytics
 
-3. Run the Next.js frontend:
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
+📈 OVERVIEW:
+- Files: 60
+- Functions: 145
+- Classes: 20
+- Symbols: 2724
 
-## Learn More
+🚨 ISSUES SUMMARY:
+- Total Issues: 169
+- Critical: 0
+- Major: 53
+- Minor: 116
 
-More information about the `codegen` library can be found [here](https://codegen.com/).
+📊 CODE QUALITY:
+- Maintainability Index: 100.0
+- Cyclomatic Complexity: 1.0
+- Comment Density: 0.01
+- Technical Debt Ratio: 0.25
+
+🎯 ANALYSIS COMPLETE!
+```
+
+## 📂 Interactive Repository Structure
+
+The UI provides a clickable repository structure with issue counts:
+
+```
+📁 backend/ [👉 Major: 53] [🔍 Minor: 116]
+├── 📄 analysis.py [👉 Major: 45] [🔍 Minor: 98]
+│   ├── ⚙️ Functions: analyze_codebase, detect_issues, analyze_code_quality...
+│   ├── 🏗️ Classes: Issue, CodeQualityResult, DependencyAnalysis...
+│   └── 🚨 Issues: Line 802: 'Unused parameter "import_string"'
+├── 📄 api.py [👉 Major: 8] [🔍 Minor: 18]
+└── 📄 visualization.py
+```
+
+**Interactive Features:**
+- ✅ Click folders → Shows contents
+- ✅ Click files → Shows symbol map (functions/classes)
+- ✅ Click symbols → Shows parameters/context/issues
+- ✅ Issue badges by severity with counts
+- ✅ Real-time issue details
+
+## 🔧 Analysis Features
+
+### 🚨 Issue Detection
+- Implementation errors
+- Misspelled function names
+- Null references
+- Unsafe assertions
+- Improper exception handling
+- Incomplete implementations
+- Inefficient patterns
+- Code duplication
+- Unused parameters
+- Redundant code
+- Formatting issues
+- Suboptimal defaults
+- Wrong parameters
+- Runtime errors
+- Dead code
+- Security vulnerabilities
+- Performance issues
+
+### 📊 Code Quality Metrics
+- Maintainability Index
+- Cyclomatic Complexity
+- Comment Density
+- Source Lines of Code
+- Duplication Percentage
+- Technical Debt Ratio
+
+### 🔗 Dependency Analysis
+- Total Dependencies
+- Circular Dependencies
+- External Dependencies
+- Internal Dependencies
+- Dependency Depth
+- Critical Dependencies
+
+### 📞 Call Graph Analysis
+- Total Functions
+- Entry Points
+- Leaf Functions
+- Maximum Call Depth
+- Call Chains
+
+## 🏗️ Architecture
+
+### Backend Files
+- `analysis.py` - Core analysis functions (50 functions, 20 classes)
+- `api.py` - FastAPI server with all endpoints
+- `visualization.py` - Visualization generation
+
+### Frontend Files
+- `frontend/interactive-analysis.html` - Interactive web UI
+
+## 🎯 Usage Examples
+
+### Start Server
+```bash
+cd backend
+python api.py
+```
+
+### Access Interactive UI
+Open browser to: `http://localhost:8000/ui`
+
+### API Analysis
+```bash
+curl http://localhost:8000/analyze/Zeeeepa/codebase-analytics | jq
+```
+
+### CLI Analysis
+```bash
+curl http://localhost:8000/cli/Zeeeepa/codebase-analytics
+```
+
+## ✅ Features
+
+- ✅ Comprehensive codebase analysis
+- ✅ Interactive repository structure
+- ✅ Issue detection with severity classification
+- ✅ Code quality metrics
+- ✅ Dependency and call graph analysis
+- ✅ Modern web UI with real-time updates
+- ✅ CLI-friendly endpoints for automation
+- ✅ Visual representations of all analysis components
+
+**Ready for comprehensive codebase analysis! 🎉**
+
