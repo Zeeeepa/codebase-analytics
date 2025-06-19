@@ -9,15 +9,23 @@ import subprocess
 import json
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 from typing import Optional, Dict, Any, List
 
 # Import consolidated analysis and visualization modules
-from analysis import analyze_codebase, get_codebase_summary, get_dependency_graph, get_symbol_references
-from visualization import visualize_codebase, generate_html_report, run_visualization_analysis, CodebaseVisualizer
+from analysis import (
+    analyze_codebase, analyze_code_quality, analyze_dependencies, analyze_call_graph,
+    detect_issues, get_codebase_summary, get_dependency_graph, get_symbol_references,
+    generate_dependency_graph_visualization, generate_call_graph_visualization,
+    generate_issue_visualization, generate_code_quality_visualization,
+    generate_repository_structure_visualization
+)
+from visualization import visualize_codebase, generate_html_report, run_visualization_analysis
+from codegen.sdk.core.codebase import Codebase
 
 # Create FastAPI app
 app = FastAPI(
@@ -38,6 +46,9 @@ app.add_middleware(
 # Create output directory
 os.makedirs("output", exist_ok=True)
 
+# Mount static files
+app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+
 # Define request models
 class AnalysisRequest(BaseModel):
     repo_url: str
@@ -56,6 +67,248 @@ analysis_results = {}
 async def root():
     """Root endpoint."""
     return {"message": "Welcome to the Codebase Analytics API"}
+
+@app.get("/ui", response_class=HTMLResponse)
+async def interactive_ui():
+    """Serve the interactive analysis UI."""
+    try:
+        with open("../frontend/interactive-analysis.html", "r") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>UI not found</h1>", status_code=404)
+
+@app.get("/analyze/{repo_owner}/{repo_name}")
+async def analyze_repository(repo_owner: str, repo_name: str):
+    """
+    Comprehensive analysis of a GitHub repository with all context.
+    
+    Args:
+        repo_owner: GitHub repository owner
+        repo_name: GitHub repository name
+        
+    Returns:
+        Complete analysis results with interactive repository structure
+    """
+    try:
+        # Construct repository URL
+        repo_url = f"{repo_owner}/{repo_name}"
+        
+        # Load codebase using Codegen SDK
+        codebase = Codebase.from_repo(repo_url)
+        
+        # Run comprehensive analysis
+        print(f"🔍 Analyzing repository: {repo_url}")
+        
+        # 1. Detect issues
+        issues = detect_issues(codebase)
+        print(f"📊 Issues detected: {len(issues.issues)}")
+        
+        # 2. Analyze code quality
+        code_quality = analyze_code_quality(codebase)
+        print(f"📈 Code quality analyzed")
+        
+        # 3. Analyze dependencies
+        dependencies = analyze_dependencies(codebase)
+        print(f"🔗 Dependencies analyzed")
+        
+        # 4. Analyze call graph
+        call_graph = analyze_call_graph(codebase)
+        print(f"📞 Call graph analyzed")
+        
+        # 5. Generate visualizations
+        dependency_viz = generate_dependency_graph_visualization(dependencies)
+        call_graph_viz = generate_call_graph_visualization(call_graph)
+        issue_viz = generate_issue_visualization(issues)
+        quality_viz = generate_code_quality_visualization(code_quality)
+        repo_structure_viz = generate_repository_structure_visualization(codebase)
+        
+        # 6. Build interactive repository structure with issue counts
+        interactive_structure = build_interactive_repository_structure(codebase, issues)
+        
+        # 7. Get symbol details for interactive features
+        symbol_details = build_symbol_details_map(codebase, issues, call_graph, dependencies)
+        
+        # Compile comprehensive response
+        response = {
+            "repository": {
+                "owner": repo_owner,
+                "name": repo_name,
+                "url": f"https://github.com/{repo_url}",
+                "total_files": len(codebase.files),
+                "total_functions": len(codebase.functions),
+                "total_classes": len(codebase.classes),
+                "total_symbols": len(codebase.symbols)
+            },
+            "analysis": {
+                "issues": {
+                    "total": len(issues.issues),
+                    "by_severity": issues.count_by_severity(),
+                    "by_category": issues.count_by_category(),
+                    "details": [
+                        {
+                            "id": issue.id,
+                            "category": issue.category.value,
+                            "severity": issue.severity.value,
+                            "message": issue.message,
+                            "file_path": str(issue.location.file_path),
+                            "line_start": issue.location.line_start,
+                            "line_end": issue.location.line_end
+                        }
+                        for issue in issues.issues
+                    ]
+                },
+                "code_quality": {
+                    "maintainability_index": code_quality.maintainability_index,
+                    "cyclomatic_complexity": code_quality.cyclomatic_complexity,
+                    "comment_density": code_quality.comment_density,
+                    "source_lines_of_code": code_quality.source_lines_of_code,
+                    "duplication_percentage": code_quality.duplication_percentage,
+                    "technical_debt_ratio": code_quality.technical_debt_ratio
+                },
+                "dependencies": {
+                    "total": dependencies.total_dependencies,
+                    "circular": len(dependencies.circular_dependencies),
+                    "external": len(dependencies.external_dependencies),
+                    "internal": len(dependencies.internal_dependencies),
+                    "depth": dependencies.dependency_depth,
+                    "critical": len(dependencies.critical_dependencies)
+                },
+                "call_graph": {
+                    "total_functions": call_graph.total_functions,
+                    "entry_points": len(call_graph.entry_points),
+                    "leaf_functions": len(call_graph.leaf_functions),
+                    "max_call_depth": call_graph.max_call_depth,
+                    "call_chains": len(call_graph.call_chains)
+                }
+            },
+            "interactive_structure": interactive_structure,
+            "symbol_details": symbol_details,
+            "visualizations": {
+                "dependency_graph": dependency_viz,
+                "call_graph": call_graph_viz,
+                "issues": issue_viz,
+                "code_quality": quality_viz,
+                "repository_structure": repo_structure_viz
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        return JSONResponse(content=response)
+        
+    except Exception as e:
+        print(f"❌ Error analyzing repository: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+def build_interactive_repository_structure(codebase: Codebase, issues) -> Dict[str, Any]:
+    """Build interactive repository structure with issue counts."""
+    from pathlib import Path
+    from collections import defaultdict
+    
+    # Group issues by file path
+    issues_by_file = defaultdict(list)
+    for issue in issues.issues:
+        file_path = str(issue.location.file_path)
+        issues_by_file[file_path].append(issue)
+    
+    # Build directory structure
+    structure = {}
+    
+    for file in codebase.files:
+        file_path = str(file.path)
+        path_parts = Path(file_path).parts
+        
+        current = structure
+        for part in path_parts[:-1]:  # All parts except filename
+            if part not in current:
+                current[part] = {"type": "directory", "children": {}, "issues": {"critical": 0, "major": 0, "minor": 0, "info": 0}}
+            current = current[part]["children"]
+        
+        # Add file
+        filename = path_parts[-1]
+        file_issues = issues_by_file.get(file_path, [])
+        issue_counts = {"critical": 0, "major": 0, "minor": 0, "info": 0}
+        
+        for issue in file_issues:
+            severity = issue.severity.value.lower()
+            if severity in issue_counts:
+                issue_counts[severity] += 1
+        
+        current[filename] = {
+            "type": "file",
+            "path": file_path,
+            "issues": issue_counts,
+            "functions": [f.name for f in codebase.functions if f.filepath == file_path],
+            "classes": [c.name for c in codebase.classes if c.filepath == file_path],
+            "symbols": [s.name for s in codebase.symbols if s.filepath == file_path]
+        }
+        
+        # Propagate issue counts up the directory tree
+        propagate_issue_counts(structure, path_parts[:-1], issue_counts)
+    
+    return structure
+
+def propagate_issue_counts(structure: Dict, path_parts: tuple, issue_counts: Dict):
+    """Propagate issue counts up the directory tree."""
+    current = structure
+    for part in path_parts:
+        if part in current and "issues" in current[part]:
+            for severity, count in issue_counts.items():
+                current[part]["issues"][severity] += count
+        current = current[part]["children"]
+
+def build_symbol_details_map(codebase: Codebase, issues, call_graph, dependencies) -> Dict[str, Any]:
+    """Build detailed symbol information for interactive features."""
+    symbol_details = {}
+    
+    # Process functions
+    for func in codebase.functions:
+        func_issues = [issue for issue in issues.issues if str(issue.location.file_path) == func.filepath and issue.location.line_start >= func.start_line and issue.location.line_start <= func.end_line]
+        
+        symbol_details[f"function:{func.name}"] = {
+            "type": "function",
+            "name": func.name,
+            "filepath": func.filepath,
+            "start_line": func.start_line,
+            "end_line": func.end_line,
+            "parameters": [param.name for param in func.parameters] if hasattr(func, 'parameters') else [],
+            "issues": [
+                {
+                    "category": issue.category.value,
+                    "severity": issue.severity.value,
+                    "message": issue.message,
+                    "line": issue.location.line_start
+                }
+                for issue in func_issues
+            ],
+            "calls": [],  # Will be populated from call graph
+            "called_by": [],  # Will be populated from call graph
+            "dependencies": []  # Will be populated from dependencies
+        }
+    
+    # Process classes
+    for cls in codebase.classes:
+        cls_issues = [issue for issue in issues.issues if str(issue.location.file_path) == cls.filepath and issue.location.line_start >= cls.start_line and issue.location.line_start <= cls.end_line]
+        
+        symbol_details[f"class:{cls.name}"] = {
+            "type": "class",
+            "name": cls.name,
+            "filepath": cls.filepath,
+            "start_line": cls.start_line,
+            "end_line": cls.end_line,
+            "methods": [method.name for method in cls.methods] if hasattr(cls, 'methods') else [],
+            "issues": [
+                {
+                    "category": issue.category.value,
+                    "severity": issue.severity.value,
+                    "message": issue.message,
+                    "line": issue.location.line_start
+                }
+                for issue in cls_issues
+            ],
+            "dependencies": []
+        }
+    
+    return symbol_details
 
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze(request: AnalysisRequest, background_tasks: BackgroundTasks):

@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Codebase Analytics</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .input-section {
+            padding: 30px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .input-group input {
+            padding: 12px 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            width: 200px;
+            transition: border-color 0.3s;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .analyze-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .analyze-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .analyze-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            padding: 30px;
+        }
+
+        .repository-structure {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .analysis-summary {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .section-title {
+            font-size: 1.5em;
+            margin-bottom: 20px;
+            color: #2c3e50;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .tree-item {
+            margin-left: 20px;
+            margin-bottom: 5px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 5px;
+            transition: background-color 0.2s;
+        }
+
+        .tree-item:hover {
+            background-color: #e9ecef;
+        }
+
+        .tree-item.directory {
+            font-weight: bold;
+            color: #2c3e50;
+        }
+
+        .tree-item.file {
+            color: #495057;
+        }
+
+        .tree-item.expanded > .tree-children {
+            display: block;
+        }
+
+        .tree-item.collapsed > .tree-children {
+            display: none;
+        }
+
+        .tree-children {
+            margin-left: 15px;
+        }
+
+        .issue-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+
+        .issue-critical {
+            background: #dc3545;
+            color: white;
+        }
+
+        .issue-major {
+            background: #fd7e14;
+            color: white;
+        }
+
+        .issue-minor {
+            background: #ffc107;
+            color: #212529;
+        }
+
+        .issue-info {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .metric-title {
+            font-size: 1.2em;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #6c757d;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px;
+        }
+
+        .symbol-details {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .symbol-details.show {
+            display: block;
+        }
+
+        .symbol-header {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .symbol-info {
+            margin-bottom: 10px;
+        }
+
+        .symbol-issues {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 5px;
+            padding: 10px;
+            margin-top: 10px;
+        }
+
+        .icon {
+            margin-right: 5px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔍 Interactive Codebase Analytics</h1>
+            <p>Comprehensive repository analysis with interactive exploration</p>
+        </div>
+
+        <div class="input-section">
+            <div class="input-group">
+                <input type="text" id="repoOwner" placeholder="Repository Owner" value="Zeeeepa">
+                <span>/</span>
+                <input type="text" id="repoName" placeholder="Repository Name" value="codebase-analytics">
+                <button class="analyze-btn" onclick="analyzeRepository()">
+                    <span id="analyzeText">🚀 Analyze Repository</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="content" class="content" style="display: none;">
+            <div class="repository-structure">
+                <h2 class="section-title">📂 Repository Structure</h2>
+                <div id="repositoryTree"></div>
+            </div>
+
+            <div class="analysis-summary">
+                <h2 class="section-title">📊 Analysis Summary</h2>
+                <div id="analysisSummary"></div>
+            </div>
+        </div>
+
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing repository... This may take a few moments.</p>
+        </div>
+
+        <div id="error" class="error" style="display: none;"></div>
+    </div>
+
+    <script>
+        let analysisData = null;
+
+        async function analyzeRepository() {
+            const repoOwner = document.getElementById('repoOwner').value.trim();
+            const repoName = document.getElementById('repoName').value.trim();
+
+            if (!repoOwner || !repoName) {
+                alert('Please enter both repository owner and name');
+                return;
+            }
+
+            // Show loading state
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('error').style.display = 'none';
+            
+            const analyzeBtn = document.querySelector('.analyze-btn');
+            analyzeBtn.disabled = true;
+            document.getElementById('analyzeText').textContent = '🔄 Analyzing...';
+
+            try {
+                const response = await fetch(`http://localhost:8000/analyze/${repoOwner}/${repoName}`);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                analysisData = await response.json();
+                displayAnalysisResults();
+
+            } catch (error) {
+                console.error('Analysis failed:', error);
+                document.getElementById('error').textContent = `Analysis failed: ${error.message}`;
+                document.getElementById('error').style.display = 'block';
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                analyzeBtn.disabled = false;
+                document.getElementById('analyzeText').textContent = '🚀 Analyze Repository';
+            }
+        }
+
+        function displayAnalysisResults() {
+            if (!analysisData) return;
+
+            // Display repository structure
+            displayRepositoryStructure();
+            
+            // Display analysis summary
+            displayAnalysisSummary();
+
+            // Show content
+            document.getElementById('content').style.display = 'grid';
+        }
+
+        function displayRepositoryStructure() {
+            const treeContainer = document.getElementById('repositoryTree');
+            treeContainer.innerHTML = '';
+
+            const structure = analysisData.interactive_structure;
+            const treeHtml = buildTreeHtml(structure, '');
+            treeContainer.innerHTML = treeHtml;
+        }
+
+        function buildTreeHtml(structure, path) {
+            let html = '';
+
+            for (const [name, item] of Object.entries(structure)) {
+                const currentPath = path ? `${path}/${name}` : name;
+                
+                if (item.type === 'directory') {
+                    const issuesBadges = buildIssuesBadges(item.issues);
+                    html += `
+                        <div class="tree-item directory collapsed" onclick="toggleDirectory(this)">
+                            <span class="icon">📁</span>
+                            ${name}/ ${issuesBadges}
+                            <div class="tree-children">
+                                ${buildTreeHtml(item.children, currentPath)}
+                            </div>
+                        </div>
+                    `;
+                } else if (item.type === 'file') {
+                    const issuesBadges = buildIssuesBadges(item.issues);
+                    const symbolCount = (item.functions?.length || 0) + (item.classes?.length || 0);
+                    html += `
+                        <div class="tree-item file" onclick="showFileDetails('${currentPath}')">
+                            <span class="icon">📄</span>
+                            ${name} ${issuesBadges}
+                            ${symbolCount > 0 ? `<span style="color: #6c757d; font-size: 0.9em;">(${symbolCount} symbols)</span>` : ''}
+                            <div class="symbol-details" id="details-${currentPath.replace(/[^a-zA-Z0-9]/g, '_')}">
+                                ${buildFileDetails(item)}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            return html;
+        }
+
+        function buildIssuesBadges(issues) {
+            let badges = '';
+            if (issues.critical > 0) badges += `<span class="issue-badge issue-critical">⚠️ Critical: ${issues.critical}</span>`;
+            if (issues.major > 0) badges += `<span class="issue-badge issue-major">👉 Major: ${issues.major}</span>`;
+            if (issues.minor > 0) badges += `<span class="issue-badge issue-minor">🔍 Minor: ${issues.minor}</span>`;
+            if (issues.info > 0) badges += `<span class="issue-badge issue-info">ℹ️ Info: ${issues.info}</span>`;
+            return badges;
+        }
+
+        function buildFileDetails(fileItem) {
+            let html = '<div class="symbol-header">📋 File Contents:</div>';
+            
+            if (fileItem.functions && fileItem.functions.length > 0) {
+                html += '<div class="symbol-info"><strong>⚙️ Functions:</strong> ' + fileItem.functions.join(', ') + '</div>';
+            }
+            
+            if (fileItem.classes && fileItem.classes.length > 0) {
+                html += '<div class="symbol-info"><strong>🏗️ Classes:</strong> ' + fileItem.classes.join(', ') + '</div>';
+            }
+
+            // Find issues for this file
+            const fileIssues = analysisData.analysis.issues.details.filter(issue => 
+                issue.file_path.endsWith(fileItem.path)
+            );
+
+            if (fileIssues.length > 0) {
+                html += '<div class="symbol-issues">';
+                html += '<div class="symbol-header">🚨 Issues Found:</div>';
+                fileIssues.forEach(issue => {
+                    html += `<div class="symbol-info">
+                        <span class="issue-badge issue-${issue.severity}">${issue.severity.toUpperCase()}</span>
+                        Line ${issue.line_start}: ${issue.message}
+                    </div>`;
+                });
+                html += '</div>';
+            }
+
+            return html;
+        }
+
+        function toggleDirectory(element) {
+            element.classList.toggle('expanded');
+            element.classList.toggle('collapsed');
+        }
+
+        function showFileDetails(filePath) {
+            const detailsId = 'details-' + filePath.replace(/[^a-zA-Z0-9]/g, '_');
+            const detailsElement = document.getElementById(detailsId);
+            
+            if (detailsElement) {
+                detailsElement.classList.toggle('show');
+            }
+        }
+
+        function displayAnalysisSummary() {
+            const summaryContainer = document.getElementById('analysisSummary');
+            const analysis = analysisData.analysis;
+            const repo = analysisData.repository;
+
+            summaryContainer.innerHTML = `
+                <div class="metric-card">
+                    <div class="metric-title">📊 Repository Overview</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <div class="metric-value">${repo.total_files}</div>
+                            <div>Files</div>
+                        </div>
+                        <div>
+                            <div class="metric-value">${repo.total_functions}</div>
+                            <div>Functions</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-title">🚨 Issues Summary</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <div class="metric-value" style="color: #dc3545;">${analysis.issues.by_severity.critical || 0}</div>
+                            <div>Critical</div>
+                        </div>
+                        <div>
+                            <div class="metric-value" style="color: #fd7e14;">${analysis.issues.by_severity.major || 0}</div>
+                            <div>Major</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <div class="metric-value">${analysis.issues.total}</div>
+                        <div>Total Issues</div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-title">📈 Code Quality</div>
+                    <div>
+                        <div class="metric-value">${analysis.code_quality.maintainability_index.toFixed(1)}</div>
+                        <div>Maintainability Index</div>
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <div class="metric-value">${analysis.code_quality.cyclomatic_complexity.toFixed(1)}</div>
+                        <div>Avg Complexity</div>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-title">🔗 Dependencies</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                        <div>
+                            <div class="metric-value">${analysis.dependencies.total}</div>
+                            <div>Total</div>
+                        </div>
+                        <div>
+                            <div class="metric-value" style="color: #dc3545;">${analysis.dependencies.circular}</div>
+                            <div>Circular</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Allow Enter key to trigger analysis
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('repoOwner').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') analyzeRepository();
+            });
+            document.getElementById('repoName').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') analyzeRepository();
+            });
+        });
+    </script>
+</body>
+</html>
+
