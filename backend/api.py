@@ -10,12 +10,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import uvicorn
 from typing import Optional, Dict, Any, List
+from urllib.parse import urlparse
 
 # Import consolidated analysis and visualization modules
 from analysis import (
@@ -54,6 +55,89 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# CLI functionality transferred from cli.py
+def parse_repo_url(repo_input: str) -> tuple[str, str]:
+    """Parse repository input to extract owner and repo name."""
+    if repo_input.startswith('https://github.com/'):
+        # Parse GitHub URL
+        parsed = urlparse(repo_input)
+        path_parts = parsed.path.strip('/').split('/')
+        if len(path_parts) >= 2:
+            return path_parts[0], path_parts[1]
+        else:
+            raise ValueError("Invalid GitHub URL format")
+    elif '/' in repo_input:
+        # Parse owner/repo format
+        parts = repo_input.split('/')
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        else:
+            raise ValueError("Invalid owner/repo format")
+    else:
+        raise ValueError("Invalid repository format. Use 'owner/repo' or GitHub URL")
+
+def format_cli_response(data: Dict[str, Any]) -> str:
+    """Format analysis response for CLI display."""
+    output = []
+    output.append("=" * 80)
+    output.append("🔍 COMPREHENSIVE CODEBASE ANALYSIS RESULTS")
+    output.append("=" * 80)
+    
+    # Repository info
+    repo = data.get('repository', {})
+    output.append(f"\n📁 Repository: {repo.get('name', 'Unknown')} ({repo.get('owner', 'Unknown')})")
+    output.append(f"🔗 URL: {repo.get('url', 'N/A')}")
+    output.append(f"📊 Files: {repo.get('total_files', 0)} | Functions: {repo.get('total_functions', 0)} | Classes: {repo.get('total_classes', 0)}")
+    
+    # Issues summary
+    analysis = data.get('analysis', {})
+    issues = analysis.get('issues', {})
+    output.append(f"\n🚨 ISSUES SUMMARY")
+    output.append(f"   Total Issues: {issues.get('total', 0)}")
+    
+    by_severity = issues.get('by_severity', {})
+    if by_severity:
+        output.append(f"   ⚠️  Critical: {by_severity.get('Critical', 0)}")
+        output.append(f"   🔶 High: {by_severity.get('High', 0)}")
+        output.append(f"   🔸 Medium: {by_severity.get('Medium', 0)}")
+        output.append(f"   🔹 Low: {by_severity.get('Low', 0)}")
+    
+    # Code quality
+    quality = analysis.get('code_quality', {})
+    if quality:
+        output.append(f"\n📈 CODE QUALITY METRICS")
+        output.append(f"   Maintainability Index: {quality.get('maintainability_index', 0):.2f}")
+        output.append(f"   Technical Debt Ratio: {quality.get('technical_debt_ratio', 0):.2f}%")
+        output.append(f"   Comment Density: {quality.get('comment_density', 0):.2f}%")
+        output.append(f"   Cyclomatic Complexity: {quality.get('cyclomatic_complexity', 0):.2f}")
+    
+    # Dependencies
+    deps = analysis.get('dependencies', {})
+    if deps:
+        output.append(f"\n🔗 DEPENDENCIES")
+        output.append(f"   Total: {deps.get('total', 0)}")
+        output.append(f"   Circular: {deps.get('circular', 0)}")
+        output.append(f"   External: {deps.get('external', 0)}")
+        output.append(f"   Critical: {deps.get('critical', 0)}")
+    
+    # Entry points
+    entry_points = analysis.get('most_important_entry_points', {})
+    if entry_points:
+        output.append(f"\n🚪 ENTRY POINTS")
+        main_funcs = entry_points.get('main_functions', [])
+        if main_funcs:
+            output.append(f"   Main Functions: {', '.join([str(f) for f in main_funcs[:5]])}")
+        
+        api_endpoints = entry_points.get('api_endpoints', [])
+        if api_endpoints:
+            output.append(f"   API Endpoints: {', '.join([str(e) for e in api_endpoints[:5]])}")
+    
+    output.append("\n" + "=" * 80)
+    output.append("✅ Analysis Complete!")
+    output.append("=" * 80)
+    
+    return "\n".join(output)
+
 # Create output directory
 os.makedirs("output", exist_ok=True)
 
@@ -87,6 +171,134 @@ async def interactive_ui():
             return HTMLResponse(content=f.read())
     except FileNotFoundError:
         return HTMLResponse(content="<h1>UI not found</h1>", status_code=404)
+
+@app.get("/interactive/{repo_owner}/{repo_name}")
+async def get_interactive_structure(repo_owner: str, repo_name: str):
+    """
+    Get interactive repository structure for UI display.
+    
+    This endpoint provides the repository tree structure with issue counts,
+    symbol information, and statistical data for the interactive UI.
+    """
+    try:
+        # Construct repository URL
+        repo_url = f"{repo_owner}/{repo_name}"
+        
+        # Load codebase using Codegen SDK
+        codebase = Codebase.from_repo(repo_url)
+        
+        print(f"🌳 Building interactive structure for: {repo_url}")
+        
+        # Build interactive repository structure
+        interactive_structure = build_interactive_repository_structure(codebase)
+        
+        # Get additional context
+        issues = detect_comprehensive_issues(codebase)
+        advanced_stats = get_advanced_codebase_statistics(codebase)
+        
+        # Build comprehensive response for interactive UI
+        response = {
+            "repository": {
+                "owner": repo_owner,
+                "name": repo_name,
+                "url": f"https://github.com/{repo_url}"
+            },
+            "interactive_tree": interactive_structure,
+            "statistics": {
+                "overview": {
+                    "total_files": interactive_structure['summary']['total_files'],
+                    "total_directories": interactive_structure['summary']['total_directories'],
+                    "total_functions": interactive_structure['summary']['total_functions'],
+                    "total_classes": interactive_structure['summary']['total_classes'],
+                    "total_issues": interactive_structure['total_issues']
+                },
+                "issues_by_severity": interactive_structure['issues_by_severity'],
+                "advanced_metrics": advanced_stats
+            },
+            "ui_config": {
+                "theme": "dark",
+                "show_issue_details": True,
+                "show_symbol_context": True,
+                "expandable_tree": True
+            }
+        }
+        
+        return JSONResponse(content=response)
+        
+    except Exception as e:
+        import traceback
+        print(f"❌ Error building interactive structure: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to build interactive structure: {str(e)}")
+
+@app.get("/cli/analyze/{repo_input:path}", response_class=PlainTextResponse)
+async def cli_analyze(repo_input: str):
+    """
+    CLI-compatible analysis endpoint that returns formatted text output.
+    
+    Supports both 'owner/repo' and full GitHub URLs.
+    """
+    try:
+        # Parse repository input
+        owner, repo = parse_repo_url(repo_input)
+        
+        # Get analysis data using existing endpoint logic
+        repo_url = f"{owner}/{repo}"
+        codebase = Codebase.from_repo(repo_url)
+        
+        print(f"🔍 CLI Analysis for: {repo_url}")
+        
+        # Perform analysis (simplified version for CLI)
+        issues = detect_comprehensive_issues(codebase)
+        code_quality = analyze_code_quality(codebase)
+        dependencies = analyze_dependencies(codebase)
+        entry_points = detect_entry_points(codebase)
+        
+        # Build response data
+        data = {
+            "repository": {
+                "owner": owner,
+                "name": repo,
+                "url": f"https://github.com/{repo_url}",
+                "total_files": len(list(codebase.files)),
+                "total_functions": len(list(codebase.functions)),
+                "total_classes": len(list(codebase.classes))
+            },
+            "analysis": {
+                "issues": {
+                    "total": len(issues.get('detailed_issues', [])),
+                    "by_severity": issues.get('issues_by_severity', {})
+                },
+                "code_quality": {
+                    "maintainability_index": getattr(code_quality, 'maintainability_index', 0),
+                    "technical_debt_ratio": getattr(code_quality, 'technical_debt_ratio', 0),
+                    "comment_density": getattr(code_quality, 'comment_density', 0),
+                    "cyclomatic_complexity": getattr(code_quality, 'cyclomatic_complexity', 0)
+                },
+                "dependencies": {
+                    "total": getattr(dependencies, 'total_dependencies', 0),
+                    "circular": len(getattr(dependencies, 'circular_dependencies', [])),
+                    "external": len(getattr(dependencies, 'external_dependencies', [])),
+                    "critical": len(getattr(dependencies, 'critical_dependencies', []))
+                },
+                "most_important_entry_points": {
+                    "main_functions": getattr(entry_points, 'main_functions', []),
+                    "api_endpoints": getattr(entry_points, 'api_endpoints', [])
+                }
+            }
+        }
+        
+        # Format for CLI display
+        formatted_output = format_cli_response(data)
+        return formatted_output
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        print(f"❌ CLI Analysis error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.get("/analyze/{repo_owner}/{repo_name}")
 async def analyze_repository(repo_owner: str, repo_name: str):
@@ -145,7 +357,11 @@ async def analyze_repository(repo_owner: str, repo_name: str):
         print("📊 Gathering advanced statistics...")
         advanced_stats = get_advanced_codebase_statistics(codebase)
         
-        # 6. Generate visualizations
+        # 6. Build interactive repository structure
+        print("🌳 Building interactive repository structure...")
+        interactive_structure = build_interactive_repository_structure(codebase)
+        
+        # 7. Generate visualizations
         dependency_viz = generate_dependency_graph_visualization(dependencies)
         call_graph_viz = generate_call_graph_visualization(call_graph)
         issue_viz = generate_issue_visualization(issues)
