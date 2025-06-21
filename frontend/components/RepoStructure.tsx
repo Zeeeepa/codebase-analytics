@@ -16,7 +16,9 @@ import {
   FaDatabase,
   FaCog,
   FaFileCode,
-  FaFileAlt
+  FaFileAlt,
+  FaChevronRight,
+  FaChevronDown
 } from 'react-icons/fa';
 import { MdError, MdWarning, MdInfo } from 'react-icons/md';
 
@@ -225,14 +227,16 @@ const FileTreeNode: React.FC<{
   onViewContext,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [showSymbols, setShowSymbols] = useState(false);
 
   const handleClick = () => {
     if (node.type === 'directory') {
       setIsOpen(!isOpen);
       onFolderClick(node.path);
     } else {
+      // For files, toggle symbol list but don't affect folder open state
+      setShowSymbols(!showSymbols);
       onFileClick(node.path);
-      setIsOpen(!isOpen); // Toggle symbol list for files
     }
   };
 
@@ -247,13 +251,25 @@ const FileTreeNode: React.FC<{
     return node.file_type ? getFileIcon(node.file_type) : <FaFile className="text-gray-500" />;
   };
 
+  const getChevron = () => {
+    if (node.type === 'directory' || (node.type === 'file' && node.symbols && node.symbols.length > 0)) {
+      return isOpen || showSymbols ? (
+        <FaChevronDown className="text-gray-400 mr-1" />
+      ) : (
+        <FaChevronRight className="text-gray-400 mr-1" />
+      );
+    }
+    return <span className="w-4 mr-1"></span>; // Empty space for alignment
+  };
+
   return (
     <div className="select-none">
       <div
-        className="flex items-center py-1 px-2 hover:bg-gray-100 cursor-pointer"
+        className="flex items-center py-1 px-2 hover:bg-gray-100 cursor-pointer rounded"
         style={{ paddingLeft: `${level * 20}px` }}
         onClick={handleClick}
       >
+        {getChevron()}
         <span className="mr-2">{getIcon()}</span>
         <span className="flex-1">{node.name}</span>
         <div className="flex items-center">
@@ -267,41 +283,39 @@ const FileTreeNode: React.FC<{
           {node.stats && <Stats stats={node.stats} />}
         </div>
       </div>
-      {isOpen && (
-        <>
-          {node.symbols && (
-            <SymbolList
-              symbols={node.symbols}
+      {/* Show symbols for files when expanded */}
+      {node.type === 'file' && showSymbols && node.symbols && (
+        <SymbolList
+          symbols={node.symbols}
+          onSymbolClick={onSymbolClick}
+          onViewCallChain={onViewCallChain}
+          onViewContext={onViewContext}
+        />
+      )}
+      {/* Show children for directories when expanded */}
+      {node.type === 'directory' && isOpen && node.children &&
+        Object.entries(node.children)
+          .sort(([a], [b]) => {
+            // Sort directories first, then files
+            const nodeA = node.children![a];
+            const nodeB = node.children![b];
+            if (nodeA.type === nodeB.type) {
+              return a.localeCompare(b);
+            }
+            return nodeA.type === 'directory' ? -1 : 1;
+          })
+          .map(([key, child]) => (
+            <FileTreeNode
+              key={`${child.path}-${key}`}
+              node={child}
+              level={level + 1}
+              onFileClick={onFileClick}
+              onFolderClick={onFolderClick}
               onSymbolClick={onSymbolClick}
               onViewCallChain={onViewCallChain}
               onViewContext={onViewContext}
             />
-          )}
-          {node.children &&
-            Object.entries(node.children)
-              .sort(([a], [b]) => {
-                // Sort directories first, then files
-                const nodeA = node.children![a];
-                const nodeB = node.children![b];
-                if (nodeA.type === nodeB.type) {
-                  return a.localeCompare(b);
-                }
-                return nodeA.type === 'directory' ? -1 : 1;
-              })
-              .map(([key, child]) => (
-                <FileTreeNode
-                  key={`${child.path}-${key}`}
-                  node={child}
-                  level={level + 1}
-                  onFileClick={onFileClick}
-                  onFolderClick={onFolderClick}
-                  onSymbolClick={onSymbolClick}
-                  onViewCallChain={onViewCallChain}
-                  onViewContext={onViewContext}
-                />
-              ))}
-        </>
-      )}
+          ))}
     </div>
   );
 };
@@ -318,9 +332,10 @@ export const RepoStructure: React.FC<RepoStructureProps> = ({
     <div className="border rounded-lg shadow-sm bg-white">
       <div className="p-4 border-b bg-gray-50">
         <h2 className="text-lg font-semibold">📂 Repository Structure</h2>
+        <p className="text-sm text-gray-500">Click on folders to expand, files to view symbols, and symbols to view details</p>
         <Stats stats={data.stats} />
       </div>
-      <div className="p-2">
+      <div className="p-2 max-h-[600px] overflow-y-auto">
         <FileTreeNode
           node={data}
           level={0}
