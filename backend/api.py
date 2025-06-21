@@ -1,34 +1,25 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any, Optional
-from codegen import Codebase
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
-import math
-import re
-import requests
-from datetime import datetime, timedelta
-import subprocess
 import os
 import tempfile
+import subprocess
+from datetime import datetime
+from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 import modal
-from collections import Counter
-import networkx as nx
-from pathlib import Path
-from codegen.sdk.core.class_definition import Class
+
+# Import our comprehensive analysis engine
+from analysis import (
+    ComprehensiveCodebaseAnalyzer,
+    AnalysisType,
+    AnalysisResult,
+    analyze_repository,
+    analyze_repository_to_text
+)
+
+# Import Codegen SDK
 from codegen.sdk.core.codebase import Codebase
-from codegen.sdk.core.external_module import ExternalModule
-from codegen.sdk.core.file import SourceFile
-from codegen.sdk.core.function import Function
-from codegen.sdk.core.import_resolution import Import
-from codegen.sdk.core.symbol import Symbol
-from codegen.sdk.enums import EdgeType, SymbolType
 
 image = (
     modal.Image.debian_slim()
@@ -50,152 +41,173 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
-# Base models for codebase analysis
-class CodebaseStats(BaseModel):
-    test_functions_count: int
-    test_classes_count: int
-    tests_per_file: float
-    total_classes: int
-    total_functions: int
-    total_imports: int
-    deepest_inheritance_class: Optional[Dict]
-    recursive_functions: List[str]
-    most_called_function: Dict
-    function_with_most_calls: Dict
-    unused_functions: List[Dict]
-    dead_code: List[Dict]
-
-class FileTestStats(BaseModel):
-    filepath: str
-    test_class_count: int
-    file_length: int
-    function_count: int
-
-class FunctionContext(BaseModel):
-    implementation: Dict
-    dependencies: List[Dict]
-    usages: List[Dict]
-
-# Models for extended analysis
-class TestAnalysis(BaseModel):
-    total_test_functions: int
-    total_test_classes: int
-    tests_per_file: float
-    top_test_files: List[Dict[str, Any]]  # Changed from 'any' to 'Any'
-
-class FunctionAnalysis(BaseModel):
-    total_functions: int
-    most_called_function: Dict[str, Any]
-    function_with_most_calls: Dict[str, Any]
-    recursive_functions: List[str]
-    unused_functions: List[Dict[str, str]]
-    dead_code: List[Dict[str, str]]
-
-class ClassAnalysis(BaseModel):
-    total_classes: int
-    deepest_inheritance: Optional[Dict[str, Any]]
-    total_imports: int
-
-class FileIssue(BaseModel):
-    critical: List[Dict[str, str]]
-    major: List[Dict[str, str]]
-    minor: List[Dict[str, str]]
-
-class ExtendedAnalysis(BaseModel):
-    test_analysis: TestAnalysis
-    function_analysis: FunctionAnalysis
-    class_analysis: ClassAnalysis
-    file_issues: Dict[str, FileIssue]
-    repo_structure: Dict[str, Any]
-
+# API Models for the new comprehensive analysis engine
 class RepoRequest(BaseModel):
     repo_url: str
+    analysis_types: Optional[List[str]] = None
 
-class Symbol(BaseModel):
+class AnalysisRequest(BaseModel):
+    repo_path: str
+    analysis_types: Optional[List[str]] = None
+    output_format: str = "json"  # "json" or "text"
+
+class IssueResponse(BaseModel):
     id: str
-    name: str
-    type: str  # 'function', 'class', or 'variable'
-    filepath: str
-    start_line: int
-    end_line: int
-    issues: Optional[List[Dict[str, str]]] = None
+    severity: str
+    category: str
+    message: str
+    file_path: str
+    line_number: Optional[int] = None
+    function_name: Optional[str] = None
+    class_name: Optional[str] = None
+    context: Optional[Dict[str, Any]] = None
 
-class FileNode(BaseModel):
+class FileAnalysisResponse(BaseModel):
+    path: str
+    issues: List[IssueResponse]
+    symbols: List[Dict[str, Any]]
+    metrics: Dict[str, Any]
+    dependencies: List[str]
+
+class RepositoryStructureResponse(BaseModel):
+    name: str
+    type: str
+    path: str
+    children: List['RepositoryStructureResponse'] = []
+    issue_counts: Dict[str, int] = {}
+    symbols: List[Dict[str, Any]] = []
+    metrics: Dict[str, Any] = {}
+
+class ComprehensiveAnalysisResponse(BaseModel):
+    repository_structure: RepositoryStructureResponse
+    total_issues: Dict[str, int]
+    file_analyses: List[FileAnalysisResponse]
+    call_graph: Optional[Dict[str, Any]] = None
+    dependency_graph: Optional[Dict[str, Any]] = None
+    metrics: Dict[str, Any] = {}
+    timestamp: str
+
+class InteractiveTreeNode(BaseModel):
+    """Interactive tree node for the UI."""
     name: str
     type: str  # 'file' or 'directory'
     path: str
-    issues: Optional[Dict[str, int]] = None
-    symbols: Optional[List[Symbol]] = None
-    children: Optional[Dict[str, 'FileNode']] = None
+    icon: str  # emoji icon
+    issue_counts: Dict[str, int] = {}
+    children: List['InteractiveTreeNode'] = []
+    symbols: List[Dict[str, Any]] = []
+    is_expanded: bool = False
 
-class InheritanceAnalysis(BaseModel):
-    """Analysis of class inheritance patterns."""
-    deepest_class_name: Optional[str] = None
-    deepest_class_depth: int = 0
-    inheritance_chain: List[str] = []
-
-class RecursionAnalysis(BaseModel):
-    """Analysis of recursive functions."""
-    recursive_functions: List[str] = []
-    total_recursive_count: int = 0
-
-class FunctionDetail(BaseModel):
-    """Detailed information about a function."""
+class SymbolDetail(BaseModel):
+    """Detailed symbol information for UI."""
     name: str
+    type: str
+    file_path: str
+    line_number: Optional[int] = None
     parameters: List[str] = []
     return_type: Optional[str] = None
-    call_count: int = 0
-    calls_made: int = 0
+    call_chain: List[str] = []
+    dependencies: List[str] = []
+    issues: List[IssueResponse] = []
+    context: Dict[str, Any] = {}
 
-class ClassDetail(BaseModel):
-    """Detailed information about a class."""
-    name: str
-    methods: List[str] = []
-    attributes: List[str] = []
+# Fix forward references
+RepositoryStructureResponse.model_rebuild()
+InteractiveTreeNode.model_rebuild()
 
-class ImportDetail(BaseModel):
-    """Detailed information about imports."""
-    module: str
-    imported_symbols: List[str] = []
+#######################################################
+# Helper Functions
+#######################################################
 
-class FunctionAnalysis(BaseModel):
-    """Comprehensive function analysis."""
-    total_functions: int = 0
-    most_called_function: Optional[FunctionDetail] = None
-    most_calling_function: Optional[FunctionDetail] = None
-    dead_functions: List[str] = []
-    dead_functions_count: int = 0
-    sample_functions: List[FunctionDetail] = []
-    sample_classes: List[ClassDetail] = []
-    sample_imports: List[ImportDetail] = []
+def clone_repository(repo_url: str) -> str:
+    """Clone a repository and return the local path."""
+    temp_dir = tempfile.mkdtemp()
+    try:
+        subprocess.run(["git", "clone", repo_url, temp_dir], check=True, capture_output=True)
+        return temp_dir
+    except subprocess.CalledProcessError as e:
+        raise HTTPException(status_code=400, f"Failed to clone repository: {e}")
 
-class AnalysisResponse(BaseModel):
-    # Basic stats
-    repo_url: str
-    description: str
-    num_files: int
-    num_functions: int
-    num_classes: int
+def convert_analysis_result_to_response(result: AnalysisResult) -> ComprehensiveAnalysisResponse:
+    """Convert internal AnalysisResult to API response format."""
     
-    # Line metrics
-    line_metrics: Dict[str, Dict[str, float]]
+    def convert_repository_structure(structure) -> RepositoryStructureResponse:
+        return RepositoryStructureResponse(
+            name=structure.name,
+            type=structure.type,
+            path=structure.path,
+            children=[convert_repository_structure(child) for child in structure.children],
+            issue_counts={severity.value: count for severity, count in structure.issue_counts.items()},
+            symbols=structure.symbols,
+            metrics=structure.metrics
+        )
     
-    # Complexity metrics
-    cyclomatic_complexity: Dict[str, float]
-    depth_of_inheritance: Dict[str, float]
-    halstead_metrics: Dict[str, int]
-    maintainability_index: Dict[str, int]
+    def convert_issue(issue) -> IssueResponse:
+        return IssueResponse(
+            id=issue.id,
+            severity=issue.severity.value,
+            category=issue.category.value,
+            message=issue.message,
+            file_path=issue.file_path,
+            line_number=issue.line_number,
+            function_name=issue.function_name,
+            class_name=issue.class_name,
+            context=issue.context
+        )
     
-    # Git metrics
-    monthly_commits: Dict[str, int]
+    def convert_file_analysis(file_analysis) -> FileAnalysisResponse:
+        return FileAnalysisResponse(
+            path=file_analysis.path,
+            issues=[convert_issue(issue) for issue in file_analysis.issues],
+            symbols=file_analysis.symbols,
+            metrics=file_analysis.metrics,
+            dependencies=file_analysis.dependencies
+        )
     
-    # New analysis features
-    inheritance_analysis: InheritanceAnalysis
-    recursion_analysis: RecursionAnalysis
-    function_analysis: FunctionAnalysis
+    return ComprehensiveAnalysisResponse(
+        repository_structure=convert_repository_structure(result.repository_structure),
+        total_issues={severity.value: count for severity, count in result.total_issues.items()},
+        file_analyses=[convert_file_analysis(fa) for fa in result.file_analyses],
+        call_graph=result.call_graph,
+        dependency_graph=result.dependency_graph,
+        metrics=result.metrics,
+        timestamp=result.timestamp
+    )
+
+def build_interactive_tree(structure: RepositoryStructureResponse) -> InteractiveTreeNode:
+    """Convert repository structure to interactive tree format."""
     
-    # Repository structure with symbols
-    repo_structure: FileNode
+    # Determine icon based on type and issues
+    if structure.type == "directory":
+        icon = "📁"
+    else:
+        # File icons based on extension
+        if structure.path.endswith('.py'):
+            icon = "🐍"
+        elif structure.path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+            icon = "📜"
+        elif structure.path.endswith(('.md', '.txt')):
+            icon = "📝"
+        elif structure.path.endswith(('.json', '.yaml', '.yml')):
+            icon = "⚙️"
+        else:
+            icon = "📄"
+    
+    return InteractiveTreeNode(
+        name=structure.name,
+        type=structure.type,
+        path=structure.path,
+        icon=icon,
+        issue_counts=structure.issue_counts,
+        children=[build_interactive_tree(child) for child in structure.children],
+        symbols=structure.symbols,
+        is_expanded=False
+    )
+
+
+#######################################################
+# API Endpoints
+#######################################################
 
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
     """
@@ -1163,8 +1175,8 @@ async def get_function_call_chain(function_id: str) -> List[str]:
         raise HTTPException(status_code=500, detail=str(e))
 
 @fastapi_app.post("/analyze_repo")
-async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
-    """Single entry point for repository analysis."""
+async def analyze_repo(request: RepoRequest) -> ComprehensiveAnalysisResponse:
+    """Comprehensive repository analysis using the new analysis engine."""
     repo_url = request.repo_url
     
     # Validate repo URL format
@@ -1185,240 +1197,205 @@ async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
     repo_url = f"{parts[0]}/{parts[1]}"  # Take only owner/repo part
     
     try:
-        codebase = Codebase.from_repo(repo_url)
+        # Clone repository to temporary directory
+        repo_path = clone_repository(f"https://github.com/{repo_url}.git")
+        
+        # Convert analysis types from request
+        analysis_types = None
+        if request.analysis_types:
+            analysis_types = [AnalysisType(at) for at in request.analysis_types]
+        
+        # Perform comprehensive analysis
+        result = analyze_repository(repo_path, analysis_types)
+        
+        # Convert to API response format
+        response = convert_analysis_result_to_response(result)
+        
+        return response
+        
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
+    finally:
+        # Clean up temporary directory
+        if 'repo_path' in locals():
+            import shutil
+            try:
+                shutil.rmtree(repo_path)
+            except:
+                pass
 
-    # Original analysis
-    num_files = len(codebase.files(extensions="*"))
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
+# New API endpoints for interactive features
 
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
-
-    monthly_commits = get_monthly_commits(repo_url)
-
-    # Analyze files and collect symbols
-    file_issues = {}
-    file_symbols = {}
+@fastapi_app.get("/api/repository/{repo_owner}/{repo_name}/tree")
+async def get_interactive_tree(repo_owner: str, repo_name: str) -> InteractiveTreeNode:
+    """Get interactive repository tree structure with issue counts."""
+    repo_url = f"{repo_owner}/{repo_name}"
     
-    for file in codebase.files:
-        # Line metrics
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-        # Analyze issues
-        issues = analyze_file_issues(file)
-        if any(len(v) > 0 for v in issues.values()):
-            file_issues[file.filepath] = issues
-
-        # Collect symbols
-        symbols = []
+    try:
+        # Clone and analyze repository
+        repo_path = clone_repository(f"https://github.com/{repo_url}.git")
+        result = analyze_repository(repo_path, [AnalysisType.INTERACTIVE_TREE, AnalysisType.ISSUE_DETECTION])
         
-        # Add functions as symbols
-        for func in file.functions:
-            issues = []
-            
-            # Check for issues
-            if not any(func.name in str(usage) for usage in func.usages):
-                issues.append({
-                    'type': 'minor',
-                    'message': f'Unused function'
-                })
-            
-            if hasattr(func, 'code_block'):
-                code = func.code_block.source
-                if 'None' in code and not any(s in code for s in ['is None', '== None', '!= None']):
-                    issues.append({
-                        'type': 'critical',
-                        'message': f'Potential unsafe null reference'
-                    })
-                
-                if 'TODO' in code or 'FIXME' in code:
-                    issues.append({
-                        'type': 'major',
-                        'message': f'Incomplete implementation'
-                    })
-
-            symbols.append(Symbol(
-                id=str(hash(func.name + file.filepath)),
-                name=func.name,
-                type='function',
-                filepath=file.filepath,
-                start_line=func.start_point[0] if hasattr(func, 'start_point') else 0,
-                end_line=func.end_point[0] if hasattr(func, 'end_point') else 0,
-                issues=issues if issues else None
-            ))
+        # Convert to API response and build interactive tree
+        response = convert_analysis_result_to_response(result)
+        tree = build_interactive_tree(response.repository_structure)
         
-        # Add classes as symbols
-        for cls in file.classes:
-            symbols.append(Symbol(
-                id=str(hash(cls.name + file.filepath)),
-                name=cls.name,
-                type='class',
-                filepath=file.filepath,
-                start_line=cls.start_point[0] if hasattr(cls, 'start_point') else 0,
-                end_line=cls.end_point[0] if hasattr(cls, 'end_point') else 0
-            ))
+        return tree
         
-        if symbols:
-            file_symbols[file.filepath] = symbols
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to get repository tree: {str(e)}")
+    finally:
+        if 'repo_path' in locals():
+            import shutil
+            try:
+                shutil.rmtree(repo_path)
+            except:
+                pass
 
-    # Build repository structure with symbols
-    repo_structure = build_repo_structure(codebase.files, file_issues, file_symbols)
-
-    # Calculate metrics
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-    num_callables = 0
+@fastapi_app.get("/api/repository/{repo_owner}/{repo_name}/file/{file_path:path}")
+async def get_file_analysis(repo_owner: str, repo_name: str, file_path: str) -> FileAnalysisResponse:
+    """Get detailed analysis for a specific file."""
+    repo_url = f"{repo_owner}/{repo_name}"
     
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
+    try:
+        # Clone and analyze repository
+        repo_path = clone_repository(f"https://github.com/{repo_url}.git")
+        result = analyze_repository(repo_path)
+        
+        # Find the specific file analysis
+        for file_analysis in result.file_analyses:
+            if file_analysis.path == file_path:
+                response = convert_analysis_result_to_response(result)
+                # Find corresponding file analysis in response
+                for fa in response.file_analyses:
+                    if fa.path == file_path:
+                        return fa
+        
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to analyze file: {str(e)}")
+    finally:
+        if 'repo_path' in locals():
+            import shutil
+            try:
+                shutil.rmtree(repo_path)
+            except:
+                pass
 
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, N1, N2, n1, n2 = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
+@fastapi_app.get("/api/repository/{repo_owner}/{repo_name}/symbol/{symbol_name}")
+async def get_symbol_detail(repo_owner: str, repo_name: str, symbol_name: str) -> SymbolDetail:
+    """Get detailed information about a specific symbol (function/class)."""
+    repo_url = f"{repo_owner}/{repo_name}"
     
-    # Perform new analysis features
-    inheritance_analysis = analyze_inheritance_patterns(codebase)
-    recursion_analysis = analyze_recursive_functions(codebase)
-    function_analysis = analyze_functions_comprehensive(codebase)
-
-    return AnalysisResponse(
-        repo_url=repo_url,
-        description=desc,
-        num_files=num_files,
-        num_functions=num_functions,
-        num_classes=num_classes,
-        line_metrics={
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100)
-                if total_loc > 0
-                else 0,
-            },
-        },
-        cyclomatic_complexity={
-            "average": total_complexity / num_callables if num_callables > 0 else 0,
-        },
-        depth_of_inheritance={
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        halstead_metrics={
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables)
-            if num_callables > 0
-            else 0,
-        },
-        maintainability_index={
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        monthly_commits=monthly_commits,
-        inheritance_analysis=inheritance_analysis,
-        recursion_analysis=recursion_analysis,
-        function_analysis=function_analysis,
-        repo_structure=repo_structure
-    )
-
-@fastapi_app.get("/function/{function_id}/call-chain")
-async def get_function_call_chain(function_id: str) -> List[str]:
-    """Get the maximum call chain for a function."""
     try:
-        function = get_function_by_id(function_id)
-        chain = get_max_call_chain(function)
-        return [f.name for f in chain]
+        # Clone and analyze repository
+        repo_path = clone_repository(f"https://github.com/{repo_url}.git")
+        result = analyze_repository(repo_path, [AnalysisType.CALL_GRAPH, AnalysisType.DEPENDENCY_ANALYSIS])
+        
+        # Search for the symbol across all files
+        for file_analysis in result.file_analyses:
+            for symbol in file_analysis.symbols:
+                if symbol.get('name') == symbol_name:
+                    # Build symbol detail
+                    symbol_issues = [
+                        IssueResponse(
+                            id=issue.id,
+                            severity=issue.severity.value,
+                            category=issue.category.value,
+                            message=issue.message,
+                            file_path=issue.file_path,
+                            line_number=issue.line_number,
+                            function_name=issue.function_name,
+                            class_name=issue.class_name,
+                            context=issue.context
+                        )
+                        for issue in file_analysis.issues 
+                        if issue.function_name == symbol_name or issue.class_name == symbol_name
+                    ]
+                    
+                    return SymbolDetail(
+                        name=symbol_name,
+                        type=symbol.get('type', 'unknown'),
+                        file_path=file_analysis.path,
+                        line_number=symbol.get('line_number'),
+                        parameters=symbol.get('parameters', []),
+                        return_type=symbol.get('return_type'),
+                        call_chain=[],  # Would need call graph analysis
+                        dependencies=[],  # Would need dependency analysis
+                        issues=symbol_issues,
+                        context=symbol
+                    )
+        
+        raise HTTPException(status_code=404, detail=f"Symbol not found: {symbol_name}")
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Failed to analyze symbol: {str(e)}")
+    finally:
+        if 'repo_path' in locals():
+            import shutil
+            try:
+                shutil.rmtree(repo_path)
+            except:
+                pass
 
-@fastapi_app.get("/function/{function_id}/context")
-async def get_function_context(function_id: str) -> FunctionContext:
-    """Get detailed context for a specific function."""
+@fastapi_app.post("/api/analyze/text")
+async def analyze_repository_text(request: AnalysisRequest) -> str:
+    """Analyze repository and return results as formatted text."""
     try:
-        function = get_function_by_id(function_id)
+        # Clone repository if URL provided, otherwise use local path
+        if request.repo_path.startswith('http'):
+            repo_path = clone_repository(request.repo_path)
+        else:
+            repo_path = request.repo_path
         
-        context = {
-            "implementation": {
-                "source": function.source,
-                "filepath": function.filepath
-            },
-            "dependencies": [],
-            "usages": []
-        }
+        # Convert analysis types
+        analysis_types = None
+        if request.analysis_types:
+            analysis_types = [AnalysisType(at) for at in request.analysis_types]
         
-        # Add dependencies
-        for dep in function.dependencies:
-            if isinstance(dep, Import):
-                dep = hop_through_imports(dep)
-            context["dependencies"].append({
-                "source": dep.source,
-                "filepath": dep.filepath
-            })
+        # Get text output
+        if request.output_format == "text":
+            result_text = analyze_repository_to_text(repo_path)
+            return result_text
+        else:
+            result = analyze_repository(repo_path, analysis_types)
+            import json
+            from dataclasses import asdict
+            return json.dumps(asdict(result), indent=2, default=str)
         
-        # Add usages
-        for usage in function.usages:
-            context["usages"].append({
-                "source": usage.usage_symbol.source,
-                "filepath": usage.usage_symbol.filepath
-            })
-        
-        return FunctionContext(**context)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
+    finally:
+        if 'repo_path' in locals() and request.repo_path.startswith('http'):
+            import shutil
+            try:
+                shutil.rmtree(repo_path)
+            except:
+                pass
 
-@fastapi_app.get("/symbol/{symbol_id}/context")
-async def get_symbol_context(symbol_id: str) -> Dict[str, Any]:
-    """Get detailed context for any symbol."""
-    try:
-        symbol = get_symbol_by_id(symbol_id)  # You'll need to implement this
-        return get_detailed_symbol_context(symbol)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
-# Helper function to get a function by ID (you'll need to implement this)
-def get_function_by_id(function_id: str):
-    # Implementation depends on how you store/retrieve functions
-    pass
-
-# Helper function to resolve imports (you'll need to implement this)
-def hop_through_imports(import_symbol):
-    # Implementation depends on how you handle imports
-    pass
+# Modal app configuration for deployment
+@app.function(image=image)
+@modal.web_endpoint(method="POST")
+def analyze_repo_modal(request: RepoRequest):
+    """Modal endpoint for repository analysis."""
+    return analyze_repo(request)
 
 @app.function(image=image)
-@modal.asgi_app()
-def fastapi_modal_app():
-    return fastapi_app
+@modal.web_endpoint(method="GET")
+def get_tree_modal(repo_owner: str, repo_name: str):
+    """Modal endpoint for getting repository tree."""
+    return get_interactive_tree(repo_owner, repo_name)
 
+# Local development server
 if __name__ == "__main__":
     import uvicorn
     import socket
     
     def find_available_port(start_port=8000, max_port=8100):
-        """Find an available port starting from start_port"""
-        for port in range(start_port, max_port):
+        """Find an available port starting from start_port."""
+        for port in range(start_port, max_port + 1):
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.bind(('0.0.0.0', port))
@@ -1431,5 +1408,11 @@ if __name__ == "__main__":
     port = find_available_port()
     print(f"🚀 Starting FastAPI server on http://localhost:{port}")
     print(f"📚 API documentation available at http://localhost:{port}/docs")
+    print(f"🔍 New comprehensive analysis endpoints:")
+    print(f"  - POST /analyze_repo - Comprehensive repository analysis")
+    print(f"  - GET /api/repository/{{owner}}/{{repo}}/tree - Interactive tree structure")
+    print(f"  - GET /api/repository/{{owner}}/{{repo}}/file/{{path}} - File analysis")
+    print(f"  - GET /api/repository/{{owner}}/{{repo}}/symbol/{{name}} - Symbol details")
+    print(f"  - POST /api/analyze/text - Text format analysis")
     
     uvicorn.run(fastapi_app, host="0.0.0.0", port=port)
