@@ -37,6 +37,7 @@ from analysis import (
     build_interactive_repository_structure
 )
 from visualize import visualize_codebase, generate_html_report, run_visualization_analysis
+from enhanced_interactive_ui import build_enhanced_interactive_structure
 from codegen.sdk.core.codebase import Codebase
 
 # Create FastAPI app
@@ -189,38 +190,45 @@ async def get_interactive_structure(repo_owner: str, repo_name: str):
         
         print(f"🌳 Building interactive structure for: {repo_url}")
         
-        # Build interactive repository structure
-        interactive_structure = build_interactive_repository_structure(codebase)
+        # Build enhanced interactive repository structure
+        interactive_structure = build_enhanced_interactive_structure(codebase)
         
         # Get additional context
         issues = detect_comprehensive_issues(codebase)
         advanced_stats = get_advanced_codebase_statistics(codebase)
         
         # Build comprehensive response for interactive UI
+        # Extract repository info from enhanced structure
+        repo_info = interactive_structure.get('repository', {})
+        repo_summary = repo_info.get('summary', {})
+        
         response = {
             "repository": {
                 "owner": repo_owner,
                 "name": repo_name,
-                "url": f"https://github.com/{repo_url}"
+                "url": f"https://github.com/{repo_url}",
+                "tree": repo_info.get('tree', {}),
+                "summary": repo_summary
             },
             "interactive_tree": interactive_structure,
             "statistics": {
                 "overview": {
-                    "total_files": interactive_structure['summary']['total_files'],
-                    "total_directories": interactive_structure['summary']['total_directories'],
-                    "total_functions": interactive_structure['summary']['total_functions'],
-                    "total_classes": interactive_structure['summary']['total_classes'],
-                    "total_issues": interactive_structure['total_issues']
+                    "total_files": repo_summary.get('total_files', 0),
+                    "total_directories": repo_summary.get('total_directories', 0),
+                    "total_functions": repo_summary.get('total_functions', 0),
+                    "total_classes": repo_summary.get('total_classes', 0),
+                    "total_issues": repo_summary.get('total_issues', 0),
+                    "total_lines_of_code": repo_summary.get('total_lines_of_code', 0)
                 },
-                "issues_by_severity": interactive_structure['issues_by_severity'],
+                "issues_by_severity": repo_summary.get('issues_by_severity', {}),
                 "advanced_metrics": advanced_stats
             },
-            "ui_config": {
+            "ui_config": repo_info.get('ui_config', {
                 "theme": "dark",
                 "show_issue_details": True,
                 "show_symbol_context": True,
                 "expandable_tree": True
-            }
+            })
         }
         
         return JSONResponse(content=response)
@@ -831,15 +839,18 @@ def run_analysis(analysis_id: str, repo_url: str, branch: Optional[str], output_
             
             # Run analysis using the analysis module
             try:
+                # Create Codebase object from the cloned directory
+                codebase = Codebase.from_directory(temp_dir)
+                
                 # Use the analyze_codebase function from analysis.py
-                results = analyze_codebase(temp_dir)
+                results = analyze_codebase(codebase)
                 
                 # Save analysis results
                 with open(os.path.join(output_dir, "analysis.json"), "w") as f:
                     json.dump(results, f, indent=2, default=str)
                 
                 # Generate visualizations
-                visualizations = visualize_codebase(temp_dir, output_dir)
+                visualizations = visualize_codebase(codebase, output_dir)
                 
                 # Generate HTML report
                 report_path = generate_html_report(results, visualizations, output_dir)

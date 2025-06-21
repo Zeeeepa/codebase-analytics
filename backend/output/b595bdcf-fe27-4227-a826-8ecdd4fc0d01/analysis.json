@@ -1,7 +1,0 @@
-{
-  "error": "'str' object has no attribute 'files'",
-  "status": "analysis_failed",
-  "repo_url": "https://github.com/Zeeeepa/codebase-analytics",
-  "branch": null,
-  "timestamp": "2025-06-19 07:48:36.355923"
-}
