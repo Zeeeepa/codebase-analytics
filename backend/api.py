@@ -29,6 +29,7 @@ from codegen.sdk.core.function import Function
 from codegen.sdk.core.import_resolution import Import
 from codegen.sdk.core.symbol import Symbol
 from codegen.sdk.enums import EdgeType, SymbolType
+from urllib.parse import urlparse
 
 image = (
     modal.Image.debian_slim()
@@ -38,6 +39,90 @@ image = (
         "networkx"  # Added for call chain analysis
     )
 )
+
+# ============================================================================
+# REPOSITORY PARSING UTILITIES (transferred from cli.py)
+# ============================================================================
+
+def parse_repo_url(repo_input: str) -> tuple[str, str]:
+    """Parse repository input to extract owner and repo name."""
+    if repo_input.startswith('https://github.com/'):
+        # Parse GitHub URL
+        parsed = urlparse(repo_input)
+        path_parts = parsed.path.strip('/').split('/')
+        if len(path_parts) >= 2:
+            return path_parts[0], path_parts[1]
+        else:
+            raise ValueError("Invalid GitHub URL format")
+    elif '/' in repo_input:
+        # Parse owner/repo format
+        parts = repo_input.split('/')
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        else:
+            raise ValueError("Invalid owner/repo format")
+    else:
+        raise ValueError("Invalid repository format. Use 'owner/repo' or GitHub URL")
+
+def format_cli_response(data: Dict[str, Any]) -> str:
+    """Format API response for CLI display."""
+    output = []
+    output.append("=" * 70)
+    output.append("🎉 CODEBASE ANALYTICS RESULTS")
+    output.append("=" * 70)
+    
+    # Repository info
+    if 'repository' in data:
+        repo_info = data['repository']
+        output.append(f"📊 Repository: {repo_info['name']} ({repo_info['owner']})")
+        output.append(f"📁 Files: {repo_info['total_files']} | ⚡ Functions: {repo_info['total_functions']} | 🏗️ Classes: {repo_info['total_classes']}")
+    
+    # Analysis results
+    if 'analysis' in data:
+        analysis = data['analysis']
+        
+        # Issues
+        if 'comprehensive_issues' in analysis:
+            issues = analysis['comprehensive_issues']
+            output.append(f"\n🚨 ISSUES DETECTED:")
+            output.append(f"  • Total Issues: {issues.get('total_issues', 0)}")
+            
+            if 'issues_by_severity' in issues:
+                severity_counts = issues['issues_by_severity']
+                output.append(f"  • Critical: {severity_counts.get('critical', 0)}")
+                output.append(f"  • Error: {severity_counts.get('error', 0)}")
+                output.append(f"  • Warning: {severity_counts.get('warning', 0)}")
+                output.append(f"  • Info: {severity_counts.get('info', 0)}")
+        
+        # Entry points
+        if 'most_important_entry_points' in analysis:
+            entry_points = analysis['most_important_entry_points']
+            output.append(f"\n🎯 ENTRY POINTS:")
+            output.append(f"  • Top Functions by Heat: {len(entry_points.get('top_10_by_heat', []))}")
+            output.append(f"  • Main Functions: {len(entry_points.get('main_functions', []))}")
+            output.append(f"  • API Endpoints: {len(entry_points.get('api_endpoints', []))}")
+            output.append(f"  • High Usage Functions: {len(entry_points.get('high_usage_functions', []))}")
+        
+        # Halstead metrics
+        if 'halstead_metrics' in analysis:
+            halstead = analysis['halstead_metrics']
+            output.append(f"\n📊 HALSTEAD METRICS:")
+            output.append(f"  • Functions Analyzed: {halstead.get('total_functions', 0)}")
+            if 'summary' in halstead:
+                summary = halstead['summary']
+                output.append(f"  • Average Difficulty: {summary.get('avg_difficulty', 0):.2f}")
+                output.append(f"  • Average Effort: {summary.get('avg_effort', 0):.2f}")
+        
+        # Code quality
+        if 'code_quality' in analysis:
+            quality = analysis['code_quality']
+            output.append(f"\n🏆 CODE QUALITY:")
+            output.append(f"  • Maintainability Index: {quality.get('maintainability_index', 0):.2f}")
+            output.append(f"  • Comment Density: {quality.get('comment_density', 0):.2f}%")
+            output.append(f"  • Technical Debt Ratio: {quality.get('technical_debt_ratio', 0):.2f}%")
+    
+    output.append(f"\n✅ Analysis complete!")
+    return "\n".join(output)
 
 app = modal.App(name="analytics-app", image=image)
 fastapi_app = FastAPI()
