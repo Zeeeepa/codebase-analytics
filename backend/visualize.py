@@ -1,669 +1,701 @@
+#!/usr/bin/env python3
+"""
+Interactive Codebase Visualization Engine
+Provides comprehensive visualization capabilities including:
+- Interactive symbol selection and context viewing
+- Repository tree with issue counts
+- Dependency graphs and relationship mapping
+- Issue heatmaps and complexity charts
+- Entry point visualization and navigation
+"""
 
-
-from typing import Dict, Any, List, Optional
 import json
-def generate_repository_tree(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate interactive repository tree with issue counts and clickable elements"""
+import os
+from typing import Dict, Any, List, Optional, Set, Tuple
+from dataclasses import dataclass, asdict
+from pathlib import Path
+import logging
+
+# Import analysis types
+try:
+    from analysis import AnalysisResult, FunctionDefinition, EntryPoint, CodeIssue
+except ImportError:
+    # Fallback for standalone usage
+    AnalysisResult = Any
+    FunctionDefinition = Any
+    EntryPoint = Any
+    CodeIssue = Any
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class VisualizationNode:
+    """Represents a node in the visualization"""
+    id: str
+    label: str
+    type: str  # file, directory, function, class, etc.
+    path: str
+    metadata: Dict[str, Any]
+    children: List['VisualizationNode'] = None
     
-    # Extract repository structure from analysis
-    repo_structure = analysis_data.get('repository_structure', {})
-    issues_by_severity = analysis_data.get('issues_by_severity', {})
+    def to_dict(self) -> Dict[str, Any]:
+        result = asdict(self)
+        if self.children:
+            result['children'] = [child.to_dict() for child in self.children]
+        return result
+
+@dataclass
+class InteractiveElement:
+    """Represents an interactive element in the visualization"""
+    element_id: str
+    element_type: str
+    position: Dict[str, float]
+    properties: Dict[str, Any]
+    actions: List[str]
+    context_data: Dict[str, Any]
     
-    # Create enhanced tree structure
-    enhanced_tree = {
-        "name": "codegen-sh/graph-sitter",
-        "type": "repository",
-        "path": "/",
-        "expanded": True,
-        "children": [
-            {
-                "name": ".codegen",
-                "type": "directory",
-                "path": "/.codegen",
-                "expanded": False,
-                "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
-                "children": []
-            },
-            {
-                "name": ".github",
-                "type": "directory", 
-                "path": "/.github",
-                "expanded": False,
-                "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
-                "children": []
-            },
-            {
-                "name": "src",
-                "type": "directory",
-                "path": "/src",
-                "expanded": True,
-                "issue_counts": {"critical": 1, "major": 4, "minor": 15, "info": 0},
-                "children": [
-                    {
-                        "name": "graph_sitter",
-                        "type": "directory",
-                        "path": "/src/graph_sitter", 
-                        "expanded": True,
-                        "issue_counts": {"critical": 1, "major": 4, "minor": 15, "info": 0},
-                        "children": [
-                            {
-                                "name": "core",
-                                "type": "directory",
-                                "path": "/src/graph_sitter/core",
-                                "expanded": True,
-                                "issue_counts": {"critical": 1, "major": 0, "minor": 0, "info": 0},
-                                "children": [],
-                                "files": [
-                                    {
-                                        "name": "codebase.py",
-                                        "type": "file",
-                                        "filepath": "src/graph_sitter/core/codebase.py",
-                                        "issue_counts": {"critical": 1, "major": 0, "minor": 0, "info": 0},
-                                        "symbols": [
-                                            {
-                                                "name": "Codebase",
-                                                "type": "class",
-                                                "line": 15,
-                                                "methods": ["__init__", "load", "analyze"],
-                                                "issues": 0
-                                            },
-                                            {
-                                                "name": "load_repository",
-                                                "type": "function", 
-                                                "line": 45,
-                                                "parameters": ["path", "config"],
-                                                "issues": 1
-                                            }
-                                        ],
-                                        "clickable": True,
-                                        "preview": "Main codebase analysis class with repository loading functionality"
-                                    }
-                                ]
-                            },
-                            {
-                                "name": "python",
-                                "type": "directory",
-                                "path": "/src/graph_sitter/python",
-                                "expanded": True,
-                                "issue_counts": {"critical": 0, "major": 4, "minor": 5, "info": 0},
-                                "children": [],
-                                "files": [
-                                    {
-                                        "name": "file.py",
-                                        "type": "file",
-                                        "filepath": "src/graph_sitter/python/file.py",
-                                        "issue_counts": {"critical": 0, "major": 4, "minor": 3, "info": 0},
-                                        "symbols": [
-                                            {
-                                                "name": "get_import_insert_index",
-                                                "type": "function",
-                                                "line": 23,
-                                                "parameters": ["import_string", "existing_imports"],
-                                                "issues": 1,
-                                                "issue_details": [
-                                                    {
-                                                        "type": "unused_parameter",
-                                                        "severity": "minor",
-                                                        "message": "Parameter 'import_string' is never used",
-                                                        "line": 23
-                                                    }
-                                                ]
-                                            },
-                                            {
-                                                "name": "PythonFile",
-                                                "type": "class",
-                                                "line": 67,
-                                                "methods": ["parse", "get_functions", "get_classes"],
-                                                "issues": 3
-                                            }
-                                        ],
-                                        "clickable": True,
-                                        "preview": "Python file parsing and import management utilities"
-                                    },
-                                    {
-                                        "name": "function.py",
-                                        "type": "file",
-                                        "filepath": "src/graph_sitter/python/function.py",
-                                        "issue_counts": {"critical": 0, "major": 0, "minor": 2, "info": 0},
-                                        "symbols": [
-                                            {
-                                                "name": "PythonFunction",
-                                                "type": "class",
-                                                "line": 12,
-                                                "methods": ["__init__", "get_parameters", "get_body"],
-                                                "issues": 1
-                                            },
-                                            {
-                                                "name": "extract_function_signature",
-                                                "type": "function",
-                                                "line": 89,
-                                                "parameters": ["node", "source_code"],
-                                                "issues": 1
-                                            }
-                                        ],
-                                        "clickable": True,
-                                        "preview": "Python function analysis and signature extraction"
-                                    }
-                                ]
-                            },
-                            {
-                                "name": "typescript",
-                                "type": "directory",
-                                "path": "/src/graph_sitter/typescript",
-                                "expanded": False,
-                                "issue_counts": {"critical": 0, "major": 0, "minor": 10, "info": 0},
-                                "children": [],
-                                "files": [
-                                    {
-                                        "name": "symbol.py",
-                                        "type": "file",
-                                        "filepath": "src/graph_sitter/typescript/symbol.py",
-                                        "issue_counts": {"critical": 0, "major": 0, "minor": 10, "info": 0},
-                                        "symbols": [
-                                            {
-                                                "name": "TypeScriptSymbol",
-                                                "type": "class",
-                                                "line": 8,
-                                                "methods": ["parse", "get_type", "get_references"],
-                                                "issues": 5
-                                            }
-                                        ],
-                                        "clickable": True,
-                                        "preview": "TypeScript symbol analysis and type extraction"
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                "name": "tests",
-                "type": "directory",
-                "path": "/tests",
-                "expanded": False,
-                "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
-                "children": [
-                    {
-                        "name": "integration",
-                        "type": "directory",
-                        "path": "/tests/integration",
-                        "expanded": False,
-                        "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
-                        "children": []
-                    },
-                    {
-                        "name": "unit",
-                        "type": "directory", 
-                        "path": "/tests/unit",
-                        "expanded": False,
-                        "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
-                        "children": []
-                    }
-                ]
-            },
-            {
-                "name": "docs",
-                "type": "directory",
-                "path": "/docs",
-                "expanded": False,
-                "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
-                "children": []
-            }
-        ],
-        "total_issues": 20,
-        "issue_counts": {"critical": 1, "major": 4, "minor": 15, "info": 0}
-    }
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+class CodebaseVisualizer:
+    """Main visualization engine for codebase analytics"""
     
-    return enhanced_tree
-def generate_visualization_data(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate comprehensive visualization data for all components"""
+    def __init__(self, analysis_result: AnalysisResult):
+        self.analysis_result = analysis_result
+        self.file_tree = {}
+        self.symbol_map = {}
+        self.issue_map = {}
+        self._build_internal_maps()
     
-    return {
-        "repository_tree": generate_repository_tree(analysis_data),
-        "issue_visualization": generate_issue_visualization(analysis_data),
-        "dead_code_visualization": generate_dead_code_visualization(analysis_data),
-        "call_graph_visualization": generate_call_graph_visualization(analysis_data),
-        "dependency_visualization": generate_dependency_visualization(analysis_data),
-        "metrics_visualization": generate_metrics_visualization(analysis_data),
-        "function_context_panels": generate_function_context_panels(analysis_data)
-    }
-def generate_issue_visualization(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate issue visualization with severity indicators and context"""
-    
-    issues_by_severity = analysis_data.get('issues_by_severity', {})
-    
-    # Create issue heatmap data
-    issue_heatmap = []
-    file_issue_map = {}
-    
-    for severity, issues in issues_by_severity.items():
-        for issue in issues:
-            filepath = issue.get('filepath', 'unknown')
-            if filepath not in file_issue_map:
-                file_issue_map[filepath] = {"critical": 0, "major": 0, "minor": 0, "info": 0}
-            file_issue_map[filepath][severity] += 1
-    
-    # Convert to heatmap format
-    for filepath, counts in file_issue_map.items():
-        total_issues = sum(counts.values())
-        severity_score = (counts['critical'] * 4 + counts['major'] * 3 + 
-                         counts['minor'] * 2 + counts['info'] * 1)
+    def _build_internal_maps(self):
+        """Build internal mapping structures for efficient visualization"""
+        # Build file tree structure
+        self._build_file_tree()
         
-        issue_heatmap.append({
-            "filepath": filepath,
-            "total_issues": total_issues,
-            "severity_score": severity_score,
-            "issue_counts": counts,
-            "color_intensity": min(100, severity_score * 10)  # For visualization
-        })
-    
-    # Sort by severity score
-    issue_heatmap.sort(key=lambda x: x['severity_score'], reverse=True)
-    
-    return {
-        "heatmap_data": issue_heatmap,
-        "severity_distribution": {
-            "critical": len(issues_by_severity.get('critical', [])),
-            "major": len(issues_by_severity.get('major', [])),
-            "minor": len(issues_by_severity.get('minor', [])),
-            "info": len(issues_by_severity.get('info', []))
-        },
-        "issue_trends": generate_issue_trends(issues_by_severity),
-        "top_issues": get_top_issues(issues_by_severity)
-    }
-def generate_dead_code_visualization(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate dead code visualization with blast radius"""
-    
-    dead_code_analysis = analysis_data.get('dead_code_analysis', {})
-    dead_code_items = dead_code_analysis.get('dead_code_items', [])
-    
-    # Create blast radius visualization
-    blast_radius_data = []
-    
-    for item in dead_code_items:
-        blast_radius = item.get('blast_radius', [])
+        # Build symbol mapping
+        self._build_symbol_map()
         
-        blast_radius_data.append({
-            "name": item.get('name', 'unknown'),
-            "type": item.get('type', 'function'),
-            "filepath": item.get('filepath', ''),
-            "reason": item.get('reason', ''),
-            "blast_radius": blast_radius,
-            "impact_score": len(blast_radius),
-            "removal_safety": "safe" if len(blast_radius) == 0 else "review_required",
-            "visualization": {
-                "center_node": item.get('name'),
-                "connected_nodes": blast_radius,
-                "node_type": "dead_code",
-                "edge_type": "dependency"
-            }
-        })
+        # Build issue mapping
+        self._build_issue_map()
     
-    # Sort by impact score (lower = safer to remove)
-    blast_radius_data.sort(key=lambda x: x['impact_score'])
-    
-    return {
-        "blast_radius_data": blast_radius_data,
-        "removal_recommendations": generate_removal_recommendations(blast_radius_data),
-        "potential_savings": dead_code_analysis.get('potential_savings', {}),
-        "cleanup_priority": prioritize_cleanup(blast_radius_data)
-    }
-def generate_call_graph_visualization(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate interactive call graph visualization"""
-    
-    function_contexts = analysis_data.get('function_contexts', {})
-    call_graph_metrics = analysis_data.get('call_graph_metrics', {})
-    
-    # Create nodes and edges for call graph
-    nodes = []
-    edges = []
-    
-    for func_name, context in function_contexts.items():
-        # Create node
-        node = {
-            "id": func_name,
-            "label": func_name,
-            "type": "function",
-            "filepath": context.get('filepath', ''),
-            "size": len(context.get('called_by', [])) + 5,  # Size based on usage
-            "color": get_node_color(context),
-            "issues": len(context.get('issues', [])),
-            "is_entry_point": context.get('is_entry_point', False),
-            "is_dead_code": context.get('is_dead_code', False),
-            "complexity": context.get('complexity_score', 0)
+    def _build_file_tree(self):
+        """Build hierarchical file tree from analysis results"""
+        self.file_tree = {
+            "name": "Repository",
+            "type": "directory",
+            "path": "/",
+            "expanded": True,
+            "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
+            "children": {}
         }
-        nodes.append(node)
         
-        # Create edges for function calls
-        for called_func in context.get('function_calls', []):
-            edges.append({
-                "from": func_name,
-                "to": called_func,
-                "type": "calls",
-                "weight": 1
+        # Process all functions to build file structure
+        for func in self.analysis_result.all_functions:
+            self._add_file_to_tree(func.file_path, func)
+        
+        # Process all issues to add issue counts
+        for issue in self.analysis_result.all_issues:
+            self._add_issue_to_tree(issue.file_path, issue)
+        
+        # Convert to final format
+        self.file_tree = self._convert_tree_format(self.file_tree)
+    
+    def _add_file_to_tree(self, file_path: str, func: FunctionDefinition):
+        """Add a file and its function to the tree structure"""
+        parts = Path(file_path).parts
+        current = self.file_tree
+        
+        # Navigate/create directory structure
+        for i, part in enumerate(parts[:-1]):
+            if part not in current["children"]:
+                current["children"][part] = {
+                    "name": part,
+                    "type": "directory",
+                    "path": "/".join(parts[:i+1]),
+                    "expanded": False,
+                    "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
+                    "children": {}
+                }
+            current = current["children"][part]
+        
+        # Add the file
+        filename = parts[-1]
+        if filename not in current["children"]:
+            current["children"][filename] = {
+                "name": filename,
+                "type": "file",
+                "path": file_path,
+                "expanded": False,
+                "issue_counts": {"critical": 0, "major": 0, "minor": 0, "info": 0},
+                "functions": [],
+                "entry_points": [],
+                "children": {}
+            }
+        
+        # Add function to file
+        current["children"][filename]["functions"].append({
+            "name": func.name,
+            "line_start": func.line_start,
+            "line_end": func.line_end,
+            "is_entry_point": func.is_entry_point,
+            "complexity": func.complexity_score,
+            "issues": len(func.issues)
+        })
+    
+    def _add_issue_to_tree(self, file_path: str, issue: CodeIssue):
+        """Add issue counts to the tree structure"""
+        parts = Path(file_path).parts
+        current = self.file_tree
+        
+        # Navigate to file and increment issue counts along the path
+        for part in parts:
+            if part in current["children"]:
+                current["children"][part]["issue_counts"][issue.severity.value] += 1
+                current = current["children"][part]
+    
+    def _convert_tree_format(self, tree_node: Dict[str, Any]) -> Dict[str, Any]:
+        """Convert internal tree format to visualization format"""
+        result = {
+            "name": tree_node["name"],
+            "type": tree_node["type"],
+            "path": tree_node["path"],
+            "expanded": tree_node["expanded"],
+            "issue_counts": tree_node["issue_counts"]
+        }
+        
+        if "functions" in tree_node:
+            result["functions"] = tree_node["functions"]
+        
+        if tree_node["children"]:
+            result["children"] = [
+                self._convert_tree_format(child) 
+                for child in tree_node["children"].values()
+            ]
+        
+        return result
+    
+    def _build_symbol_map(self):
+        """Build symbol mapping for quick lookups"""
+        self.symbol_map = {}
+        
+        for func in self.analysis_result.all_functions:
+            self.symbol_map[func.name] = {
+                "type": "function",
+                "definition": func,
+                "file_path": func.file_path,
+                "line_number": func.line_start,
+                "dependencies": func.dependencies,
+                "dependents": func.called_by
+            }
+        
+        for ep in self.analysis_result.all_entry_points:
+            self.symbol_map[ep.name] = {
+                "type": "entry_point",
+                "definition": ep,
+                "file_path": ep.file_path,
+                "line_number": ep.line_number,
+                "dependencies": ep.dependencies,
+                "dependents": []
+            }
+    
+    def _build_issue_map(self):
+        """Build issue mapping by file and severity"""
+        self.issue_map = {
+            "by_file": {},
+            "by_severity": {"critical": [], "major": [], "minor": [], "info": []},
+            "by_type": {}
+        }
+        
+        for issue in self.analysis_result.all_issues:
+            # Group by file
+            if issue.file_path not in self.issue_map["by_file"]:
+                self.issue_map["by_file"][issue.file_path] = []
+            self.issue_map["by_file"][issue.file_path].append(issue)
+            
+            # Group by severity
+            self.issue_map["by_severity"][issue.severity.value].append(issue)
+            
+            # Group by type
+            issue_type = issue.type.value
+            if issue_type not in self.issue_map["by_type"]:
+                self.issue_map["by_type"][issue_type] = []
+            self.issue_map["by_type"][issue_type].append(issue)
+
+    def generate_interactive_repository_tree(self) -> Dict[str, Any]:
+        """Generate interactive repository tree with clickable elements"""
+        return {
+            "tree_data": self.file_tree,
+            "interactive_elements": self._generate_tree_interactive_elements(),
+            "navigation_actions": {
+                "expand_all": "expand_all_nodes",
+                "collapse_all": "collapse_all_nodes",
+                "filter_by_issues": "filter_nodes_by_issues",
+                "search_symbols": "search_symbol_in_tree"
+            }
+        }
+    
+    def _generate_tree_interactive_elements(self) -> List[InteractiveElement]:
+        """Generate interactive elements for the repository tree"""
+        elements = []
+        
+        def process_node(node, path=""):
+            node_id = f"tree_node_{path}_{node['name']}"
+            
+            element = InteractiveElement(
+                element_id=node_id,
+                element_type=node["type"],
+                position={"x": 0, "y": 0},  # Will be calculated by frontend
+                properties={
+                    "name": node["name"],
+                    "path": node["path"],
+                    "issue_counts": node["issue_counts"],
+                    "expandable": "children" in node and len(node.get("children", [])) > 0
+                },
+                actions=["click", "expand", "collapse", "context_menu"],
+                context_data={
+                    "file_path": node["path"],
+                    "functions": node.get("functions", []),
+                    "issues": self.issue_map["by_file"].get(node["path"], [])
+                }
+            )
+            elements.append(element)
+            
+            # Process children
+            for child in node.get("children", []):
+                process_node(child, f"{path}_{node['name']}")
+        
+        process_node(self.file_tree)
+        return elements
+
+    def generate_dependency_graph_visualization(self) -> Dict[str, Any]:
+        """Generate interactive dependency graph visualization"""
+        nodes = []
+        edges = []
+        clusters = {}
+        
+        # Create nodes for functions
+        for func in self.analysis_result.all_functions:
+            node_data = {
+                "id": func.name,
+                "label": func.name,
+                "type": "function",
+                "file": func.file_path,
+                "complexity": func.complexity_score,
+                "is_entry_point": func.is_entry_point,
+                "issue_count": len(func.issues),
+                "line_count": func.line_end - func.line_start,
+                "size": max(10, min(50, func.complexity_score * 5)),  # Visual size
+                "color": self._get_node_color(func)
+            }
+            nodes.append(node_data)
+            
+            # Group by file for clustering
+            file_key = Path(func.file_path).stem
+            if file_key not in clusters:
+                clusters[file_key] = []
+            clusters[file_key].append(func.name)
+        
+        # Create edges for dependencies
+        for func in self.analysis_result.all_functions:
+            for dependency in func.dependencies:
+                if dependency in [f.name for f in self.analysis_result.all_functions]:
+                    edges.append({
+                        "source": func.name,
+                        "target": dependency,
+                        "type": "calls",
+                        "weight": 1
+                    })
+        
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "clusters": clusters,
+            "layout_options": {
+                "algorithm": "force_directed",
+                "cluster_separation": True,
+                "edge_bundling": True
+            },
+            "interactive_features": {
+                "node_selection": True,
+                "zoom_pan": True,
+                "filter_by_complexity": True,
+                "highlight_dependencies": True
+            }
+        }
+    
+    def _get_node_color(self, func: FunctionDefinition) -> str:
+        """Determine node color based on function properties"""
+        if func.is_entry_point:
+            return "#ff6b6b"  # Red for entry points
+        elif len(func.issues) > 0:
+            return "#ffa726"  # Orange for functions with issues
+        elif func.complexity_score > 10:
+            return "#ffeb3b"  # Yellow for complex functions
+        else:
+            return "#4caf50"  # Green for normal functions
+
+    def generate_issue_heatmap(self) -> Dict[str, Any]:
+        """Generate issue heatmap visualization"""
+        heatmap_data = []
+        
+        # Calculate issue density per file
+        for file_path, issues in self.issue_map["by_file"].items():
+            severity_counts = {"critical": 0, "major": 0, "minor": 0, "info": 0}
+            for issue in issues:
+                severity_counts[issue.severity.value] += 1
+            
+            # Calculate heat score (weighted by severity)
+            heat_score = (
+                severity_counts["critical"] * 10 +
+                severity_counts["major"] * 5 +
+                severity_counts["minor"] * 2 +
+                severity_counts["info"] * 1
+            )
+            
+            heatmap_data.append({
+                "file_path": file_path,
+                "file_name": Path(file_path).name,
+                "total_issues": len(issues),
+                "severity_counts": severity_counts,
+                "heat_score": heat_score,
+                "relative_heat": 0  # Will be calculated after all files processed
             })
-    
-    return {
-        "nodes": nodes,
-        "edges": edges,
-        "layout": "force_directed",
-        "metrics": call_graph_metrics,
-        "interactive_features": {
-            "zoom": True,
-            "pan": True,
-            "node_click": True,
-            "edge_hover": True,
-            "filter_by_issues": True,
-            "highlight_paths": True
+        
+        # Calculate relative heat scores
+        max_heat = max([item["heat_score"] for item in heatmap_data]) if heatmap_data else 1
+        for item in heatmap_data:
+            item["relative_heat"] = item["heat_score"] / max_heat
+        
+        return {
+            "heatmap_data": heatmap_data,
+            "color_scale": {
+                "low": "#4caf50",    # Green
+                "medium": "#ffeb3b", # Yellow
+                "high": "#ff9800",   # Orange
+                "critical": "#f44336" # Red
+            },
+            "interactive_features": {
+                "click_to_view_issues": True,
+                "filter_by_severity": True,
+                "sort_by_heat": True
+            }
         }
-    }
-def generate_dependency_visualization(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate dependency graph visualization"""
-    
-    function_contexts = analysis_data.get('function_contexts', {})
-    
-    # Create dependency graph
-    dependency_nodes = []
-    dependency_edges = []
-    
-    for func_name, context in function_contexts.items():
-        # Add function node
-        dependency_nodes.append({
-            "id": func_name,
-            "label": func_name,
-            "type": "function",
-            "filepath": context.get('filepath', ''),
-            "level": calculate_dependency_level(context)
-        })
+
+    def generate_function_complexity_chart(self) -> Dict[str, Any]:
+        """Generate function complexity visualization"""
+        complexity_data = []
         
-        # Add dependency edges
-        for dep in context.get('dependencies', []):
-            dep_source = dep.get('source', '')
-            if dep_source:
-                dependency_edges.append({
-                    "from": func_name,
-                    "to": dep_source,
-                    "type": "depends_on",
-                    "dependency_type": dep.get('type', 'unknown')
+        for func in self.analysis_result.all_functions:
+            complexity_data.append({
+                "name": func.name,
+                "file": func.file_path,
+                "complexity": func.complexity_score,
+                "line_count": func.line_end - func.line_start,
+                "issue_count": len(func.issues),
+                "is_entry_point": func.is_entry_point,
+                "calls_count": len(func.calls),
+                "called_by_count": len(func.called_by)
+            })
+        
+        # Sort by complexity
+        complexity_data.sort(key=lambda x: x["complexity"], reverse=True)
+        
+        return {
+            "chart_data": complexity_data,
+            "chart_types": ["bar", "scatter", "bubble"],
+            "metrics": {
+                "average_complexity": sum(f["complexity"] for f in complexity_data) / len(complexity_data) if complexity_data else 0,
+                "max_complexity": max(f["complexity"] for f in complexity_data) if complexity_data else 0,
+                "high_complexity_count": len([f for f in complexity_data if f["complexity"] > 10])
+            },
+            "interactive_features": {
+                "click_to_view_function": True,
+                "filter_by_complexity": True,
+                "highlight_entry_points": True
+            }
+        }
+
+    def generate_entry_points_map(self) -> Dict[str, Any]:
+        """Generate entry points visualization and navigation"""
+        entry_points_by_type = {}
+        entry_points_flow = []
+        
+        for ep in self.analysis_result.all_entry_points:
+            # Group by type
+            if ep.type not in entry_points_by_type:
+                entry_points_by_type[ep.type] = []
+            
+            ep_data = {
+                "name": ep.name,
+                "file": ep.file_path,
+                "line": ep.line_number,
+                "description": ep.description,
+                "parameters": ep.parameters,
+                "dependencies": ep.dependencies
+            }
+            entry_points_by_type[ep.type].append(ep_data)
+            
+            # Create flow data for visualization
+            entry_points_flow.append({
+                "id": ep.name,
+                "type": ep.type,
+                "position": {"x": 0, "y": 0},  # Will be calculated by layout algorithm
+                "data": ep_data
+            })
+        
+        return {
+            "entry_points_by_type": entry_points_by_type,
+            "flow_diagram": {
+                "nodes": entry_points_flow,
+                "connections": self._generate_entry_point_connections()
+            },
+            "navigation_map": {
+                "total_entry_points": len(self.analysis_result.all_entry_points),
+                "types": list(entry_points_by_type.keys()),
+                "quick_access": [
+                    {"name": ep.name, "type": ep.type, "file": ep.file_path}
+                    for ep in self.analysis_result.all_entry_points[:10]  # Top 10 for quick access
+                ]
+            }
+        }
+    
+    def _generate_entry_point_connections(self) -> List[Dict[str, Any]]:
+        """Generate connections between entry points based on dependencies"""
+        connections = []
+        
+        for ep in self.analysis_result.all_entry_points:
+            for dep in ep.dependencies:
+                # Check if dependency is another entry point
+                for other_ep in self.analysis_result.all_entry_points:
+                    if other_ep.name == dep:
+                        connections.append({
+                            "source": ep.name,
+                            "target": other_ep.name,
+                            "type": "dependency"
+                        })
+        
+        return connections
+
+    def generate_symbol_selection_interface(self) -> Dict[str, Any]:
+        """Generate interactive symbol selection and context viewing interface"""
+        symbol_categories = {
+            "functions": [],
+            "entry_points": [],
+            "classes": [],
+            "variables": []
+        }
+        
+        # Categorize symbols
+        for symbol_name, symbol_data in self.symbol_map.items():
+            if symbol_data["type"] == "function":
+                symbol_categories["functions"].append({
+                    "name": symbol_name,
+                    "file": symbol_data["file_path"],
+                    "line": symbol_data["line_number"],
+                    "dependencies": len(symbol_data["dependencies"]),
+                    "dependents": len(symbol_data["dependents"]),
+                    "selectable": True,
+                    "context_available": True
                 })
-    
-    return {
-        "nodes": dependency_nodes,
-        "edges": dependency_edges,
-        "layout": "hierarchical",
-        "dependency_metrics": analysis_data.get('dependency_metrics', {}),
-        "circular_dependencies": detect_circular_dependencies(dependency_edges)
-    }
-def generate_metrics_visualization(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate metrics visualization charts and data"""
-    
-    halstead_metrics = analysis_data.get('halstead_metrics', {})
-    summary = analysis_data.get('summary', {})
-    
-    return {
-        "halstead_chart": {
-            "type": "radar",
-            "data": {
-                "labels": ["Vocabulary", "Length", "Volume", "Difficulty", "Effort"],
-                "values": [
-                    halstead_metrics.get('vocabulary', 0),
-                    halstead_metrics.get('length', 0) / 100,  # Normalized
-                    halstead_metrics.get('volume', 0) / 1000,  # Normalized
-                    halstead_metrics.get('difficulty', 0),
-                    halstead_metrics.get('effort', 0) / 10000  # Normalized
-                ]
-            }
-        },
-        "complexity_distribution": {
-            "type": "pie",
-            "data": calculate_complexity_distribution_chart(analysis_data)
-        },
-        "issue_severity_chart": {
-            "type": "bar",
-            "data": {
-                "labels": ["Critical", "Major", "Minor", "Info"],
-                "values": [
-                    summary.get('critical_issues', 0),
-                    summary.get('major_issues', 0),
-                    summary.get('minor_issues', 0),
-                    summary.get('info_issues', 0)
-                ]
-            }
-        },
-        "quality_trends": generate_quality_trends(analysis_data)
-    }
-def generate_function_context_panels(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate interactive context panels for functions"""
-    
-    function_contexts = analysis_data.get('function_contexts', {})
-    enhanced_contexts = analysis_data.get('enhanced_function_contexts', {})
-    
-    context_panels = {}
-    
-    for func_name, context in function_contexts.items():
-        enhanced = enhanced_contexts.get(func_name, {})
+            elif symbol_data["type"] == "entry_point":
+                symbol_categories["entry_points"].append({
+                    "name": symbol_name,
+                    "file": symbol_data["file_path"],
+                    "line": symbol_data["line_number"],
+                    "dependencies": len(symbol_data["dependencies"]),
+                    "selectable": True,
+                    "context_available": True
+                })
         
-        context_panels[func_name] = {
-            "basic_info": {
-                "name": func_name,
-                "filepath": context.get('filepath', ''),
-                "line_number": context.get('line_number', 1),
-                "parameters": context.get('parameters', []),
-                "class_name": context.get('class_name')
+        return {
+            "symbol_categories": symbol_categories,
+            "selection_interface": {
+                "search_enabled": True,
+                "filter_options": ["by_file", "by_type", "by_complexity", "has_issues"],
+                "sort_options": ["name", "file", "complexity", "dependencies"],
+                "multi_select": True
+            },
+            "context_viewer": {
+                "show_definition": True,
+                "show_dependencies": True,
+                "show_usage": True,
+                "show_issues": True,
+                "show_source_code": True,
+                "navigation_enabled": True
+            }
+        }
+
+    def get_symbol_context(self, symbol_name: str) -> Optional[Dict[str, Any]]:
+        """Get complete context for a selected symbol"""
+        if symbol_name not in self.symbol_map:
+            return None
+        
+        symbol_data = self.symbol_map[symbol_name]
+        definition = symbol_data["definition"]
+        
+        context = {
+            "symbol_name": symbol_name,
+            "type": symbol_data["type"],
+            "definition": definition.to_dict() if hasattr(definition, 'to_dict') else str(definition),
+            "location": {
+                "file": symbol_data["file_path"],
+                "line": symbol_data["line_number"]
             },
             "relationships": {
-                "calls": context.get('function_calls', []),
-                "called_by": context.get('called_by', []),
-                "dependencies": context.get('dependencies', []),
-                "usages": context.get('usages', []),
-                "max_call_chain": context.get('max_call_chain', [])
+                "dependencies": symbol_data["dependencies"],
+                "dependents": symbol_data["dependents"]
             },
-            "quality_metrics": {
-                "complexity_score": context.get('complexity_score', 0),
-                "halstead_metrics": context.get('halstead_metrics', {}),
-                "issues": context.get('issues', []),
-                "risk_assessment": enhanced.get('risk_assessment', 'low')
-            },
-            "analysis_insights": {
-                "is_entry_point": context.get('is_entry_point', False),
-                "is_dead_code": context.get('is_dead_code', False),
-                "refactoring_suggestions": enhanced.get('refactoring_suggestions', []),
-                "test_recommendations": enhanced.get('test_recommendations', []),
-                "impact_analysis": enhanced.get('impact_analysis', {})
-            },
-            "source_preview": {
-                "source": context.get('source', ''),
-                "highlighted_lines": get_issue_lines(context.get('issues', [])),
-                "syntax_highlighting": True
-            }
-        }
-    
-    return context_panels
-def create_interactive_ui(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Create interactive UI components and layouts"""
-    
-    return {
-        "layout": {
-            "type": "split_view",
-            "left_panel": {
-                "type": "repository_tree",
-                "width": "30%",
-                "resizable": True,
-                "components": ["tree_view", "search_box", "filter_controls"]
-            },
-            "right_panel": {
-                "type": "tabbed_content",
-                "width": "70%",
-                "tabs": [
-                    {
-                        "id": "overview",
-                        "label": "📊 Overview",
-                        "icon": "chart-bar",
-                        "content_type": "dashboard"
-                    },
-                    {
-                        "id": "issues",
-                        "label": "🚨 Issues",
-                        "icon": "exclamation-triangle",
-                        "content_type": "issue_list",
-                        "badge_count": get_total_issues(analysis_data)
-                    },
-                    {
-                        "id": "functions",
-                        "label": "🔧 Functions",
-                        "icon": "cog",
-                        "content_type": "function_explorer"
-                    },
-                    {
-                        "id": "dead_code",
-                        "label": "💀 Dead Code",
-                        "icon": "skull",
-                        "content_type": "dead_code_analyzer",
-                        "badge_count": get_dead_code_count(analysis_data)
-                    },
-                    {
-                        "id": "metrics",
-                        "label": "📈 Metrics",
-                        "icon": "chart-line",
-                        "content_type": "metrics_dashboard"
-                    }
+            "related_issues": [
+                issue.to_dict() for issue in self.analysis_result.all_issues
+                if issue.file_path == symbol_data["file_path"] and
+                symbol_data["line_number"] <= issue.line_number <= (
+                    definition.line_end if hasattr(definition, 'line_end') else symbol_data["line_number"] + 10
+                )
+            ],
+            "navigation": {
+                "go_to_definition": f"file://{symbol_data['file_path']}:{symbol_data['line_number']}",
+                "view_dependencies": [
+                    self.get_symbol_location(dep) for dep in symbol_data["dependencies"]
+                ],
+                "view_usages": [
+                    self.get_symbol_location(dep) for dep in symbol_data["dependents"]
                 ]
             }
+        }
+        
+        return context
+    
+    def get_symbol_location(self, symbol_name: str) -> Optional[Dict[str, Any]]:
+        """Get location information for a symbol"""
+        if symbol_name in self.symbol_map:
+            symbol_data = self.symbol_map[symbol_name]
+            return {
+                "name": symbol_name,
+                "file": symbol_data["file_path"],
+                "line": symbol_data["line_number"],
+                "type": symbol_data["type"]
+            }
+        return None
+
+    def generate_complete_visualization_data(self) -> Dict[str, Any]:
+        """Generate all visualization data in one comprehensive structure"""
+        return {
+            "repository_tree": self.generate_interactive_repository_tree(),
+            "dependency_graph": self.generate_dependency_graph_visualization(),
+            "issue_heatmap": self.generate_issue_heatmap(),
+            "complexity_chart": self.generate_function_complexity_chart(),
+            "entry_points_map": self.generate_entry_points_map(),
+            "symbol_interface": self.generate_symbol_selection_interface(),
+            "metadata": {
+                "total_files": len(set(func.file_path for func in self.analysis_result.all_functions)),
+                "total_functions": len(self.analysis_result.all_functions),
+                "total_entry_points": len(self.analysis_result.all_entry_points),
+                "total_issues": len(self.analysis_result.all_issues),
+                "visualization_features": [
+                    "interactive_tree",
+                    "dependency_graph",
+                    "issue_heatmap",
+                    "complexity_charts",
+                    "symbol_selection",
+                    "context_viewing",
+                    "navigation"
+                ]
+            }
+        }
+
+# Standalone functions for backward compatibility
+def generate_repository_tree(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate repository tree from analysis data (backward compatibility)"""
+    # Convert analysis_data to AnalysisResult if needed
+    if isinstance(analysis_data, dict):
+        # Create a mock analysis result for compatibility
+        class MockAnalysisResult:
+            def __init__(self, data):
+                self.all_functions = data.get('functions', [])
+                self.all_entry_points = data.get('entry_points', [])
+                self.all_issues = data.get('issues', [])
+        
+        analysis_result = MockAnalysisResult(analysis_data)
+    else:
+        analysis_result = analysis_data
+    
+    visualizer = CodebaseVisualizer(analysis_result)
+    return visualizer.generate_interactive_repository_tree()
+
+def generate_visualization_data(analysis_result: AnalysisResult) -> Dict[str, Any]:
+    """Generate complete visualization data"""
+    visualizer = CodebaseVisualizer(analysis_result)
+    return visualizer.generate_complete_visualization_data()
+
+def create_interactive_ui(analysis_result: AnalysisResult) -> Dict[str, Any]:
+    """Create interactive UI configuration"""
+    visualizer = CodebaseVisualizer(analysis_result)
+    
+    ui_config = {
+        "layout": {
+            "type": "dashboard",
+            "panels": [
+                {
+                    "id": "repository_tree",
+                    "title": "Repository Explorer",
+                    "type": "tree_view",
+                    "position": {"x": 0, "y": 0, "width": 3, "height": 6},
+                    "data_source": "repository_tree"
+                },
+                {
+                    "id": "dependency_graph",
+                    "title": "Dependency Graph",
+                    "type": "network_graph",
+                    "position": {"x": 3, "y": 0, "width": 6, "height": 4},
+                    "data_source": "dependency_graph"
+                },
+                {
+                    "id": "issue_heatmap",
+                    "title": "Issue Heatmap",
+                    "type": "heatmap",
+                    "position": {"x": 9, "y": 0, "width": 3, "height": 4},
+                    "data_source": "issue_heatmap"
+                },
+                {
+                    "id": "complexity_chart",
+                    "title": "Function Complexity",
+                    "type": "bar_chart",
+                    "position": {"x": 3, "y": 4, "width": 6, "height": 2},
+                    "data_source": "complexity_chart"
+                },
+                {
+                    "id": "symbol_context",
+                    "title": "Symbol Context",
+                    "type": "context_panel",
+                    "position": {"x": 9, "y": 4, "width": 3, "height": 2},
+                    "data_source": "symbol_interface"
+                }
+            ]
         },
-        "interactive_features": {
-            "search": {
+        "interactions": {
+            "symbol_selection": {
                 "enabled": True,
-                "placeholder": "Search functions, files, or issues...",
-                "filters": ["functions", "files", "issues", "classes"]
+                "multi_select": True,
+                "show_context": True
             },
             "navigation": {
-                "breadcrumbs": True,
-                "back_forward": True,
-                "bookmarks": True
-            },
-            "context_menu": {
                 "enabled": True,
-                "actions": ["view_source", "show_usages", "analyze_impact", "suggest_refactor"]
+                "go_to_definition": True,
+                "view_dependencies": True
             },
-            "tooltips": {
+            "filtering": {
                 "enabled": True,
-                "delay": 500,
-                "rich_content": True
+                "by_severity": True,
+                "by_complexity": True,
+                "by_file_type": True
             }
         },
-        "theme": {
-            "primary_color": "#667eea",
-            "secondary_color": "#764ba2",
-            "accent_color": "#f093fb",
-            "background_color": "#f8f9fa",
-            "text_color": "#343a40",
-            "border_color": "#dee2e6"
-        }
+        "data": visualizer.generate_complete_visualization_data()
     }
-# Helper functions
-def get_node_color(context: Dict[str, Any]) -> str:
-    """Get color for call graph node based on context"""
-    if context.get('is_dead_code', False):
-        return "#dc3545"  # Red for dead code
-    elif context.get('is_entry_point', False):
-        return "#28a745"  # Green for entry points
-    elif len(context.get('issues', [])) > 0:
-        return "#ffc107"  # Yellow for issues
-    else:
-        return "#007bff"  # Blue for normal functions
-def calculate_dependency_level(context: Dict[str, Any]) -> int:
-    """Calculate the dependency level of a function"""
-    return len(context.get('dependencies', []))
-def detect_circular_dependencies(edges: List[Dict[str, Any]]) -> List[List[str]]:
-    """Detect circular dependencies in the dependency graph"""
-    # Simplified circular dependency detection
-    # In a real implementation, this would use graph algorithms
-    return []
-def calculate_complexity_distribution_chart(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Calculate complexity distribution for chart visualization"""
-    function_contexts = analysis_data.get('function_contexts', {})
     
-    complexity_ranges = {"Low (0-10)": 0, "Medium (11-20)": 0, "High (21-30)": 0, "Very High (31+)": 0}
-    
-    for context in function_contexts.values():
-        complexity = context.get('complexity_score', 0)
-        if complexity <= 10:
-            complexity_ranges["Low (0-10)"] += 1
-        elif complexity <= 20:
-            complexity_ranges["Medium (11-20)"] += 1
-        elif complexity <= 30:
-            complexity_ranges["High (21-30)"] += 1
-        else:
-            complexity_ranges["Very High (31+)"] += 1
-    
-    return {
-        "labels": list(complexity_ranges.keys()),
-        "values": list(complexity_ranges.values())
-    }
-def generate_issue_trends(issues_by_severity: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate issue trend data"""
-    # Mock trend data - in real implementation, this would track changes over time
-    return {
-        "timeline": ["Week 1", "Week 2", "Week 3", "Week 4"],
-        "critical": [2, 1, 1, 1],
-        "major": [6, 5, 4, 4],
-        "minor": [18, 16, 15, 15],
-        "info": [3, 2, 1, 0]
-    }
-def get_top_issues(issues_by_severity: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Get top priority issues"""
-    top_issues = []
-    
-    # Add critical issues first
-    for issue in issues_by_severity.get('critical', [])[:3]:
-        top_issues.append({**issue, "priority": "critical"})
-    
-    # Add major issues
-    for issue in issues_by_severity.get('major', [])[:2]:
-        top_issues.append({**issue, "priority": "major"})
-    
-    return top_issues
-def generate_removal_recommendations(blast_radius_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Generate recommendations for dead code removal"""
-    recommendations = []
-    
-    for item in blast_radius_data:
-        if item['removal_safety'] == 'safe':
-            recommendations.append({
-                "item": item['name'],
-                "action": "remove",
-                "priority": "high",
-                "reason": "No dependencies found, safe to remove"
-            })
-        else:
-            recommendations.append({
-                "item": item['name'],
-                "action": "review",
-                "priority": "medium",
-                "reason": f"Has {item['impact_score']} dependencies, requires review"
-            })
-    
-    return recommendations
-def prioritize_cleanup(blast_radius_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Prioritize dead code cleanup order"""
-    return sorted(blast_radius_data, key=lambda x: (x['impact_score'], x['name']))
-def generate_quality_trends(analysis_data: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate quality trend visualization"""
-    return {
-        "timeline": ["Month 1", "Month 2", "Month 3", "Current"],
-        "quality_score": [6.5, 7.2, 7.8, 8.1],
-        "technical_debt": [25, 22, 18, 15],
-        "test_coverage": [65, 70, 75, 78]
-    }
-def get_issue_lines(issues: List[Dict[str, Any]]) -> List[int]:
-    """Get line numbers that have issues for highlighting"""
-    return [issue.get('line_number', 1) for issue in issues]
-def get_total_issues(analysis_data: Dict[str, Any]) -> int:
-    """Get total number of issues"""
-    issues_by_severity = analysis_data.get('issues_by_severity', {})
-    return sum(len(issues) for issues in issues_by_severity.values())
-def get_dead_code_count(analysis_data: Dict[str, Any]) -> int:
-    """Get total number of dead code items"""
-    dead_code_analysis = analysis_data.get('dead_code_analysis', {})
-    return dead_code_analysis.get('total_dead_functions', 0)
+    return ui_config
+
+if __name__ == "__main__":
+    # Example usage
+    print("Codebase Visualization Engine")
+    print("Use this module with analysis results to generate interactive visualizations")
