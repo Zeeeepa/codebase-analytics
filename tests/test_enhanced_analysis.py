@@ -13,7 +13,7 @@ import json
 from datetime import datetime
 
 # Add the backend directory to the path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 try:
     from analysis import ComprehensiveCodebaseAnalyzer, IssueCollection, IssueSeverity, IssueCategory
@@ -341,7 +341,7 @@ def test_context_collection(analyzer):
         print("  ✅ Context collection tests passed")
         
     except Exception as e:
-        print(f"  ❌ Context collection test failed: {e}")
+        print(f"  ��� Context collection test failed: {e}")
 
 def generate_test_report(results, duration):
     """Generate a detailed test report."""

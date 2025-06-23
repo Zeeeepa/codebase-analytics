@@ -21,6 +21,9 @@ import json
 from datetime import datetime
 from typing import Dict, Any, List
 
+# Add backend directory to path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+
 def test_step_1_architecture():
     """Test Step 1: Architecture Analysis and Integration Map."""
     print("🔍 Testing Step 1: Architecture Analysis and Integration Map")
