@@ -916,6 +916,1083 @@ def detect_security_vulnerabilities(codebase) -> List[Issue]:
     return issues
 
 # ====================================================================
+# STEP 4: CONTEXT-RICH ERROR INFORMATION SYSTEM
+# ====================================================================
+
+class ContextCollector:
+    """Collects comprehensive context information for issues."""
+    
+    def __init__(self, codebase):
+        self.codebase = codebase
+        
+    def collect_function_context(self, function) -> Dict[str, Any]:
+        """Collect comprehensive context for a function."""
+        context = {}
+        
+        try:
+            # Basic function information
+            context["function_name"] = function.name
+            context["function_signature"] = self._get_function_signature(function)
+            
+            # Call chain analysis
+            context["call_chain"] = self._get_call_chain(function)
+            context["callers"] = self._get_function_callers(function)
+            context["callees"] = self._get_function_callees(function)
+            
+            # Parameter analysis
+            context["parameter_usage"] = self._analyze_parameter_usage(function)
+            context["parameter_types"] = self._get_parameter_types(function)
+            
+            # Complexity metrics
+            context["complexity_metrics"] = self._calculate_complexity_metrics(function)
+            
+            # Dependencies and relationships
+            context["dependencies"] = self._get_function_dependencies(function)
+            context["usages"] = self._get_function_usages(function)
+            context["related_files"] = self._get_related_files(function)
+            
+            # Code quality indicators
+            context["code_quality"] = self._assess_code_quality(function)
+            
+            # Security implications
+            context["security_implications"] = self._assess_security_implications(function)
+            
+            # Performance impact
+            context["performance_impact"] = self._assess_performance_impact(function)
+            
+        except Exception as e:
+            context["context_collection_error"] = str(e)
+            
+        return context
+    
+    def collect_file_context(self, file) -> Dict[str, Any]:
+        """Collect comprehensive context for a file."""
+        context = {}
+        
+        try:
+            # Basic file information
+            context["file_path"] = str(file.path) if hasattr(file, 'path') else 'unknown'
+            context["file_size"] = len(file.source) if hasattr(file, 'source') else 0
+            context["line_count"] = len(file.source.split('\n')) if hasattr(file, 'source') else 0
+            
+            # Import analysis
+            context["imports"] = self._analyze_file_imports(file)
+            context["external_dependencies"] = self._get_external_dependencies(file)
+            
+            # Function and class analysis
+            context["functions"] = self._get_file_functions(file)
+            context["classes"] = self._get_file_classes(file)
+            
+            # Code structure
+            context["code_structure"] = self._analyze_code_structure(file)
+            
+            # File relationships
+            context["related_files"] = self._get_file_relationships(file)
+            
+        except Exception as e:
+            context["context_collection_error"] = str(e)
+            
+        return context
+    
+    def collect_issue_context(self, issue: Issue) -> Dict[str, Any]:
+        """Collect comprehensive context for an issue."""
+        context = {}
+        
+        try:
+            # Issue metadata
+            context["issue_id"] = issue.id
+            context["issue_type"] = issue.type.value if isinstance(issue.type, IssueType) else issue.type
+            context["issue_category"] = issue.category.value if isinstance(issue.category, IssueCategory) else issue.category
+            context["severity"] = issue.severity.value if isinstance(issue.severity, IssueSeverity) else issue.severity
+            
+            # Location context
+            if issue.location and isinstance(issue.location, CodeLocation):
+                context["location_context"] = self._get_location_context(issue.location)
+            
+            # Item-specific context
+            if issue.item:
+                if hasattr(issue.item, 'name') and hasattr(issue.item, 'source'):
+                    # Function or class
+                    context["item_context"] = self.collect_function_context(issue.item)
+                elif hasattr(issue.item, 'path') and hasattr(issue.item, 'source'):
+                    # File
+                    context["item_context"] = self.collect_file_context(issue.item)
+            
+            # Impact analysis
+            context["impact_analysis"] = self._analyze_issue_impact(issue)
+            
+            # Fix suggestions
+            context["fix_suggestions"] = self._generate_fix_suggestions(issue)
+            
+        except Exception as e:
+            context["context_collection_error"] = str(e)
+            
+        return context
+    
+    def _get_function_signature(self, function) -> str:
+        """Get the function signature."""
+        try:
+            if hasattr(function, 'parameters') and function.parameters:
+                params = []
+                for param in function.parameters:
+                    param_str = param.name
+                    if hasattr(param, 'type_annotation') and param.type_annotation:
+                        param_str += f": {param.type_annotation}"
+                    if hasattr(param, 'default_value') and param.default_value:
+                        param_str += f" = {param.default_value}"
+                    params.append(param_str)
+                return f"def {function.name}({', '.join(params)})"
+            else:
+                return f"def {function.name}(...)"
+        except:
+            return f"def {function.name}(...)"
+    
+    def _get_call_chain(self, function) -> List[str]:
+        """Get the call chain for a function."""
+        try:
+            call_chain = []
+            if hasattr(function, 'call_sites'):
+                for call_site in function.call_sites:
+                    if hasattr(call_site, 'parent_function') and call_site.parent_function:
+                        call_chain.append(call_site.parent_function.name)
+            return call_chain
+        except:
+            return []
+    
+    def _get_function_callers(self, function) -> List[Dict[str, str]]:
+        """Get functions that call this function."""
+        try:
+            callers = []
+            if hasattr(function, 'call_sites'):
+                for call_site in function.call_sites:
+                    if hasattr(call_site, 'parent_function') and call_site.parent_function:
+                        callers.append({
+                            "name": call_site.parent_function.name,
+                            "file": str(call_site.parent_function.file.path) if hasattr(call_site.parent_function, 'file') else 'unknown'
+                        })
+            return callers
+        except:
+            return []
+    
+    def _get_function_callees(self, function) -> List[Dict[str, str]]:
+        """Get functions called by this function."""
+        try:
+            callees = []
+            if hasattr(function, 'function_calls'):
+                for call in function.function_calls:
+                    if hasattr(call, 'function_definition') and call.function_definition:
+                        callees.append({
+                            "name": call.function_definition.name,
+                            "file": str(call.function_definition.file.path) if hasattr(call.function_definition, 'file') else 'unknown'
+                        })
+            return callees
+        except:
+            return []
+    
+    def _analyze_parameter_usage(self, function) -> Dict[str, str]:
+        """Analyze parameter usage in the function."""
+        try:
+            usage = {}
+            if hasattr(function, 'parameters') and hasattr(function, 'source'):
+                for param in function.parameters:
+                    if param.name in function.source:
+                        usage[param.name] = "used"
+                    else:
+                        usage[param.name] = "unused"
+            return usage
+        except:
+            return {}
+    
+    def _get_parameter_types(self, function) -> Dict[str, str]:
+        """Get parameter type information."""
+        try:
+            types = {}
+            if hasattr(function, 'parameters'):
+                for param in function.parameters:
+                    if hasattr(param, 'type_annotation') and param.type_annotation:
+                        types[param.name] = param.type_annotation
+                    else:
+                        types[param.name] = "unknown"
+            return types
+        except:
+            return {}
+    
+    def _calculate_complexity_metrics(self, function) -> Dict[str, Any]:
+        """Calculate comprehensive complexity metrics."""
+        try:
+            metrics = {}
+            
+            if hasattr(function, 'source') and function.source:
+                # Cyclomatic complexity (simplified)
+                complexity_keywords = ['if', 'elif', 'else', 'for', 'while', 'try', 'except', 'finally', 'with', 'and', 'or']
+                cyclomatic = 1  # Base complexity
+                for keyword in complexity_keywords:
+                    cyclomatic += function.source.count(keyword)
+                metrics["cyclomatic_complexity"] = cyclomatic
+                
+                # Line metrics
+                lines = function.source.split('\n')
+                metrics["total_lines"] = len(lines)
+                metrics["code_lines"] = len([line for line in lines if line.strip() and not line.strip().startswith('#')])
+                metrics["comment_lines"] = len([line for line in lines if line.strip().startswith('#')])
+                
+                # Nesting depth (simplified)
+                max_depth = 0
+                current_depth = 0
+                for line in lines:
+                    stripped = line.lstrip()
+                    if any(keyword in stripped for keyword in ['if', 'for', 'while', 'try', 'with', 'def', 'class']):
+                        current_depth = (len(line) - len(stripped)) // 4  # Assuming 4-space indentation
+                        max_depth = max(max_depth, current_depth)
+                metrics["max_nesting_depth"] = max_depth
+                
+            return metrics
+        except:
+            return {}
+    
+    def _get_function_dependencies(self, function) -> List[Dict[str, str]]:
+        """Get function dependencies."""
+        try:
+            dependencies = []
+            if hasattr(function, 'dependencies'):
+                for dep in function.dependencies:
+                    dependencies.append({
+                        "name": dep.name if hasattr(dep, 'name') else str(dep),
+                        "type": type(dep).__name__,
+                        "file": str(dep.file.path) if hasattr(dep, 'file') and hasattr(dep.file, 'path') else 'unknown'
+                    })
+            return dependencies
+        except:
+            return []
+    
+    def _get_function_usages(self, function) -> List[Dict[str, str]]:
+        """Get function usage information."""
+        try:
+            usages = []
+            if hasattr(function, 'usages'):
+                for usage in function.usages:
+                    usages.append({
+                        "location": str(usage.usage_symbol.file.path) if hasattr(usage, 'usage_symbol') and hasattr(usage.usage_symbol, 'file') else 'unknown',
+                        "context": "function_call"  # Could be enhanced with more context
+                    })
+            return usages
+        except:
+            return []
+    
+    def _get_related_files(self, function) -> List[str]:
+        """Get files related to this function."""
+        try:
+            related = set()
+            
+            # Add file containing the function
+            if hasattr(function, 'file') and hasattr(function.file, 'path'):
+                related.add(str(function.file.path))
+            
+            # Add files from dependencies
+            if hasattr(function, 'dependencies'):
+                for dep in function.dependencies:
+                    if hasattr(dep, 'file') and hasattr(dep.file, 'path'):
+                        related.add(str(dep.file.path))
+            
+            # Add files from usages
+            if hasattr(function, 'usages'):
+                for usage in function.usages:
+                    if hasattr(usage, 'usage_symbol') and hasattr(usage.usage_symbol, 'file'):
+                        related.add(str(usage.usage_symbol.file.path))
+            
+            return list(related)
+        except:
+            return []
+    
+    def _assess_code_quality(self, function) -> Dict[str, Any]:
+        """Assess code quality indicators."""
+        try:
+            quality = {}
+            
+            if hasattr(function, 'source') and function.source:
+                # Check for code smells
+                quality["has_long_lines"] = any(len(line) > 120 for line in function.source.split('\n'))
+                quality["has_todo_comments"] = any(keyword in function.source.lower() for keyword in ['todo', 'fixme', 'hack'])
+                quality["has_docstring"] = '"""' in function.source or "'''" in function.source
+                
+                # Complexity assessment
+                lines = len(function.source.split('\n'))
+                if lines > 50:
+                    quality["complexity_assessment"] = "high"
+                elif lines > 20:
+                    quality["complexity_assessment"] = "medium"
+                else:
+                    quality["complexity_assessment"] = "low"
+            
+            return quality
+        except:
+            return {}
+    
+    def _assess_security_implications(self, function) -> List[str]:
+        """Assess security implications of the function."""
+        try:
+            implications = []
+            
+            if hasattr(function, 'source') and function.source:
+                dangerous_patterns = {
+                    'eval(': 'Uses eval() which can execute arbitrary code',
+                    'exec(': 'Uses exec() which can execute arbitrary code',
+                    'pickle.loads(': 'Uses pickle.loads() which can execute arbitrary code',
+                    'subprocess.': 'Uses subprocess which can execute system commands',
+                    'os.system(': 'Uses os.system() which can execute system commands',
+                    '__import__(': 'Uses dynamic imports which can be dangerous'
+                }
+                
+                for pattern, implication in dangerous_patterns.items():
+                    if pattern in function.source:
+                        implications.append(implication)
+            
+            return implications
+        except:
+            return []
+    
+    def _assess_performance_impact(self, function) -> str:
+        """Assess the performance impact of the function."""
+        try:
+            if not hasattr(function, 'source') or not function.source:
+                return "unknown"
+            
+            # Simple heuristics for performance assessment
+            source = function.source.lower()
+            
+            # High impact indicators
+            if any(pattern in source for pattern in ['nested loop', 'for.*for', 'while.*while', 'recursive']):
+                return "high"
+            
+            # Medium impact indicators
+            if any(pattern in source for pattern in ['for', 'while', 'comprehension']):
+                return "medium"
+            
+            # Low impact (simple functions)
+            return "low"
+        except:
+            return "unknown"
+    
+    def _analyze_file_imports(self, file) -> Dict[str, Any]:
+        """Analyze file imports."""
+        try:
+            imports_info = {
+                "total_imports": 0,
+                "external_imports": [],
+                "internal_imports": [],
+                "unused_imports": []
+            }
+            
+            if hasattr(file, 'imports'):
+                imports_info["total_imports"] = len(file.imports)
+                
+                for imp in file.imports:
+                    import_name = imp.source if hasattr(imp, 'source') else str(imp)
+                    
+                    # Check if external (simplified heuristic)
+                    if any(ext in import_name for ext in ['os', 'sys', 'json', 'requests', 'numpy', 'pandas']):
+                        imports_info["external_imports"].append(import_name)
+                    else:
+                        imports_info["internal_imports"].append(import_name)
+                    
+                    # Check if unused
+                    if hasattr(imp, 'usages') and len(imp.usages) == 0:
+                        imports_info["unused_imports"].append(import_name)
+            
+            return imports_info
+        except:
+            return {}
+    
+    def _get_external_dependencies(self, file) -> List[str]:
+        """Get external dependencies for a file."""
+        try:
+            external_deps = []
+            if hasattr(file, 'imports'):
+                for imp in file.imports:
+                    import_name = imp.source if hasattr(imp, 'source') else str(imp)
+                    # Simple heuristic for external dependencies
+                    if not import_name.startswith('.') and not import_name.startswith('backend'):
+                        external_deps.append(import_name)
+            return external_deps
+        except:
+            return []
+    
+    def _get_file_functions(self, file) -> List[Dict[str, str]]:
+        """Get functions in a file."""
+        try:
+            functions = []
+            if hasattr(file, 'functions'):
+                for func in file.functions:
+                    functions.append({
+                        "name": func.name,
+                        "line_count": len(func.source.split('\n')) if hasattr(func, 'source') else 0
+                    })
+            return functions
+        except:
+            return []
+    
+    def _get_file_classes(self, file) -> List[Dict[str, str]]:
+        """Get classes in a file."""
+        try:
+            classes = []
+            if hasattr(file, 'classes'):
+                for cls in file.classes:
+                    classes.append({
+                        "name": cls.name,
+                        "method_count": len(cls.methods) if hasattr(cls, 'methods') else 0
+                    })
+            return classes
+        except:
+            return []
+    
+    def _analyze_code_structure(self, file) -> Dict[str, Any]:
+        """Analyze the code structure of a file."""
+        try:
+            structure = {}
+            
+            if hasattr(file, 'source') and file.source:
+                lines = file.source.split('\n')
+                structure["total_lines"] = len(lines)
+                structure["code_lines"] = len([line for line in lines if line.strip() and not line.strip().startswith('#')])
+                structure["comment_lines"] = len([line for line in lines if line.strip().startswith('#')])
+                structure["blank_lines"] = len([line for line in lines if not line.strip()])
+                
+                # Calculate comment ratio
+                if structure["code_lines"] > 0:
+                    structure["comment_ratio"] = structure["comment_lines"] / structure["code_lines"]
+                else:
+                    structure["comment_ratio"] = 0
+            
+            return structure
+        except:
+            return {}
+    
+    def _get_file_relationships(self, file) -> List[str]:
+        """Get files related to this file."""
+        try:
+            related = set()
+            
+            # Add files from imports
+            if hasattr(file, 'imports'):
+                for imp in file.imports:
+                    if hasattr(imp, 'imported_symbol') and hasattr(imp.imported_symbol, 'file'):
+                        related.add(str(imp.imported_symbol.file.path))
+            
+            return list(related)
+        except:
+            return []
+    
+    def _get_location_context(self, location: CodeLocation) -> Dict[str, Any]:
+        """Get context for a code location."""
+        try:
+            context = {
+                "file_path": location.file_path,
+                "line_start": location.line_start,
+                "line_end": location.line_end,
+                "line_range": f"{location.line_start}-{location.line_end}" if location.line_end != location.line_start else str(location.line_start)
+            }
+            
+            # Try to get surrounding code context
+            try:
+                with open(location.file_path, 'r') as f:
+                    lines = f.readlines()
+                    
+                # Get context lines (5 before and after)
+                start_idx = max(0, location.line_start - 6)
+                end_idx = min(len(lines), location.line_end + 5)
+                
+                context["surrounding_code"] = {
+                    "before": [line.rstrip() for line in lines[start_idx:location.line_start-1]],
+                    "target": [line.rstrip() for line in lines[location.line_start-1:location.line_end]],
+                    "after": [line.rstrip() for line in lines[location.line_end:end_idx]]
+                }
+            except:
+                context["surrounding_code"] = None
+            
+            return context
+        except:
+            return {}
+    
+    def _analyze_issue_impact(self, issue: Issue) -> Dict[str, Any]:
+        """Analyze the impact of an issue."""
+        try:
+            impact = {
+                "severity_level": issue.severity.value if isinstance(issue.severity, IssueSeverity) else issue.severity,
+                "category": issue.category.value if isinstance(issue.category, IssueCategory) else issue.category,
+                "affected_components": [],
+                "potential_consequences": []
+            }
+            
+            # Determine potential consequences based on issue type
+            if isinstance(issue.type, IssueType):
+                if issue.type in [IssueType.INFINITE_LOOP, IssueType.OFF_BY_ONE_ERROR]:
+                    impact["potential_consequences"].append("Runtime errors or crashes")
+                elif issue.type in [IssueType.DANGEROUS_FUNCTION_USAGE, IssueType.UNSAFE_EVAL]:
+                    impact["potential_consequences"].append("Security vulnerabilities")
+                elif issue.type in [IssueType.UNUSED_FUNCTION, IssueType.UNUSED_CLASS]:
+                    impact["potential_consequences"].append("Code bloat and maintenance overhead")
+                elif issue.type in [IssueType.HIGH_COMPLEXITY, IssueType.LONG_FUNCTION]:
+                    impact["potential_consequences"].append("Reduced maintainability and increased bug risk")
+            
+            # Analyze affected components
+            if issue.item:
+                if hasattr(issue.item, 'name'):
+                    impact["affected_components"].append(f"Function/Class: {issue.item.name}")
+                if hasattr(issue.item, 'file') and hasattr(issue.item.file, 'path'):
+                    impact["affected_components"].append(f"File: {issue.item.file.path}")
+            
+            return impact
+        except:
+            return {}
+    
+    def _generate_fix_suggestions(self, issue: Issue) -> List[str]:
+        """Generate specific fix suggestions for an issue."""
+        try:
+            suggestions = []
+            
+            if isinstance(issue.type, IssueType):
+                if issue.type == IssueType.UNREACHABLE_CODE:
+                    suggestions.extend([
+                        "Remove the unreachable code",
+                        "Restructure the function logic to make the code reachable",
+                        "Add conditional logic if the code should be reachable under certain conditions"
+                    ])
+                elif issue.type == IssueType.INFINITE_LOOP:
+                    suggestions.extend([
+                        "Add a break statement with appropriate condition",
+                        "Add a return statement to exit the function",
+                        "Modify the loop condition to ensure termination"
+                    ])
+                elif issue.type == IssueType.OFF_BY_ONE_ERROR:
+                    suggestions.extend([
+                        "Use array[len(array)-1] instead of array[len(array)]",
+                        "Use negative indexing: array[-1] for the last element",
+                        "Check array bounds before accessing elements"
+                    ])
+                elif issue.type == IssueType.DANGEROUS_FUNCTION_USAGE:
+                    suggestions.extend([
+                        "Replace eval() with safer alternatives like ast.literal_eval()",
+                        "Use subprocess with shell=False and validate inputs",
+                        "Consider using json.loads() instead of pickle.loads() for data"
+                    ])
+                elif issue.type == IssueType.UNUSED_FUNCTION:
+                    suggestions.extend([
+                        "Remove the function if it's truly unused",
+                        "Add documentation explaining why the function is kept",
+                        "Consider making it private with underscore prefix if it's internal"
+                    ])
+                elif issue.type == IssueType.LINE_TOO_LONG:
+                    suggestions.extend([
+                        "Break the line into multiple lines",
+                        "Extract complex expressions into variables",
+                        "Use parentheses for implicit line continuation"
+                    ])
+            
+            # Add generic suggestion if no specific ones
+            if not suggestions and issue.suggestion:
+                suggestions.append(issue.suggestion)
+            
+            return suggestions
+        except:
+            return []
+
+# ====================================================================
+# STEP 5: ADVANCED ANALYSIS CAPABILITIES
+# ====================================================================
+
+def detect_circular_dependencies_advanced(codebase) -> List[Issue]:
+    """
+    Detect circular dependencies with enhanced context and analysis.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of circular dependency issues
+    """
+    issues = []
+    
+    if not CODEGEN_SDK_AVAILABLE or not hasattr(codebase, 'files'):
+        return issues
+    
+    try:
+        # Build dependency graph
+        dependency_graph = {}
+        file_dependencies = {}
+        
+        # Collect file-level dependencies
+        for file in codebase.files:
+            file_path = str(file.path) if hasattr(file, 'path') else 'unknown'
+            dependencies = set()
+            
+            if hasattr(file, 'imports'):
+                for imp in file.imports:
+                    if hasattr(imp, 'imported_symbol') and hasattr(imp.imported_symbol, 'file'):
+                        dep_path = str(imp.imported_symbol.file.path)
+                        if dep_path != file_path:  # Avoid self-dependencies
+                            dependencies.add(dep_path)
+            
+            file_dependencies[file_path] = dependencies
+            dependency_graph[file_path] = list(dependencies)
+        
+        # Find cycles using DFS
+        visited = set()
+        rec_stack = set()
+        cycles = []
+        
+        def dfs(node, path):
+            if node in rec_stack:
+                # Found a cycle
+                cycle_start = path.index(node)
+                cycle = path[cycle_start:] + [node]
+                cycles.append(cycle)
+                return
+            
+            if node in visited:
+                return
+            
+            visited.add(node)
+            rec_stack.add(node)
+            
+            for neighbor in dependency_graph.get(node, []):
+                dfs(neighbor, path + [node])
+            
+            rec_stack.remove(node)
+        
+        # Run DFS from each node
+        for node in dependency_graph:
+            if node not in visited:
+                dfs(node, [])
+        
+        # Create issues for each cycle found
+        for cycle in cycles:
+            if len(cycle) > 1:  # Ignore self-loops
+                cycle_description = " -> ".join([f.split('/')[-1] for f in cycle])
+                
+                # Find the file object for the first file in the cycle
+                first_file = None
+                for file in codebase.files:
+                    if str(file.path) == cycle[0]:
+                        first_file = file
+                        break
+                
+                location = CodeLocation(
+                    file_path=cycle[0],
+                    line_start=1
+                )
+                
+                issue = Issue(
+                    type=IssueType.CIRCULAR_DEPENDENCY,
+                    category=IssueCategory.DEPENDENCY_ISSUE,
+                    severity=IssueSeverity.WARNING,
+                    message=f"Circular dependency detected: {cycle_description}",
+                    location=location,
+                    item=first_file,
+                    suggestion="Refactor code to break the circular dependency by extracting common functionality"
+                )
+                
+                # Add rich context
+                issue.add_context("cycle_length", len(cycle) - 1)
+                issue.add_context("cycle_files", cycle)
+                issue.add_context("cycle_description", cycle_description)
+                issue.add_context("dependency_type", "file_level")
+                
+                issues.append(issue)
+    
+    except Exception as e:
+        # Create an issue for analysis failure
+        issues.append(Issue(
+            type=IssueType.IMPLEMENTATION_ERROR,
+            category=IssueCategory.IMPLEMENTATION_ERROR,
+            severity=IssueSeverity.WARNING,
+            message=f"Failed to analyze circular dependencies: {str(e)}",
+            suggestion="Check codebase structure and dependencies"
+        ))
+    
+    return issues
+
+def analyze_inheritance_patterns(codebase) -> List[Issue]:
+    """
+    Analyze inheritance patterns and detect potential issues.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of inheritance-related issues
+    """
+    issues = []
+    
+    if not CODEGEN_SDK_AVAILABLE or not hasattr(codebase, 'classes'):
+        return issues
+    
+    try:
+        # Analyze each class
+        for cls in codebase.classes:
+            # Check for deep inheritance hierarchies
+            inheritance_depth = _calculate_inheritance_depth(cls)
+            if inheritance_depth > 5:  # Arbitrary threshold
+                location = CodeLocation(
+                    file_path=str(cls.file.path) if hasattr(cls, 'file') and hasattr(cls.file, 'path') else 'unknown',
+                    line_start=cls.line if hasattr(cls, 'line') else 1
+                )
+                
+                issue = Issue(
+                    type=IssueType.HIGH_COMPLEXITY,
+                    category=IssueCategory.CODE_QUALITY,
+                    severity=IssueSeverity.WARNING,
+                    message=f"Deep inheritance hierarchy detected in class '{cls.name}' (depth: {inheritance_depth})",
+                    location=location,
+                    item=cls,
+                    suggestion="Consider using composition instead of deep inheritance"
+                )
+                
+                issue.add_context("inheritance_depth", inheritance_depth)
+                issue.add_context("class_name", cls.name)
+                issue.add_context("inheritance_chain", _get_inheritance_chain(cls))
+                
+                issues.append(issue)
+            
+            # Check for multiple inheritance complexity
+            if hasattr(cls, 'parents') and len(cls.parents) > 2:
+                location = CodeLocation(
+                    file_path=str(cls.file.path) if hasattr(cls, 'file') and hasattr(cls.file, 'path') else 'unknown',
+                    line_start=cls.line if hasattr(cls, 'line') else 1
+                )
+                
+                issue = Issue(
+                    type=IssueType.HIGH_COMPLEXITY,
+                    category=IssueCategory.CODE_QUALITY,
+                    severity=IssueSeverity.INFO,
+                    message=f"Complex multiple inheritance in class '{cls.name}' ({len(cls.parents)} parents)",
+                    location=location,
+                    item=cls,
+                    suggestion="Consider simplifying the inheritance structure or using mixins"
+                )
+                
+                issue.add_context("parent_count", len(cls.parents))
+                issue.add_context("parent_classes", [p.name for p in cls.parents if hasattr(p, 'name')])
+                
+                issues.append(issue)
+            
+            # Check for unused inherited methods
+            unused_inherited = _find_unused_inherited_methods(cls)
+            if unused_inherited:
+                location = CodeLocation(
+                    file_path=str(cls.file.path) if hasattr(cls, 'file') and hasattr(cls.file, 'path') else 'unknown',
+                    line_start=cls.line if hasattr(cls, 'line') else 1
+                )
+                
+                issue = Issue(
+                    type=IssueType.UNUSED_FUNCTION,
+                    category=IssueCategory.DEAD_CODE,
+                    severity=IssueSeverity.INFO,
+                    message=f"Class '{cls.name}' inherits unused methods: {', '.join(unused_inherited)}",
+                    location=location,
+                    item=cls,
+                    suggestion="Consider removing unused inherited methods or documenting their purpose"
+                )
+                
+                issue.add_context("unused_methods", unused_inherited)
+                issue.add_context("inheritance_analysis", True)
+                
+                issues.append(issue)
+    
+    except Exception as e:
+        # Create an issue for analysis failure
+        issues.append(Issue(
+            type=IssueType.IMPLEMENTATION_ERROR,
+            category=IssueCategory.IMPLEMENTATION_ERROR,
+            severity=IssueSeverity.WARNING,
+            message=f"Failed to analyze inheritance patterns: {str(e)}",
+            suggestion="Check class definitions and inheritance structure"
+        ))
+    
+    return issues
+
+def analyze_complexity_patterns(codebase) -> List[Issue]:
+    """
+    Analyze complexity patterns and identify high-complexity code.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of complexity-related issues
+    """
+    issues = []
+    
+    if not CODEGEN_SDK_AVAILABLE or not hasattr(codebase, 'functions'):
+        return issues
+    
+    try:
+        context_collector = ContextCollector(codebase)
+        
+        # Analyze each function for complexity
+        for func in codebase.functions:
+            complexity_metrics = context_collector._calculate_complexity_metrics(func)
+            
+            # Check cyclomatic complexity
+            cyclomatic = complexity_metrics.get("cyclomatic_complexity", 0)
+            if cyclomatic > 10:  # Standard threshold
+                location = CodeLocation(
+                    file_path=str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                    line_start=func.line if hasattr(func, 'line') else 1
+                )
+                
+                severity = IssueSeverity.ERROR if cyclomatic > 20 else IssueSeverity.WARNING
+                
+                issue = Issue(
+                    type=IssueType.HIGH_COMPLEXITY,
+                    category=IssueCategory.PERFORMANCE_ISSUE,
+                    severity=severity,
+                    message=f"High cyclomatic complexity in function '{func.name}' (complexity: {cyclomatic})",
+                    location=location,
+                    item=func,
+                    suggestion="Consider breaking this function into smaller, more focused functions"
+                )
+                
+                issue.add_context("cyclomatic_complexity", cyclomatic)
+                issue.add_context("complexity_metrics", complexity_metrics)
+                issue.add_context("function_name", func.name)
+                
+                issues.append(issue)
+            
+            # Check function length
+            total_lines = complexity_metrics.get("total_lines", 0)
+            if total_lines > 50:  # Arbitrary threshold
+                location = CodeLocation(
+                    file_path=str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                    line_start=func.line if hasattr(func, 'line') else 1
+                )
+                
+                issue = Issue(
+                    type=IssueType.LONG_FUNCTION,
+                    category=IssueCategory.CODE_QUALITY,
+                    severity=IssueSeverity.WARNING,
+                    message=f"Long function '{func.name}' ({total_lines} lines)",
+                    location=location,
+                    item=func,
+                    suggestion="Consider breaking this long function into smaller, more focused functions"
+                )
+                
+                issue.add_context("total_lines", total_lines)
+                issue.add_context("code_lines", complexity_metrics.get("code_lines", 0))
+                issue.add_context("comment_lines", complexity_metrics.get("comment_lines", 0))
+                
+                issues.append(issue)
+            
+            # Check nesting depth
+            max_nesting = complexity_metrics.get("max_nesting_depth", 0)
+            if max_nesting > 4:  # Arbitrary threshold
+                location = CodeLocation(
+                    file_path=str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                    line_start=func.line if hasattr(func, 'line') else 1
+                )
+                
+                issue = Issue(
+                    type=IssueType.DEEP_NESTING,
+                    category=IssueCategory.CODE_QUALITY,
+                    severity=IssueSeverity.WARNING,
+                    message=f"Deep nesting in function '{func.name}' (depth: {max_nesting})",
+                    location=location,
+                    item=func,
+                    suggestion="Consider extracting nested logic into separate functions or using early returns"
+                )
+                
+                issue.add_context("max_nesting_depth", max_nesting)
+                issue.add_context("nesting_analysis", True)
+                
+                issues.append(issue)
+    
+    except Exception as e:
+        # Create an issue for analysis failure
+        issues.append(Issue(
+            type=IssueType.IMPLEMENTATION_ERROR,
+            category=IssueCategory.IMPLEMENTATION_ERROR,
+            severity=IssueSeverity.WARNING,
+            message=f"Failed to analyze complexity patterns: {str(e)}",
+            suggestion="Check function definitions and code structure"
+        ))
+    
+    return issues
+
+def analyze_performance_patterns(codebase) -> List[Issue]:
+    """
+    Analyze performance patterns and identify potential performance issues.
+    
+    Args:
+        codebase: The codebase to analyze
+        
+    Returns:
+        List of performance-related issues
+    """
+    issues = []
+    
+    if not CODEGEN_SDK_AVAILABLE or not hasattr(codebase, 'functions'):
+        return issues
+    
+    try:
+        # Analyze each function for performance patterns
+        for func in codebase.functions:
+            if not hasattr(func, 'source') or not func.source:
+                continue
+            
+            source_lower = func.source.lower()
+            
+            # Check for nested loops
+            if _has_nested_loops(func.source):
+                location = CodeLocation(
+                    file_path=str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                    line_start=func.line if hasattr(func, 'line') else 1
+                )
+                
+                issue = Issue(
+                    type=IssueType.INEFFICIENT_LOOP,
+                    category=IssueCategory.PERFORMANCE_ISSUE,
+                    severity=IssueSeverity.WARNING,
+                    message=f"Nested loops detected in function '{func.name}' - potential O(n²) complexity",
+                    location=location,
+                    item=func,
+                    suggestion="Consider optimizing the algorithm or using more efficient data structures"
+                )
+                
+                issue.add_context("performance_pattern", "nested_loops")
+                issue.add_context("complexity_estimate", "O(n²) or higher")
+                
+                issues.append(issue)
+            
+            # Check for inefficient string concatenation
+            if '+=' in func.source and 'str' in source_lower:
+                location = CodeLocation(
+                    file_path=str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                    line_start=func.line if hasattr(func, 'line') else 1
+                )
+                
+                issue = Issue(
+                    type=IssueType.INEFFICIENT_PATTERN,
+                    category=IssueCategory.PERFORMANCE_ISSUE,
+                    severity=IssueSeverity.INFO,
+                    message=f"Potential inefficient string concatenation in function '{func.name}'",
+                    location=location,
+                    item=func,
+                    suggestion="Consider using join() or f-strings for better performance"
+                )
+                
+                issue.add_context("performance_pattern", "string_concatenation")
+                issue.add_context("optimization_suggestion", "Use ''.join() or f-strings")
+                
+                issues.append(issue)
+            
+            # Check for repeated expensive operations
+            expensive_ops = ['re.compile', 'json.loads', 'pickle.loads', 'open(']
+            for op in expensive_ops:
+                if func.source.count(op) > 1:
+                    location = CodeLocation(
+                        file_path=str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                        line_start=func.line if hasattr(func, 'line') else 1
+                    )
+                    
+                    issue = Issue(
+                        type=IssueType.UNNECESSARY_COMPUTATION,
+                        category=IssueCategory.PERFORMANCE_ISSUE,
+                        severity=IssueSeverity.INFO,
+                        message=f"Repeated expensive operation '{op}' in function '{func.name}' ({func.source.count(op)} times)",
+                        location=location,
+                        item=func,
+                        suggestion=f"Consider caching the result of '{op}' or moving it outside the function"
+                    )
+                    
+                    issue.add_context("expensive_operation", op)
+                    issue.add_context("occurrence_count", func.source.count(op))
+                    
+                    issues.append(issue)
+    
+    except Exception as e:
+        # Create an issue for analysis failure
+        issues.append(Issue(
+            type=IssueType.IMPLEMENTATION_ERROR,
+            category=IssueCategory.IMPLEMENTATION_ERROR,
+            severity=IssueSeverity.WARNING,
+            message=f"Failed to analyze performance patterns: {str(e)}",
+            suggestion="Check function definitions and performance patterns"
+        ))
+    
+    return issues
+
+# Helper functions for advanced analysis
+
+def _calculate_inheritance_depth(cls) -> int:
+    """Calculate the inheritance depth of a class."""
+    try:
+        if not hasattr(cls, 'parents') or not cls.parents:
+            return 0
+        
+        max_depth = 0
+        for parent in cls.parents:
+            parent_depth = _calculate_inheritance_depth(parent)
+            max_depth = max(max_depth, parent_depth)
+        
+        return max_depth + 1
+    except:
+        return 0
+
+def _get_inheritance_chain(cls) -> List[str]:
+    """Get the inheritance chain for a class."""
+    try:
+        chain = [cls.name]
+        if hasattr(cls, 'parents') and cls.parents:
+            for parent in cls.parents:
+                parent_chain = _get_inheritance_chain(parent)
+                chain.extend(parent_chain)
+        return chain
+    except:
+        return [cls.name if hasattr(cls, 'name') else 'unknown']
+
+def _find_unused_inherited_methods(cls) -> List[str]:
+    """Find inherited methods that are not used."""
+    try:
+        unused = []
+        if hasattr(cls, 'parents') and cls.parents:
+            for parent in cls.parents:
+                if hasattr(parent, 'methods'):
+                    for method in parent.methods:
+                        if hasattr(method, 'usages') and len(method.usages) == 0:
+                            unused.append(method.name)
+        return unused
+    except:
+        return []
+
+def _has_nested_loops(source: str) -> bool:
+    """Check if the source code has nested loops."""
+    try:
+        lines = source.split('\n')
+        loop_keywords = ['for ', 'while ']
+        
+        in_loop = False
+        loop_indent = 0
+        
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            
+            current_indent = len(line) - len(line.lstrip())
+            
+            # Check if this line starts a loop
+            if any(keyword in stripped for keyword in loop_keywords):
+                if in_loop and current_indent > loop_indent:
+                    return True  # Found nested loop
+                in_loop = True
+                loop_indent = current_indent
+            elif current_indent <= loop_indent and in_loop:
+                in_loop = False
+        
+        return False
+    except:
+        return False
+
+# ====================================================================
 # UTILITY FUNCTIONS
 # ====================================================================
 
@@ -1080,6 +2157,11 @@ class ComprehensiveCodebaseAnalyzer:
             ("Detecting implementation errors", self._detect_implementation_errors),
             ("Detecting security vulnerabilities", self._detect_security_vulnerabilities),
             ("Analyzing code quality", self._analyze_code_quality),
+            # Advanced analysis capabilities
+            ("Detecting advanced circular dependencies", self._detect_circular_dependencies_advanced),
+            ("Analyzing inheritance patterns", self._analyze_inheritance_patterns),
+            ("Analyzing complexity patterns", self._analyze_complexity_patterns),
+            ("Analyzing performance patterns", self._analyze_performance_patterns),
         ]
         
         for step_name, step_func in analysis_steps:
@@ -1541,6 +2623,42 @@ class ComprehensiveCodebaseAnalyzer:
             
         except Exception as e:
             print(f"Error in code quality analysis: {e}")
+    
+    def _detect_circular_dependencies_advanced(self):
+        """Wrapper method for advanced circular dependency detection."""
+        try:
+            circular_issues = detect_circular_dependencies_advanced(self.codebase)
+            self.issues.extend(circular_issues)
+            print(f"Found {len(circular_issues)} circular dependency issues")
+        except Exception as e:
+            print(f"Error in advanced circular dependency detection: {e}")
+    
+    def _analyze_inheritance_patterns(self):
+        """Wrapper method for inheritance pattern analysis."""
+        try:
+            inheritance_issues = analyze_inheritance_patterns(self.codebase)
+            self.issues.extend(inheritance_issues)
+            print(f"Found {len(inheritance_issues)} inheritance pattern issues")
+        except Exception as e:
+            print(f"Error in inheritance pattern analysis: {e}")
+    
+    def _analyze_complexity_patterns(self):
+        """Wrapper method for complexity pattern analysis."""
+        try:
+            complexity_issues = analyze_complexity_patterns(self.codebase)
+            self.issues.extend(complexity_issues)
+            print(f"Found {len(complexity_issues)} complexity pattern issues")
+        except Exception as e:
+            print(f"Error in complexity pattern analysis: {e}")
+    
+    def _analyze_performance_patterns(self):
+        """Wrapper method for performance pattern analysis."""
+        try:
+            performance_issues = analyze_performance_patterns(self.codebase)
+            self.issues.extend(performance_issues)
+            print(f"Found {len(performance_issues)} performance pattern issues")
+        except Exception as e:
+            print(f"Error in performance pattern analysis: {e}")
     
     def _generate_comprehensive_report(self):
         """Generate the final comprehensive analysis report."""
