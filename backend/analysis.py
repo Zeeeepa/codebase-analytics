@@ -2162,6 +2162,8 @@ class ComprehensiveCodebaseAnalyzer:
             ("Analyzing inheritance patterns", self._analyze_inheritance_patterns),
             ("Analyzing complexity patterns", self._analyze_complexity_patterns),
             ("Analyzing performance patterns", self._analyze_performance_patterns),
+            # Integration and optimization
+            ("Integrating performance optimization", self._integrate_performance_optimization),
         ]
         
         for step_name, step_func in analysis_steps:
@@ -2660,6 +2662,26 @@ class ComprehensiveCodebaseAnalyzer:
         except Exception as e:
             print(f"Error in performance pattern analysis: {e}")
     
+    def _integrate_performance_optimization(self):
+        """Integrate performance optimization features."""
+        try:
+            from performance_optimization import get_optimization_report, _performance_monitor
+            
+            # Get performance report
+            perf_report = get_optimization_report()
+            
+            # Add performance data to context
+            self.performance_data = perf_report
+            
+            print(f"Performance optimization integrated - {len(perf_report.get('performance', {}).get('bottlenecks', []))} bottlenecks identified")
+            
+        except ImportError:
+            print("Performance optimization module not available")
+            self.performance_data = {}
+        except Exception as e:
+            print(f"Error integrating performance optimization: {e}")
+            self.performance_data = {}
+    
     def _generate_comprehensive_report(self):
         """Generate the final comprehensive analysis report."""
         duration = time.time() - self.start_time
@@ -2681,7 +2703,8 @@ class ComprehensiveCodebaseAnalyzer:
         # Generate summaries using SDK functions
         summaries = self._generate_summaries()
         
-        return {
+        # Create basic analysis results
+        basic_results = {
             "success": True,
             "timestamp": datetime.now().isoformat(),
             "duration": duration,
@@ -2709,6 +2732,35 @@ class ComprehensiveCodebaseAnalyzer:
             "call_graph_metrics": self._calculate_call_graph_metrics(),
             "summaries": summaries
         }
+        
+        # Generate enhanced report with actionable insights
+        try:
+            from enhanced_reporting import generate_enhanced_report
+            
+            enhanced_report = generate_enhanced_report(
+                basic_results, 
+                self.issues, 
+                getattr(self, 'performance_data', {}),
+                export_html=True
+            )
+            
+            # Merge enhanced features into basic results
+            basic_results.update({
+                "enhanced_report": enhanced_report,
+                "actionable_insights": enhanced_report.get("actionable_insights", []),
+                "trend_analysis": enhanced_report.get("trend_analysis", []),
+                "executive_summary": enhanced_report.get("executive_summary", {}),
+                "recommendations": enhanced_report.get("recommendations", {})
+            })
+            
+            print(f"Enhanced reporting generated with {len(enhanced_report.get('actionable_insights', []))} actionable insights")
+            
+        except ImportError:
+            print("Enhanced reporting module not available")
+        except Exception as e:
+            print(f"Error generating enhanced report: {e}")
+        
+        return basic_results
     
     def _find_most_important_functions(self):
         """Find most important functions using SDK data."""

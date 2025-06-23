@@ -1,0 +1,52 @@
+{
+  "test_metadata": {
+    "timestamp": "2025-06-23T06:52:45.850539",
+    "duration": 0.1,
+    "repository": "codebase-analytics",
+    "test_type": "enhanced_analysis_validation"
+  },
+  "analysis_results": {
+    "success": true,
+    "mode": "fallback",
+    "summary": {
+      "total_issues": 3,
+      "critical_issues": 1,
+      "error_issues": 1,
+      "warning_issues": 1,
+      "info_issues": 0,
+      "dead_code_items": 0
+    },
+    "issues": {
+      "by_severity": {
+        "critical": 1,
+        "error": 1,
+        "warning": 1,
+        "info": 0
+      },
+      "by_type": {
+        "unreachable_code": 1,
+        "dangerous_function_usage": 1,
+        "high_complexity": 1
+      },
+      "all": [
+        "[ERROR] unreachable_code: Test unreachable code detection (backend/analysis.py:100-105) - Suggestion: Remove unreachable code",
+        "[CRITICAL] dangerous_function_usage: Test security vulnerability detection (backend/api.py:50) - Suggestion: Replace with safer alternative",
+        "[WARNING] high_complexity: Test complexity detection (backend/comprehensive_analysis.py:200) - Suggestion: Break into smaller functions"
+      ]
+    },
+    "architecture_tests": {
+      "issue_creation": true,
+      "issue_collection": true,
+      "filtering": true,
+      "serialization": true,
+      "error_detection_functions": true,
+      "context_collection": true
+    }
+  },
+  "test_summary": {
+    "total_issues": 3,
+    "analysis_successful": true,
+    "duration_seconds": 0.1,
+    "performance_rating": "excellent"
+  }
+}
