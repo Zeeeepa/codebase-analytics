@@ -41,11 +41,33 @@ try:
     from codegen.sdk.core.external_module import ExternalModule
     from codegen.sdk.enums import EdgeType, SymbolType, NodeType
     from codegen.sdk.core.interfaces.editable import Editable
+    
+    # Import functions from Codegen SDK modules
+    from codegen.sdk.codebase.codebase_analysis import (
+        get_codebase_summary,
+        get_file_summary,
+        get_class_summary,
+        get_function_summary,
+        get_symbol_summary
+    )
+    from codegen.sdk.codebase.codebase_context import (
+        CodebaseContext,
+        get_function_context as sdk_get_function_context
+    )
+    from codegen.sdk.codebase.codebase_ai import (
+        generate_system_prompt,
+        generate_flag_system_prompt,
+        generate_context,
+        generate_tools,
+        generate_flag_tools
+    )
+    
     CODEGEN_SDK_AVAILABLE = True
 except ImportError as e:
     print(f"Warning: Codegen SDK not available: {e}")
     print("Falling back to basic analysis without SDK features")
     CODEGEN_SDK_AVAILABLE = False
+    
     # Define minimal classes for fallback
     class Codebase: pass
     class SourceFile: pass
@@ -55,6 +77,20 @@ except ImportError as e:
     class Import: pass
     class ExternalModule: pass
     class Editable: pass
+    class CodebaseContext: pass
+    
+    # Define fallback functions
+    def get_codebase_summary(codebase): return "Codebase summary not available (SDK not loaded)"
+    def get_file_summary(file): return "File summary not available (SDK not loaded)"
+    def get_class_summary(cls): return "Class summary not available (SDK not loaded)"
+    def get_function_summary(func): return "Function summary not available (SDK not loaded)"
+    def get_symbol_summary(symbol): return "Symbol summary not available (SDK not loaded)"
+    def sdk_get_function_context(function): return {"error": "Codegen SDK not available"}
+    def generate_system_prompt(target=None, context=None): return "System prompt generation not available (SDK not loaded)"
+    def generate_flag_system_prompt(target, context=None): return "Flag system prompt generation not available (SDK not loaded)"
+    def generate_context(context=None): return "Context generation not available (SDK not loaded)"
+    def generate_tools(): return []
+    def generate_flag_tools(): return []
 
 # Issue and severity definitions
 class IssueSeverity(Enum):
@@ -184,285 +220,12 @@ class FunctionContext:
             self.halstead_metrics = {}
 
 # ====================================================================
-# CODEGEN SDK ANALYSIS FUNCTIONS (from codebase_analysis.py)
+# CODEGEN SDK FUNCTIONS - Now imported directly from SDK modules
 # ====================================================================
-
-def get_codebase_summary(codebase: Codebase) -> str:
-    """Generate a comprehensive summary of the codebase structure."""
-    if not CODEGEN_SDK_AVAILABLE or not hasattr(codebase, 'ctx'):
-        return "Codebase summary not available (SDK not loaded)"
-    
-    try:
-        node_summary = f"""Contains {len(codebase.ctx.get_nodes())} nodes
-- {len(list(codebase.files))} files
-- {len(list(codebase.imports))} imports
-- {len(list(codebase.external_modules))} external_modules
-- {len(list(codebase.symbols))} symbols
-\t- {len(list(codebase.classes))} classes
-\t- {len(list(codebase.functions))} functions
-\t- {len(list(codebase.global_vars))} global_vars
-\t- {len(list(codebase.interfaces))} interfaces
-"""
-        edge_summary = f"""Contains {len(codebase.ctx.edges)} edges
-- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.SYMBOL_USAGE])} symbol -> used symbol
-- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.IMPORT_SYMBOL_RESOLUTION])} import -> used symbol
-- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.EXPORT])} export -> exported symbol
-    """
-        return f"{node_summary}\n{edge_summary}"
-    except Exception as e:
-        return f"Error generating codebase summary: {str(e)}"
-
-def get_file_summary(file: SourceFile) -> str:
-    """Generate a summary of a source file's dependencies and usage."""
-    if not CODEGEN_SDK_AVAILABLE:
-        return "File summary not available (SDK not loaded)"
-    
-    try:
-        return f"""==== [ `{file.name}` (SourceFile) Dependency Summary ] ====
-- {len(file.imports)} imports
-- {len(file.symbols)} symbol references
-\t- {len(file.classes)} classes
-\t- {len(file.functions)} functions
-\t- {len(file.global_vars)} global variables
-\t- {len(file.interfaces)} interfaces
-
-==== [ `{file.name}` Usage Summary ] ====
-- {len(file.imports)} importers
-"""
-    except Exception as e:
-        return f"Error generating file summary: {str(e)}"
-
-def get_class_summary(cls: Class) -> str:
-    """Generate a summary of a class's dependencies and usage."""
-    if not CODEGEN_SDK_AVAILABLE:
-        return "Class summary not available (SDK not loaded)"
-    
-    try:
-        return f"""==== [ `{cls.name}` (Class) Dependency Summary ] ====
-- parent classes: {cls.parent_class_names}
-- {len(cls.methods)} methods
-- {len(cls.attributes)} attributes
-- {len(cls.decorators)} decorators
-- {len(cls.dependencies)} dependencies
-
-{get_symbol_summary(cls)}
-    """
-    except Exception as e:
-        return f"Error generating class summary: {str(e)}"
-
-def get_function_summary(func: Function) -> str:
-    """Generate a summary of a function's dependencies and usage."""
-    if not CODEGEN_SDK_AVAILABLE:
-        return "Function summary not available (SDK not loaded)"
-    
-    try:
-        return f"""==== [ `{func.name}` (Function) Dependency Summary ] ====
-- {len(func.return_statements)} return statements
-- {len(func.parameters)} parameters
-- {len(func.function_calls)} function calls
-- {len(func.call_sites)} call sites
-- {len(func.decorators)} decorators
-- {len(func.dependencies)} dependencies
-
-{get_symbol_summary(func)}
-        """
-    except Exception as e:
-        return f"Error generating function summary: {str(e)}"
-
-def get_symbol_summary(symbol: Symbol) -> str:
-    """Generate a summary of a symbol's usage across the codebase."""
-    if not CODEGEN_SDK_AVAILABLE:
-        return "Symbol summary not available (SDK not loaded)"
-    
-    try:
-        usages = symbol.symbol_usages
-        imported_symbols = [x.imported_symbol for x in usages if isinstance(x, Import)]
-
-        return f"""==== [ `{symbol.name}` ({type(symbol).__name__}) Usage Summary ] ====
-- {len(usages)} usages
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function])} functions
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class])} classes
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar])} global variables
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])} interfaces
-\t- {len(imported_symbols)} imports
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function])} functions
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class])} classes
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar])} global variables
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])} interfaces
-\t\t- {len([x for x in imported_symbols if isinstance(x, ExternalModule)])} external modules
-\t\t- {len([x for x in imported_symbols if isinstance(x, SourceFile)])} files
-    """
-    except Exception as e:
-        return f"Error generating symbol summary: {str(e)}"
-
-# ====================================================================
-# AI PROMPT GENERATION FUNCTIONS (from codebase_ai.py)
-# ====================================================================
-
-def generate_system_prompt(target: Editable = None, context: Union[None, str, Editable, List[Editable], Dict[str, Union[str, Editable, List[Editable]]]] = None) -> str:
-    """Generate a system prompt for AI-powered code analysis and modification."""
-    prompt = """Hey CodegenBot!
-You are an incredibly precise and thoughtful AI who helps developers accomplish complex transformations on their codebase.
-You always provide clear, concise, and accurate responses.
-When dealing with code, you maintain the original structure and style unless explicitly asked to change it.
-"""
-    if target:
-        prompt += f"""
-The user has just requested a response on the following code snippet:
-
-[[[CODE SNIPPET BEGIN]]]
-{target.extended_source}
-[[[CODE SNIPPET END]]]
-
-Your job is to follow the instructions of the user, given the context provided.
-"""
-    else:
-        prompt += """
-Your job is to follow the instructions of the user.
-"""
-
-    if context:
-        prompt += """
-The user has provided some additional context that you can use to assist with your response.
-You may use this context to inform your answer, but you're not required to directly include it in your response.
-
-Here is the additional context:
-"""
-        prompt += generate_context(context)
-
-    prompt += """
-Please ensure your response is accurate and relevant to the user's request. You may think out loud in the response.
-
-Generally, when responding with an answer, try to follow these general "ground rules":
-Remember, these are just rules you should follow by default. If the user explicitly asks for something else, you should follow their instructions instead.
-
-> When generating new code or new classes, such as "create me a new function that does XYZ" or "generate a helper function that does XYZ", try to:
-
-- Do not include extra indentation that is not necessary, unless the user explicitly asks for something else.
-- Include as much information as possible. Do not write things like "# the rest of the class" or "# the rest of the method", unless the user explicitly asks for something else.
-- Do try to include comments and well-documented code, unless the user explicitly asks for something else.
-- Only return the NEW code without re-iterating any existing code that the user has provided to you, unless the user explicitly asks for something else.
-- Do not include any code that the user has explicitly asked you to remove, unless the user explicitly asks for something else.
-
-> When changing existing code, such as "change this method to do XYZ" or "update this function to do XYZ" or "remove all instances of XYZ from this class", try to:
-
-- Do not include extra indentation that is not necessary, unless the user explicitly asks for something else.
-- Include the entire context of the code that the user has provided to you, unless the user explicitly asks for something else.
-- Include as much information as possible. Do not write things like "# the rest of the class" or "# the rest of the method", unless the user explicitly asks for something else.
-- Do try to include comments and well-documented code, unless the user explicitly asks for something else.
-- Avoid editing existing code that does not need editing, unless the user explicitly asks for something else.
-- When asked to modify a very small or trivial part of the code, try to only modify the part that the user has asked you to modify, unless the user explicitly asks for something else.
-- If asked to make improvements, try not to change existing function signatures, decorators, or returns, unless the user explicitly asks for something else.
-
-REMEMBER: When giving the final answer, you must use the set_answer tool to provide the final answer that will be used in subsequent operations such as writing to a file, renaming, or editing.
-    """
-
-    return prompt
-
-def generate_flag_system_prompt(target: Editable, context: Union[None, str, Editable, List[Editable], Dict[str, Union[str, Editable, List[Editable]]]] = None) -> str:
-    """Generate a system prompt for AI-powered flagging decisions."""
-    prompt = f"""Hey CodegenBot!
-You are an incredibly precise and thoughtful AI who helps developers accomplish complex transformations on their codebase.
-
-You are now tasked with determining whether to flag the symbol, file, attribute, or message using AI.
-Flagging a symbol means to mark it as a chunk of code that should be modified in a later step.
-You will be given the user prompt, and the code snippet that the user is requesting a response on.
-Use the should_flag tool to return either a true or false answer to the question of whether to flag the symbol, file, attribute, or message.
-
-Here is the code snippet that the user is requesting a response on:
-
-[[[CODE SNIPPET BEGIN]]]
-{target.extended_source}
-[[[CODE SNIPPET END]]]
-"""
-
-    if context:
-        prompt += """
-The user has provided some additional context that you can use to assist with your response.
-You may use this context to inform your answer, but you're not required to directly include it in your response.
-
-Here is the additional context:
-"""
-        prompt += generate_context(context)
-
-    prompt += """
-Please intelligently determine whether the user's request on the given code snippet should be flagged.
-Remember, use the should_flag tool to return either a true or false answer to the question of whether to flag the symbol, file, attribute, or message
-as a chunk of code that should be modified, edited, or changed in a later step.
-    """
-
-    return prompt
-
-def generate_context(context: Union[None, str, Editable, List[Union[Editable, File]], Dict[str, Union[str, Editable, List[Editable], File]], File] = None) -> str:
-    """Generate context string from various input types."""
-    output = ""
-    if not context:
-        return output
-    else:
-        if isinstance(context, str):
-            output += f"====== Context ======\n{context}\n====================\n\n"
-        elif isinstance(context, Editable):
-            # Get class name
-            output += f"====== {context.__class__.__name__} ======\n"
-            output += f"{context.extended_source}\n"
-            output += "====================\n\n"
-        elif isinstance(context, File):
-            output += f"====== {context.__class__.__name__}======\n"
-            output += f"{context.source}\n"
-            output += "====================\n\n"
-        elif isinstance(context, list):
-            for item in context:
-                output += generate_context(item)
-        elif isinstance(context, dict):
-            for key, value in context.items():
-                output += f"[[[ {key} ]]]\n"
-                output += generate_context(value)
-                output += "\n\n"
-        return output
-
-def generate_tools() -> list:
-    """Generate tool definitions for AI interactions."""
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": "set_answer",
-                "description": "Use this function to set the final answer to the given prompt. This answer will be used in subsequent operations such as writing to a file, renaming, or editing.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "answer": {
-                            "type": "string",
-                            "description": "The final answer to the given prompt. Do not include any unnecessary context or commentary in your response.",
-                        },
-                    },
-                    "required": ["answer"],
-                },
-            },
-        }
-    ]
-
-def generate_flag_tools() -> list:
-    """Generate tool definitions for AI flagging decisions."""
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": "should_flag",
-                "description": "Use this function to determine whether to flag the symbol, file, attribute, or message using AI.",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "flag": {
-                            "type": "boolean",
-                            "description": "Whether to flag the symbol, file, attribute, or message.",
-                        },
-                    },
-                    "required": ["flag"],
-                },
-            },
-        }
-    ]
+# Functions are imported from:
+# - codegen.sdk.codebase.codebase_analysis: get_codebase_summary, get_file_summary, etc.
+# - codegen.sdk.codebase.codebase_context: CodebaseContext, sdk_get_function_context
+# - codegen.sdk.codebase.codebase_ai: generate_system_prompt, generate_tools, etc.
 
 # ====================================================================
 # UTILITY FUNCTIONS
@@ -470,32 +233,8 @@ def generate_flag_tools() -> list:
 
 def get_function_context(function) -> dict:
     """Get the implementation, dependencies, and usages of a function using Codegen SDK."""
-    if not CODEGEN_SDK_AVAILABLE:
-        return {"error": "Codegen SDK not available"}
-    
-    context = {
-        "implementation": {"source": function.source, "filepath": function.filepath},
-        "dependencies": [],
-        "usages": [],
-    }
-    
-    try:
-        # Add dependencies using SDK's pre-computed relationships
-        for dep in function.dependencies:
-            if hasattr(dep, 'source') and hasattr(dep, 'filepath'):
-                context["dependencies"].append({"source": dep.source, "filepath": dep.filepath})
-        
-        # Add usages using SDK's pre-computed relationships
-        for usage in function.usages:
-            if hasattr(usage, 'usage_symbol'):
-                context["usages"].append({
-                    "source": usage.usage_symbol.source,
-                    "filepath": usage.usage_symbol.filepath,
-                })
-    except Exception as e:
-        context["error"] = f"Error getting function context: {str(e)}"
-    
-    return context
+    # Use the imported SDK function
+    return sdk_get_function_context(function)
 
 def get_max_call_chain(function):
     """Calculate maximum call chain for a function using NetworkX."""
