@@ -16,7 +16,14 @@ import threading
 import time
 
 # Import our consolidated analysis module
-from analysis import analyze_codebase, get_function_context, get_issue_context, AnalysisResult
+from analysis import (
+    analyze_codebase, 
+    get_function_context, 
+    get_issue_context, 
+    get_symbol_context,
+    get_interactive_symbol_data,
+    AnalysisResult
+)
 
 app = Flask(__name__)
 CORS(app)
@@ -270,6 +277,69 @@ def get_entry_points(repo_path: str):
     except Exception as e:
         logger.error(f"Error getting entry points for {repo_path}: {str(e)}")
         return jsonify({"error": f"Failed to get entry points: {str(e)}"}), 500
+
+@app.route('/symbols/<path:repo_path>', methods=['GET'])
+def get_interactive_symbols(repo_path: str):
+    """
+    Get interactive symbol data for symbol selection
+    Returns: All symbols with metadata for interactive selection
+    """
+    try:
+        cache_key = f"analysis:{repo_path}"
+        
+        if cache_key not in analysis_cache or not is_cache_valid(cache_key):
+            analysis_result = analyze_codebase(repo_path)
+        else:
+            cached_data = analysis_cache[cache_key]
+            analysis_result = _reconstruct_analysis_result(cached_data)
+        
+        # Get interactive symbol data
+        symbol_data = get_interactive_symbol_data(analysis_result)
+        
+        return jsonify({
+            "status": "success",
+            **symbol_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting symbols for {repo_path}: {str(e)}")
+        return jsonify({"error": f"Failed to get symbols: {str(e)}"}), 500
+
+@app.route('/symbol-context/<path:repo_path>/<symbol_name>', methods=['GET'])
+def get_symbol_context_endpoint(repo_path: str, symbol_name: str):
+    """
+    Get comprehensive context for a specific symbol (interactive selection)
+    Returns: Complete symbol context with relationships and issues
+    """
+    try:
+        cache_key = f"analysis:{repo_path}"
+        
+        if cache_key not in analysis_cache or not is_cache_valid(cache_key):
+            analysis_result = analyze_codebase(repo_path)
+        else:
+            cached_data = analysis_cache[cache_key]
+            analysis_result = _reconstruct_analysis_result(cached_data)
+        
+        # Get optional file path filter
+        file_path = request.args.get('file_path')
+        
+        # Get symbol context
+        context = get_symbol_context(analysis_result, symbol_name, file_path)
+        
+        if context:
+            return jsonify({
+                "status": "success",
+                "symbol_context": context
+            })
+        else:
+            return jsonify({
+                "status": "not_found",
+                "message": f"Symbol '{symbol_name}' not found"
+            }), 404
+        
+    except Exception as e:
+        logger.error(f"Error getting symbol context for {symbol_name} in {repo_path}: {str(e)}")
+        return jsonify({"error": f"Failed to get symbol context: {str(e)}"}), 500
 
 @app.route('/visualize/<path:repo_path>', methods=['GET'])
 def get_visualization_data(repo_path: str):

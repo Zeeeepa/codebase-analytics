@@ -31,7 +31,7 @@ except ImportError:
     TREE_SITTER_AVAILABLE = False
     logging.warning("tree-sitter not available, falling back to AST parsing")
 
-# Codegen SDK integration
+# Codegen SDK integration (Graph-sitter = Codegen as per requirements)
 try:
     from codegen.sdk.core.codebase import Codebase
     from codegen.sdk.core.file import SourceFile
@@ -45,6 +45,20 @@ try:
 except ImportError:
     CODEGEN_SDK_AVAILABLE = False
     logging.warning("Codegen SDK not available, using fallback analysis")
+
+# Import comprehensive analysis functions
+try:
+    from codegen_on_oss.analyzers.codebase_analysis import (
+        get_codebase_summary,
+        get_file_summary,
+        get_class_summary,
+        get_function_summary,
+        get_symbol_summary
+    )
+    COMPREHENSIVE_ANALYSIS_AVAILABLE = True
+except ImportError:
+    COMPREHENSIVE_ANALYSIS_AVAILABLE = False
+    logging.warning("Comprehensive analysis functions not available")
 
 class IssueSeverity(Enum):
     CRITICAL = "critical"
@@ -90,6 +104,16 @@ class IssueType(Enum):
     MEMORY_LEAK = "memory_leak"
     RACE_CONDITION = "race_condition"
     DEADLOCK = "deadlock"
+    
+    # Comprehensive Analysis Issues (from comprehensive_analysis.py)
+    UNUSED_FUNCTION = "unused_function"
+    UNUSED_CLASS = "unused_class"
+    UNUSED_IMPORT = "unused_import"
+    PARAMETER_MISMATCH = "parameter_mismatch"
+    MISSING_TYPE_ANNOTATION = "missing_type_annotation"
+    CIRCULAR_DEPENDENCY = "circular_dependency"
+    IMPLEMENTATION_ERROR = "implementation_error"
+    EMPTY_FUNCTION = "empty_function"
 
 @dataclass
 class CodeIssue:
@@ -189,7 +213,10 @@ class GraphSitterAnalyzer:
         self.parsers = {}
         self.dependency_graph = nx.DiGraph()
         self.symbol_table = {}
+        self.codegen_codebase = None  # For comprehensive analysis
+        self.comprehensive_issues = []
         self.setup_parsers()
+        self.setup_codegen_integration()
     
     def setup_parsers(self):
         """Setup tree-sitter parsers for supported languages"""
@@ -215,6 +242,20 @@ class GraphSitterAnalyzer:
                 self.parsers[lang] = config
             except Exception as e:
                 logging.warning(f"Could not load {lang} parser: {e}")
+    
+    def setup_codegen_integration(self):
+        """Setup Codegen SDK integration for comprehensive analysis"""
+        if CODEGEN_SDK_AVAILABLE:
+            try:
+                # Initialize Codegen codebase for comprehensive analysis
+                if self.repo_path.exists():
+                    self.codegen_codebase = Codebase(str(self.repo_path))
+                    logging.info("Codegen SDK integration initialized successfully")
+                else:
+                    logging.warning(f"Repository path {self.repo_path} does not exist")
+            except Exception as e:
+                logging.warning(f"Could not initialize Codegen SDK: {e}")
+                self.codegen_codebase = None
     
     def analyze_codebase(self) -> AnalysisResult:
         """Perform comprehensive codebase analysis"""
@@ -246,6 +287,16 @@ class GraphSitterAnalyzer:
         # Build dependency relationships
         self._build_dependency_graph(all_functions)
         
+        # Run comprehensive analysis using Codegen SDK
+        if self.codegen_codebase:
+            comprehensive_analysis = self._run_comprehensive_analysis()
+            all_issues.extend(comprehensive_analysis['issues'])
+            # Enhance functions with comprehensive data
+            all_functions = self._enhance_functions_with_comprehensive_data(all_functions, comprehensive_analysis)
+        
+        # Ensure ALL functions are captured (not just samples)
+        all_functions = self._ensure_all_functions_captured(all_functions)
+        
         # Identify most important functions based on complexity and usage
         important_functions = self._identify_important_functions(all_functions)
         
@@ -266,6 +317,266 @@ class GraphSitterAnalyzer:
         
         logging.info(f"Analysis complete: {len(important_functions)} functions, {len(all_entry_points)} entry points, {len(all_issues)} issues")
         return result
+    
+    def _run_comprehensive_analysis(self) -> Dict[str, Any]:
+        """Run comprehensive analysis using Codegen SDK"""
+        issues = []
+        
+        try:
+            # Analyze dead code (unused functions, classes, imports)
+            issues.extend(self._analyze_dead_code())
+            
+            # Analyze parameter issues
+            issues.extend(self._analyze_parameter_issues())
+            
+            # Analyze type annotations
+            issues.extend(self._analyze_type_annotations())
+            
+            # Analyze circular dependencies
+            issues.extend(self._analyze_circular_dependencies())
+            
+            # Analyze implementation issues
+            issues.extend(self._analyze_implementation_issues())
+            
+        except Exception as e:
+            logging.error(f"Error in comprehensive analysis: {e}")
+            issues.append(CodeIssue(
+                type=IssueType.IMPLEMENTATION_ERROR,
+                severity=IssueSeverity.CRITICAL,
+                message=f"Comprehensive analysis failed: {e}",
+                file_path=str(self.repo_path),
+                line_number=1
+            ))
+        
+        return {
+            'issues': issues,
+            'functions': list(self.codegen_codebase.functions) if self.codegen_codebase else [],
+            'classes': list(self.codegen_codebase.classes) if self.codegen_codebase else [],
+            'files': list(self.codegen_codebase.files) if self.codegen_codebase else []
+        }
+    
+    def _analyze_dead_code(self) -> List[CodeIssue]:
+        """Find and return unused code issues"""
+        issues = []
+        
+        if not self.codegen_codebase:
+            return issues
+        
+        # Find unused functions
+        for func in self.codegen_codebase.functions:
+            if not func.usages:
+                issues.append(CodeIssue(
+                    type=IssueType.UNUSED_FUNCTION,
+                    severity=IssueSeverity.MINOR,
+                    message=f"Unused function: {func.name}",
+                    file_path=func.file.path if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                    line_number=getattr(func, 'line', 1),
+                    suggestion="Consider removing this unused function or documenting why it's needed"
+                ))
+        
+        # Find unused classes
+        for cls in self.codegen_codebase.classes:
+            if not cls.usages:
+                issues.append(CodeIssue(
+                    type=IssueType.UNUSED_CLASS,
+                    severity=IssueSeverity.MINOR,
+                    message=f"Unused class: {cls.name}",
+                    file_path=cls.file.path if hasattr(cls, 'file') and hasattr(cls.file, 'path') else 'unknown',
+                    line_number=getattr(cls, 'line', 1),
+                    suggestion="Consider removing this unused class or documenting why it's needed"
+                ))
+        
+        # Find unused imports
+        for file in self.codegen_codebase.files:
+            for imp in file.imports:
+                if not imp.usages:
+                    issues.append(CodeIssue(
+                        type=IssueType.UNUSED_IMPORT,
+                        severity=IssueSeverity.INFO,
+                        message=f"Unused import: {imp.source if hasattr(imp, 'source') else str(imp)}",
+                        file_path=file.path if hasattr(file, 'path') else 'unknown',
+                        line_number=getattr(imp, 'line', 1),
+                        suggestion="Remove this unused import"
+                    ))
+        
+        return issues
+    
+    def _analyze_parameter_issues(self) -> List[CodeIssue]:
+        """Find and return parameter issues"""
+        issues = []
+        
+        if not self.codegen_codebase:
+            return issues
+        
+        for func in self.codegen_codebase.functions:
+            # Check for unused parameters
+            for param in func.parameters:
+                # Skip 'self' in methods
+                if param.name == 'self' and func.is_method:
+                    continue
+                    
+                # Check if parameter is used in function body
+                param_dependencies = [dep.name for dep in func.dependencies if hasattr(dep, 'name')]
+                if param.name not in param_dependencies:
+                    issues.append(CodeIssue(
+                        type=IssueType.UNUSED_PARAMETER,
+                        severity=IssueSeverity.INFO,
+                        message=f"Function '{func.name}' has unused parameter: {param.name}",
+                        file_path=func.file.path if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                        line_number=getattr(func, 'line', 1),
+                        suggestion=f"Consider removing the unused parameter '{param.name}' if it's not needed"
+                    ))
+        
+        return issues
+    
+    def _analyze_type_annotations(self) -> List[CodeIssue]:
+        """Find and return missing type annotation issues"""
+        issues = []
+        
+        if not self.codegen_codebase:
+            return issues
+        
+        for func in self.codegen_codebase.functions:
+            # Skip if function is in a type-annotated file
+            file_path = str(func.file.path) if hasattr(func, 'file') and hasattr(func.file, 'path') else ''
+            if any(file_ext in file_path for file_ext in ['.pyi']):
+                continue
+                
+            # Check return type
+            if not func.return_type and not func.name.startswith('__'):
+                issues.append(CodeIssue(
+                    type=IssueType.MISSING_TYPE_ANNOTATION,
+                    severity=IssueSeverity.INFO,
+                    message=f"Function '{func.name}' is missing return type annotation",
+                    file_path=file_path,
+                    line_number=getattr(func, 'line', 1),
+                    suggestion="Add a return type annotation to improve type safety"
+                ))
+        
+        return issues
+    
+    def _analyze_circular_dependencies(self) -> List[CodeIssue]:
+        """Find and return circular dependency issues"""
+        issues = []
+        
+        if not self.codegen_codebase:
+            return issues
+        
+        try:
+            # Build dependency graph
+            dep_graph = nx.DiGraph()
+            
+            for file in self.codegen_codebase.files:
+                file_path = file.path if hasattr(file, 'path') else str(file)
+                dep_graph.add_node(file_path)
+                
+                for imp in file.imports:
+                    if hasattr(imp, 'target_file') and imp.target_file:
+                        target_path = imp.target_file.path if hasattr(imp.target_file, 'path') else str(imp.target_file)
+                        dep_graph.add_edge(file_path, target_path)
+            
+            # Find cycles
+            try:
+                cycles = list(nx.simple_cycles(dep_graph))
+                for cycle in cycles:
+                    if len(cycle) > 1:  # Only report actual cycles
+                        issues.append(CodeIssue(
+                            type=IssueType.CIRCULAR_DEPENDENCY,
+                            severity=IssueSeverity.MAJOR,
+                            message=f"Circular dependency detected: {' -> '.join(cycle)}",
+                            file_path=cycle[0] if cycle else 'unknown',
+                            line_number=1,
+                            suggestion="Refactor to break the circular dependency"
+                        ))
+            except nx.NetworkXError:
+                # Graph might be too complex or have issues
+                pass
+                
+        except Exception as e:
+            logging.warning(f"Error analyzing circular dependencies: {e}")
+        
+        return issues
+    
+    def _analyze_implementation_issues(self) -> List[CodeIssue]:
+        """Find and return implementation issues"""
+        issues = []
+        
+        if not self.codegen_codebase:
+            return issues
+        
+        for func in self.codegen_codebase.functions:
+            # Check for empty functions
+            if hasattr(func, 'source') and func.source:
+                # Simple heuristic for empty functions
+                source_lines = [line.strip() for line in func.source.split('\n') if line.strip()]
+                # Remove docstring and comments
+                code_lines = [line for line in source_lines if not line.startswith('#') and not line.startswith('"""') and not line.startswith("'''")]
+                
+                if len(code_lines) <= 2:  # Just function definition and pass/return
+                    issues.append(CodeIssue(
+                        type=IssueType.EMPTY_FUNCTION,
+                        severity=IssueSeverity.MINOR,
+                        message=f"Function '{func.name}' appears to be empty or only contains pass/return",
+                        file_path=func.file.path if hasattr(func, 'file') and hasattr(func.file, 'path') else 'unknown',
+                        line_number=getattr(func, 'line', 1),
+                        suggestion="Implement the function or remove if not needed"
+                    ))
+        
+        return issues
+    
+    def _enhance_functions_with_comprehensive_data(self, functions: List[FunctionDefinition], comprehensive_data: Dict[str, Any]) -> List[FunctionDefinition]:
+        """Enhance function definitions with comprehensive analysis data"""
+        # Create a mapping of function names to comprehensive data
+        codegen_functions = {func.name: func for func in comprehensive_data.get('functions', [])}
+        
+        for func_def in functions:
+            if func_def.name in codegen_functions:
+                codegen_func = codegen_functions[func_def.name]
+                
+                # Add dependencies from Codegen analysis
+                if hasattr(codegen_func, 'dependencies'):
+                    func_def.dependencies.extend([dep.name for dep in codegen_func.dependencies if hasattr(dep, 'name')])
+                
+                # Add called_by relationships
+                if hasattr(codegen_func, 'call_sites'):
+                    func_def.called_by.extend([
+                        call.parent_function.name for call in codegen_func.call_sites 
+                        if hasattr(call, 'parent_function') and call.parent_function
+                    ])
+        
+        return functions
+    
+    def _ensure_all_functions_captured(self, functions: List[FunctionDefinition]) -> List[FunctionDefinition]:
+        """Ensure ALL functions are captured, not just samples"""
+        if not self.codegen_codebase:
+            return functions
+        
+        # Get all function names from current analysis
+        current_function_names = {func.name for func in functions}
+        
+        # Get all functions from Codegen SDK
+        for codegen_func in self.codegen_codebase.functions:
+            if codegen_func.name not in current_function_names:
+                # Create a FunctionDefinition for missing functions
+                missing_func = FunctionDefinition(
+                    name=codegen_func.name,
+                    file_path=codegen_func.file.path if hasattr(codegen_func, 'file') and hasattr(codegen_func.file, 'path') else 'unknown',
+                    line_start=getattr(codegen_func, 'line', 1),
+                    line_end=getattr(codegen_func, 'line', 1) + 10,  # Estimate
+                    parameters=[{'name': param.name, 'type': getattr(param, 'type', None)} for param in codegen_func.parameters],
+                    return_type=getattr(codegen_func, 'return_type', None),
+                    docstring=getattr(codegen_func, 'docstring', None),
+                    source_code=getattr(codegen_func, 'source', ''),
+                    complexity_score=0,  # Will be calculated later
+                    is_entry_point=False,
+                    calls=[call.name for call in codegen_func.function_calls if hasattr(call, 'name')],
+                    called_by=[],
+                    dependencies=[dep.name for dep in codegen_func.dependencies if hasattr(dep, 'name')],
+                    issues=[]
+                )
+                functions.append(missing_func)
+        
+        return functions
     
     def _collect_source_files(self) -> List[Path]:
         """Collect all source files in the repository"""
@@ -823,6 +1134,105 @@ def analyze_codebase(repo_path: str) -> AnalysisResult:
     """Main entry point for codebase analysis"""
     analyzer = GraphSitterAnalyzer(repo_path)
     return analyzer.analyze_codebase()
+
+# Interactive Symbol Selection Support
+def get_symbol_context(analysis_result: AnalysisResult, symbol_name: str, file_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Get comprehensive context for interactive symbol selection"""
+    context = {
+        'symbol_name': symbol_name,
+        'definitions': [],
+        'usages': [],
+        'relationships': [],
+        'issues': [],
+        'entry_points': []
+    }
+    
+    # Find function definitions
+    for func in analysis_result.all_functions:
+        if func.name == symbol_name or func.name.endswith(f".{symbol_name}"):
+            context['definitions'].append({
+                'type': 'function',
+                'name': func.name,
+                'file_path': func.file_path,
+                'line_start': func.line_start,
+                'line_end': func.line_end,
+                'source_code': func.source_code,
+                'parameters': func.parameters,
+                'return_type': func.return_type,
+                'docstring': func.docstring,
+                'complexity_score': func.complexity_score,
+                'is_entry_point': func.is_entry_point
+            })
+            
+            # Add relationships
+            context['relationships'].extend([
+                {'type': 'calls', 'target': call} for call in func.calls
+            ])
+            context['relationships'].extend([
+                {'type': 'called_by', 'source': caller} for caller in func.called_by
+            ])
+            context['relationships'].extend([
+                {'type': 'depends_on', 'target': dep} for dep in func.dependencies
+            ])
+            
+            # Add issues
+            context['issues'].extend([issue.to_dict() for issue in func.issues])
+    
+    # Find related entry points
+    for ep in analysis_result.all_entry_points:
+        if symbol_name in ep.dependencies or ep.name == symbol_name:
+            context['entry_points'].append(ep.to_dict())
+    
+    # Find symbol in dependency graph
+    if symbol_name in analysis_result.dependency_graph:
+        context['graph_dependencies'] = analysis_result.dependency_graph[symbol_name]
+    
+    # Find in symbol table
+    if symbol_name in analysis_result.symbol_table:
+        context['symbol_info'] = analysis_result.symbol_table[symbol_name]
+    
+    return context if context['definitions'] or context['usages'] else None
+
+def get_interactive_symbol_data(analysis_result: AnalysisResult) -> Dict[str, Any]:
+    """Get data structure optimized for interactive symbol selection"""
+    symbols = {}
+    
+    # Add all functions as selectable symbols
+    for func in analysis_result.all_functions:
+        symbols[func.name] = {
+            'type': 'function',
+            'file_path': func.file_path,
+            'line_start': func.line_start,
+            'line_end': func.line_end,
+            'preview': func.source_code[:200] + '...' if len(func.source_code) > 200 else func.source_code,
+            'has_issues': len(func.issues) > 0,
+            'is_entry_point': func.is_entry_point,
+            'complexity_score': func.complexity_score,
+            'call_count': len(func.calls),
+            'called_by_count': len(func.called_by)
+        }
+    
+    # Add entry points
+    for ep in analysis_result.all_entry_points:
+        if ep.name not in symbols:  # Don't overwrite function data
+            symbols[ep.name] = {
+                'type': 'entry_point',
+                'file_path': ep.file_path,
+                'line_number': ep.line_number,
+                'description': ep.description,
+                'entry_point_type': ep.type,
+                'parameters': ep.parameters,
+                'dependencies_count': len(ep.dependencies)
+            }
+    
+    return {
+        'symbols': symbols,
+        'total_symbols': len(symbols),
+        'functions_count': len([s for s in symbols.values() if s['type'] == 'function']),
+        'entry_points_count': len([s for s in symbols.values() if s['type'] == 'entry_point']),
+        'issues_count': len(analysis_result.all_issues),
+        'files_count': analysis_result.total_files
+    }
 
 # Additional utility functions
 def get_function_context(analysis_result: AnalysisResult, function_name: str) -> Optional[Dict[str, Any]]:
