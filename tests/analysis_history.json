@@ -20,5 +20,27 @@
     "dead_code_items": 0,
     "analysis_duration": 1.5,
     "issue_types": {}
+  },
+  {
+    "timestamp": "2025-06-23T07:52:19.800438",
+    "total_issues": 5,
+    "critical_issues": 1,
+    "error_issues": 2,
+    "warning_issues": 2,
+    "info_issues": 0,
+    "dead_code_items": 0,
+    "analysis_duration": 1.5,
+    "issue_types": {}
+  },
+  {
+    "timestamp": "2025-06-23T07:52:19.800891",
+    "total_issues": 5,
+    "critical_issues": 1,
+    "error_issues": 2,
+    "warning_issues": 2,
+    "info_issues": 0,
+    "dead_code_items": 0,
+    "analysis_duration": 1.5,
+    "issue_types": {}
   }
 ]

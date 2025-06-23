@@ -1,7 +1,0 @@
-{
-  "error": "Codebase initialization failed",
-  "success": false,
-  "issues": [
-    "[ERROR] implementation_error:  (Unknown location) - Suggestion: Install the Codegen SDK for full functionality"
-  ]
-}
