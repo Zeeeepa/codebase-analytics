@@ -1,16 +1,14 @@
-from fastapi import FastAPI
+#!/usr/bin/env python3
+"""
+Clean API Module
+
+This is the main API module that imports from consolidated analysis.py and visualize.py
+modules to provide a clean, non-redundant interface for codebase analytics.
+"""
+
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any
-from codegen import Codebase
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
-import math
-import re
+from typing import Dict, List, Tuple, Any, Optional
 import requests
 from datetime import datetime, timedelta
 import subprocess
@@ -18,17 +16,61 @@ import os
 import tempfile
 from fastapi.middleware.cors import CORSMiddleware
 import modal
+from pathlib import Path
 
+# Import from Codegen SDK
+from codegen.sdk.core.codebase import Codebase
+from codegen.sdk.core.class_definition import Class
+from codegen.sdk.core.file import SourceFile
+from codegen.sdk.core.function import Function
+from codegen.sdk.core.symbol import Symbol
+
+# Import from our consolidated modules
+from analysis import (
+    InheritanceAnalysis,
+    RecursionAnalysis,
+    SymbolInfo,
+    calculate_cyclomatic_complexity,
+    calculate_doi,
+    get_operators_and_operands,
+    calculate_halstead_volume,
+    count_lines,
+    calculate_maintainability_index,
+    get_maintainability_rank,
+    analyze_inheritance_patterns,
+    analyze_recursive_functions,
+    analyze_file_issues,
+    build_repo_structure,
+    get_file_type,
+    get_detailed_symbol_context,
+    get_max_call_chain
+)
+
+from visualize import (
+    VisualizationType,
+    OutputFormat,
+    VisualizationConfig,
+    create_call_graph,
+    create_dependency_graph,
+    create_class_hierarchy,
+    create_complexity_heatmap,
+    create_issues_heatmap,
+    create_blast_radius,
+    generate_all_visualizations,
+    get_visualization_summary
+)
+
+# Modal setup
 image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
+        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime",
+        "networkx", "matplotlib"
     )
 )
 
 app = modal.App(name="analytics-app", image=image)
-
 fastapi_app = FastAPI()
 
 fastapi_app.add_middleware(
@@ -39,17 +81,172 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
+# Pydantic Models
+
+class CodebaseStats(BaseModel):
+    test_functions_count: int
+    test_classes_count: int
+    tests_per_file: float
+    total_classes: int
+    total_functions: int
+    total_imports: int
+    deepest_inheritance_class: Optional[Dict]
+    recursive_functions: List[str]
+    most_called_function: Dict
+    function_with_most_calls: Dict
+    unused_functions: List[Dict]
+    dead_code: List[Dict]
+
+class FileTestStats(BaseModel):
+    filepath: str
+    test_class_count: int
+    file_length: int
+    function_count: int
+
+class FunctionContext(BaseModel):
+    implementation: Dict
+    dependencies: List[Dict]
+    usages: List[Dict]
+
+class TestAnalysis(BaseModel):
+    total_test_functions: int
+    total_test_classes: int
+    tests_per_file: float
+    top_test_files: List[Dict[str, Any]]
+
+class FunctionAnalysis(BaseModel):
+    total_functions: int
+    most_called_function: Dict[str, Any]
+    function_with_most_calls: Dict[str, Any]
+    recursive_functions: List[str]
+    unused_functions: List[Dict[str, str]]
+    dead_code: List[Dict[str, str]]
+
+class ClassAnalysis(BaseModel):
+    total_classes: int
+    deepest_inheritance: Optional[Dict[str, Any]]
+    total_imports: int
+
+class FileIssue(BaseModel):
+    critical: List[Dict[str, str]]
+    major: List[Dict[str, str]]
+    minor: List[Dict[str, str]]
+
+class ExtendedAnalysis(BaseModel):
+    test_analysis: TestAnalysis
+    function_analysis: FunctionAnalysis
+    class_analysis: ClassAnalysis
+    file_issues: Dict[str, FileIssue]
+    repo_structure: Dict[str, Any]
+
+class RepoRequest(BaseModel):
+    repo_url: str
+
+class Symbol(BaseModel):
+    id: str
+    name: str
+    type: str  # 'function', 'class', or 'variable'
+    filepath: str
+    start_line: int
+    end_line: int
+    issues: Optional[List[Dict[str, str]]] = None
+
+class InheritanceAnalysisPydantic(BaseModel):
+    """Pydantic version of InheritanceAnalysis for serialization."""
+    deepest_class_name: Optional[str] = None
+    deepest_class_depth: int = 0
+    inheritance_chain: List[str] = []
+
+class RecursionAnalysisPydantic(BaseModel):
+    """Pydantic version of RecursionAnalysis for serialization."""
+    recursive_functions: List[str] = []
+    total_recursive_count: int = 0
+
+class FileNode(BaseModel):
+    name: str
+    type: str  # 'file' or 'directory'
+    path: str
+    issues: Optional[Dict[str, int]] = None
+    symbols: Optional[List[Dict[str, Any]]] = None
+    children: Optional[Dict[str, 'FileNode']] = None
+
+class AnalysisResponse(BaseModel):
+    # Basic stats
+    repo_url: str
+    description: str
+    num_files: int
+    num_functions: int
+    num_classes: int
+    
+    # Line metrics
+    line_metrics: Dict[str, Dict[str, float]]
+    
+    # Complexity metrics
+    cyclomatic_complexity: Dict[str, float]
+    depth_of_inheritance: Dict[str, float]
+    halstead_metrics: Dict[str, int]
+    maintainability_index: Dict[str, int]
+    
+    # Git metrics
+    monthly_commits: Dict[str, int]
+    
+    # New analysis features
+    inheritance_analysis: InheritanceAnalysisPydantic
+    recursion_analysis: RecursionAnalysisPydantic
+    
+    # Repository structure with symbols
+    repo_structure: FileNode
+
+class GitHubUrlRequest(BaseModel):
+    github_url: str
+
+class VisualizationRequest(BaseModel):
+    repo_url: str
+    visualization_type: VisualizationType
+    config: Optional[Dict[str, Any]] = None
+
+class VisualizationResponse(BaseModel):
+    visualization_type: str
+    data: Dict[str, Any]
+    config: Dict[str, Any]
+
+# Utility Functions
+
+def dict_to_file_node(data: Dict) -> FileNode:
+    """Convert dictionary structure to FileNode."""
+    children = None
+    if 'children' in data and data['children']:
+        children = {
+            name: dict_to_file_node(child_data) 
+            for name, child_data in data['children'].items()
+        }
+    
+    return FileNode(
+        name=data['name'],
+        type=data['type'],
+        path=data['path'],
+        issues=data.get('issues'),
+        symbols=data.get('symbols'),
+        children=children
+    )
+
+def convert_inheritance_analysis(analysis: InheritanceAnalysis) -> InheritanceAnalysisPydantic:
+    """Convert InheritanceAnalysis dataclass to Pydantic model."""
+    return InheritanceAnalysisPydantic(
+        deepest_class_name=analysis.deepest_class_name,
+        deepest_class_depth=analysis.deepest_class_depth,
+        inheritance_chain=analysis.inheritance_chain or []
+    )
+
+def convert_recursion_analysis(analysis: RecursionAnalysis) -> RecursionAnalysisPydantic:
+    """Convert RecursionAnalysis dataclass to Pydantic model."""
+    return RecursionAnalysisPydantic(
+        recursive_functions=analysis.recursive_functions or [],
+        total_recursive_count=analysis.total_recursive_count
+    )
 
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
-    """
-    Get the number of commits per month for the last 12 months.
-
-    Args:
-        repo_path: Path to the git repository
-
-    Returns:
-        Dictionary with month-year as key and number of commits as value
-    """
+    """Get the number of commits per month for the last 12 months."""
     end_date = datetime.now()
     start_date = end_date - timedelta(days=365)
 
@@ -107,238 +304,64 @@ def get_monthly_commits(repo_path: str) -> Dict[str, int]:
         except:
             pass
 
-
-def calculate_cyclomatic_complexity(function):
-    def analyze_statement(statement):
-        complexity = 0
-
-        if isinstance(statement, IfBlockStatement):
-            complexity += 1
-            if hasattr(statement, "elif_statements"):
-                complexity += len(statement.elif_statements)
-
-        elif isinstance(statement, (ForLoopStatement, WhileStatement)):
-            complexity += 1
-
-        elif isinstance(statement, TryCatchStatement):
-            complexity += len(getattr(statement, "except_blocks", []))
-
-        if hasattr(statement, "condition") and isinstance(statement.condition, str):
-            complexity += statement.condition.count(
-                " and "
-            ) + statement.condition.count(" or ")
-
-        if hasattr(statement, "nested_code_blocks"):
-            for block in statement.nested_code_blocks:
-                complexity += analyze_block(block)
-
-        return complexity
-
-    def analyze_block(block):
-        if not block or not hasattr(block, "statements"):
-            return 0
-        return sum(analyze_statement(stmt) for stmt in block.statements)
-
-    return (
-        1 + analyze_block(function.code_block) if hasattr(function, "code_block") else 1
-    )
-
-
-def cc_rank(complexity):
-    if complexity < 0:
-        raise ValueError("Complexity must be a non-negative value")
-
-    ranks = [
-        (1, 5, "A"),
-        (6, 10, "B"),
-        (11, 20, "C"),
-        (21, 30, "D"),
-        (31, 40, "E"),
-        (41, float("inf"), "F"),
-    ]
-    for low, high, rank in ranks:
-        if low <= complexity <= high:
-            return rank
-    return "F"
-
-
-def calculate_doi(cls):
-    """Calculate the depth of inheritance for a given class."""
-    return len(cls.superclasses)
-
-
-def get_operators_and_operands(function):
-    operators = []
-    operands = []
-
-    for statement in function.code_block.statements:
-        for call in statement.function_calls:
-            operators.append(call.name)
-            for arg in call.args:
-                operands.append(arg.source)
-
-        if hasattr(statement, "expressions"):
-            for expr in statement.expressions:
-                if isinstance(expr, BinaryExpression):
-                    operators.extend([op.source for op in expr.operators])
-                    operands.extend([elem.source for elem in expr.elements])
-                elif isinstance(expr, UnaryExpression):
-                    operators.append(expr.ts_node.type)
-                    operands.append(expr.argument.source)
-                elif isinstance(expr, ComparisonExpression):
-                    operators.extend([op.source for op in expr.operators])
-                    operands.extend([elem.source for elem in expr.elements])
-
-        if hasattr(statement, "expression"):
-            expr = statement.expression
-            if isinstance(expr, BinaryExpression):
-                operators.extend([op.source for op in expr.operators])
-                operands.extend([elem.source for elem in expr.elements])
-            elif isinstance(expr, UnaryExpression):
-                operators.append(expr.ts_node.type)
-                operands.append(expr.argument.source)
-            elif isinstance(expr, ComparisonExpression):
-                operators.extend([op.source for op in expr.operators])
-                operands.extend([elem.source for elem in expr.elements])
-
-    return operators, operands
-
-
-def calculate_halstead_volume(operators, operands):
-    n1 = len(set(operators))
-    n2 = len(set(operands))
-
-    N1 = len(operators)
-    N2 = len(operands)
-
-    N = N1 + N2
-    n = n1 + n2
-
-    if n > 0:
-        volume = N * math.log2(n)
-        return volume, N1, N2, n1, n2
-    return 0, N1, N2, n1, n2
-
-
-def count_lines(source: str):
-    """Count different types of lines in source code."""
-    if not source.strip():
-        return 0, 0, 0, 0
-
-    lines = [line.strip() for line in source.splitlines()]
-    loc = len(lines)
-    sloc = len([line for line in lines if line])
-
-    in_multiline = False
-    comments = 0
-    code_lines = []
-
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        code_part = line
-        if not in_multiline and "#" in line:
-            comment_start = line.find("#")
-            if not re.search(r'["\'].*#.*["\']', line[:comment_start]):
-                code_part = line[:comment_start].strip()
-                if line[comment_start:].strip():
-                    comments += 1
-
-        if ('"""' in line or "'''" in line) and not (
-            line.count('"""') % 2 == 0 or line.count("'''") % 2 == 0
-        ):
-            if in_multiline:
-                in_multiline = False
-                comments += 1
-            else:
-                in_multiline = True
-                comments += 1
-                if line.strip().startswith('"""') or line.strip().startswith("'''"):
-                    code_part = ""
-        elif in_multiline:
-            comments += 1
-            code_part = ""
-        elif line.strip().startswith("#"):
-            comments += 1
-            code_part = ""
-
-        if code_part.strip():
-            code_lines.append(code_part)
-
-        i += 1
-
-    lloc = 0
-    continued_line = False
-    for line in code_lines:
-        if continued_line:
-            if not any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
-                continued_line = False
-            continue
-
-        lloc += len([stmt for stmt in line.split(";") if stmt.strip()])
-
-        if any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
-            continued_line = True
-
-    return loc, lloc, sloc, comments
-
-
-def calculate_maintainability_index(
-    halstead_volume: float, cyclomatic_complexity: float, loc: int
-) -> int:
-    """Calculate the normalized maintainability index for a given function."""
-    if loc <= 0:
-        return 100
-
+def get_github_repo_description(repo_url: str) -> str:
+    """Get repository description from GitHub API."""
     try:
-        raw_mi = (
-            171
-            - 5.2 * math.log(max(1, halstead_volume))
-            - 0.23 * cyclomatic_complexity
-            - 16.2 * math.log(max(1, loc))
-        )
-        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
-        return int(normalized_mi)
-    except (ValueError, TypeError):
-        return 0
+        api_url = f"https://api.github.com/repos/{repo_url}"
+        response = requests.get(api_url)
+        if response.status_code == 200:
+            data = response.json()
+            description = data.get("description")
+            return description if description is not None else "No description available"
+        else:
+            return "Description not available"
+    except Exception as e:
+        print(f"Error fetching repo description: {e}")
+        return "Description not available"
 
+# Helper functions for symbol lookup (simplified implementations)
+def get_function_by_id(function_id: str) -> Function:
+    """Get function by ID - simplified implementation."""
+    # This would need to be implemented with proper codebase context
+    # For now, return a mock function
+    raise HTTPException(status_code=501, detail="Function lookup not implemented")
 
-def get_maintainability_rank(mi_score: float) -> str:
-    """Convert maintainability index score to a letter grade."""
-    if mi_score >= 85:
-        return "A"
-    elif mi_score >= 65:
-        return "B"
-    elif mi_score >= 45:
-        return "C"
-    elif mi_score >= 25:
-        return "D"
-    else:
-        return "F"
+def get_symbol_by_id(symbol_id: str) -> Symbol:
+    """Get symbol by ID - simplified implementation."""
+    # This would need to be implemented with proper codebase context
+    # For now, return a mock symbol
+    raise HTTPException(status_code=501, detail="Symbol lookup not implemented")
 
-
-def get_github_repo_description(repo_url):
-    api_url = f"https://api.github.com/repos/{repo_url}"
-
-    response = requests.get(api_url)
-
-    if response.status_code == 200:
-        repo_data = response.json()
-        return repo_data.get("description", "No description available")
-    else:
-        return ""
-
-
-class RepoRequest(BaseModel):
-    repo_url: str
-
+# API Endpoints
 
 @fastapi_app.post("/analyze_repo")
-async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
+async def analyze_repo(request: RepoRequest) -> AnalysisResponse:
+    """Single entry point for repository analysis."""
     repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
+    
+    # Validate repo URL format
+    if not repo_url or '/' not in repo_url:
+        raise HTTPException(status_code=400, detail="Repository URL must be in format 'owner/repo'")
+    
+    # Remove any GitHub URL prefix if present
+    if repo_url.startswith('https://github.com/'):
+        repo_url = repo_url.replace('https://github.com/', '')
+    if repo_url.endswith('.git'):
+        repo_url = repo_url[:-4]
+    
+    # Ensure it's in owner/repo format
+    parts = repo_url.split('/')
+    if len(parts) < 2:
+        raise HTTPException(status_code=400, detail="Repository URL must be in format 'owner/repo'")
+    
+    repo_url = f"{parts[0]}/{parts[1]}"  # Take only owner/repo part
+    
+    try:
+        codebase = Codebase.from_repo(repo_url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
 
+    # Basic analysis
     num_files = len(codebase.files(extensions="*"))
     num_functions = len(codebase.functions)
     num_classes = len(codebase.classes)
@@ -350,25 +373,91 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
     total_doi = 0
 
     monthly_commits = get_monthly_commits(repo_url)
-    print(monthly_commits)
 
+    # Analyze files and collect symbols
+    file_issues = {}
+    file_symbols = {}
+    
     for file in codebase.files:
+        # Line metrics
         loc, lloc, sloc, comments = count_lines(file.source)
         total_loc += loc
         total_lloc += lloc
         total_sloc += sloc
         total_comments += comments
 
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
+        # Analyze issues
+        issues = analyze_file_issues(file)
+        if any(len(v) > 0 for v in issues.values()):
+            file_issues[file.filepath] = issues
 
+        # Collect symbols
+        symbols = []
+        
+        # Add functions as symbols
+        for func in file.functions:
+            issues = []
+            
+            # Check for issues
+            if not any(func.name in str(usage) for usage in func.usages):
+                issues.append({
+                    'type': 'minor',
+                    'message': f'Unused function'
+                })
+            
+            if hasattr(func, 'code_block'):
+                code = func.code_block.source
+                if 'None' in code and not any(s in code for s in ['is None', '== None', '!= None']):
+                    issues.append({
+                        'type': 'critical',
+                        'message': f'Potential unsafe null reference'
+                    })
+                
+                if 'TODO' in code or 'FIXME' in code:
+                    issues.append({
+                        'type': 'major',
+                        'message': f'Incomplete implementation'
+                    })
+
+            symbols.append({
+                'id': str(hash(func.name + file.filepath)),
+                'name': func.name,
+                'type': 'function',
+                'filepath': file.filepath,
+                'start_line': func.start_point[0] if hasattr(func, 'start_point') else 0,
+                'end_line': func.end_point[0] if hasattr(func, 'end_point') else 0,
+                'issues': issues if issues else None
+            })
+        
+        # Add classes as symbols
+        for cls in file.classes:
+            symbols.append({
+                'id': str(hash(cls.name + file.filepath)),
+                'name': cls.name,
+                'type': 'class',
+                'filepath': file.filepath,
+                'start_line': cls.start_point[0] if hasattr(cls, 'start_point') else 0,
+                'end_line': cls.end_point[0] if hasattr(cls, 'end_point') else 0
+            })
+        
+        if symbols:
+            file_symbols[file.filepath] = symbols
+
+    # Build repository structure with symbols
+    repo_structure_dict = build_repo_structure(codebase.files, file_issues, file_symbols)
+    repo_structure = dict_to_file_node(repo_structure_dict)
+
+    # Calculate metrics
+    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
     num_callables = 0
+    
     for func in callables:
         if not hasattr(func, "code_block"):
             continue
 
         complexity = calculate_cyclomatic_complexity(func)
         operators, operands = get_operators_and_operands(func)
-        volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
+        volume, N1, N2, n1, n2 = calculate_halstead_volume(operators, operands)
         loc = len(func.code_block.source.splitlines())
         mi_score = calculate_maintainability_index(volume, complexity, loc)
 
@@ -382,10 +471,25 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
         total_doi += doi
 
     desc = get_github_repo_description(repo_url)
+    # Ensure description is never None
+    if desc is None:
+        desc = "Repository analysis completed"
+    
+    # Perform new analysis features
+    inheritance_analysis_raw = analyze_inheritance_patterns(codebase)
+    recursion_analysis_raw = analyze_recursive_functions(codebase)
+    
+    # Convert to Pydantic models for serialization
+    inheritance_analysis = convert_inheritance_analysis(inheritance_analysis_raw)
+    recursion_analysis = convert_recursion_analysis(recursion_analysis_raw)
 
-    results = {
-        "repo_url": repo_url,
-        "line_metrics": {
+    return AnalysisResponse(
+        repo_url=repo_url,
+        description=desc,
+        num_files=num_files,
+        num_functions=num_functions,
+        num_classes=num_classes,
+        line_metrics={
             "total": {
                 "loc": total_loc,
                 "lloc": total_lloc,
@@ -396,36 +500,226 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
                 else 0,
             },
         },
-        "cyclomatic_complexity": {
-            "average": total_complexity if num_callables > 0 else 0,
+        cyclomatic_complexity={
+            "average": total_complexity / num_callables if num_callables > 0 else 0,
         },
-        "depth_of_inheritance": {
+        depth_of_inheritance={
             "average": total_doi / len(codebase.classes) if codebase.classes else 0,
         },
-        "halstead_metrics": {
+        halstead_metrics={
             "total_volume": int(total_volume),
             "average_volume": int(total_volume / num_callables)
             if num_callables > 0
             else 0,
         },
-        "maintainability_index": {
+        maintainability_index={
             "average": int(total_mi / num_callables) if num_callables > 0 else 0,
         },
-        "description": desc,
-        "num_files": num_files,
-        "num_functions": num_functions,
-        "num_classes": num_classes,
-        "monthly_commits": monthly_commits,
-    }
+        monthly_commits=monthly_commits,
+        inheritance_analysis=inheritance_analysis,
+        recursion_analysis=recursion_analysis,
+        repo_structure=repo_structure
+    )
 
-    return results
+@fastapi_app.post("/analyze_github_url")
+async def analyze_github_url(request: GitHubUrlRequest) -> AnalysisResponse:
+    """CLI-compatible endpoint for analyzing GitHub repositories by full URL.
+    
+    Example usage:
+    curl -X POST "http://localhost:8001/analyze_github_url" \
+         -H "Content-Type: application/json" \
+         -d '{"github_url": "https://github.com/Zeeeepa/codege"}'
+    """
+    github_url = request.github_url.strip()
+    
+    # Validate GitHub URL format
+    if not github_url.startswith('https://github.com/'):
+        raise HTTPException(
+            status_code=400, 
+            detail="URL must be a valid GitHub repository URL (https://github.com/owner/repo)"
+        )
+    
+    # Extract owner/repo from GitHub URL
+    try:
+        # Remove GitHub prefix
+        repo_path = github_url.replace('https://github.com/', '')
+        
+        # Remove .git suffix if present
+        if repo_path.endswith('.git'):
+            repo_path = repo_path[:-4]
+        
+        # Remove trailing slash if present
+        repo_path = repo_path.rstrip('/')
+        
+        # Validate format
+        parts = repo_path.split('/')
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            raise ValueError("Invalid repository path")
+        
+        owner, repo = parts
+        repo_url = f"{owner}/{repo}"
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid GitHub URL format. Expected: https://github.com/owner/repo"
+        )
+    
+    # Create a RepoRequest and delegate to the existing analyze_repo function
+    repo_request = RepoRequest(repo_url=repo_url)
+    
+    # Call the existing analysis logic
+    return await analyze_repo(repo_request)
 
+@fastapi_app.get("/analyze_github")
+async def analyze_github_get(url: str) -> AnalysisResponse:
+    """GET endpoint for CLI analysis of GitHub repositories.
+    
+    Example usage:
+    curl "http://localhost:8001/analyze_github?url=https://github.com/Zeeeepa/codege"
+    
+    Or with URL encoding:
+    curl "http://localhost:8001/analyze_github?url=https%3A//github.com/Zeeeepa/codege"
+    """
+    # Create a GitHubUrlRequest and delegate to the POST endpoint
+    request = GitHubUrlRequest(github_url=url)
+    return await analyze_github_url(request)
 
+@fastapi_app.post("/visualize")
+async def create_visualization(request: VisualizationRequest) -> VisualizationResponse:
+    """Create a visualization for a repository."""
+    repo_url = request.repo_url
+    viz_type = request.visualization_type
+    config_dict = request.config or {}
+    
+    # Validate repo URL format
+    if not repo_url or '/' not in repo_url:
+        raise HTTPException(status_code=400, detail="Repository URL must be in format 'owner/repo'")
+    
+    # Clean repo URL
+    if repo_url.startswith('https://github.com/'):
+        repo_url = repo_url.replace('https://github.com/', '')
+    if repo_url.endswith('.git'):
+        repo_url = repo_url[:-4]
+    
+    parts = repo_url.split('/')
+    if len(parts) < 2:
+        raise HTTPException(status_code=400, detail="Repository URL must be in format 'owner/repo'")
+    
+    repo_url = f"{parts[0]}/{parts[1]}"
+    
+    try:
+        codebase = Codebase.from_repo(repo_url)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
+
+    # Create visualization config
+    config = VisualizationConfig(**config_dict)
+    
+    # Generate visualization based on type
+    try:
+        if viz_type == VisualizationType.CALL_GRAPH:
+            viz_data = create_call_graph(codebase, config=config)
+        elif viz_type == VisualizationType.DEPENDENCY_GRAPH:
+            viz_data = create_dependency_graph(codebase, config=config)
+        elif viz_type == VisualizationType.CLASS_HIERARCHY:
+            viz_data = create_class_hierarchy(codebase, config=config)
+        elif viz_type == VisualizationType.COMPLEXITY_HEATMAP:
+            viz_data = create_complexity_heatmap(codebase, config=config)
+        elif viz_type == VisualizationType.BLAST_RADIUS:
+            # For blast radius, we need a symbol name
+            symbol_name = config_dict.get('symbol_name')
+            if not symbol_name:
+                raise HTTPException(status_code=400, detail="symbol_name required for blast radius visualization")
+            viz_data = create_blast_radius(codebase, symbol_name, config=config)
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported visualization type: {viz_type}")
+        
+        return VisualizationResponse(
+            visualization_type=viz_type.value,
+            data=viz_data,
+            config=config.__dict__
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to create visualization: {str(e)}")
+
+@fastapi_app.get("/visualizations/summary/{repo_url:path}")
+async def get_visualizations_summary(repo_url: str):
+    """Get a summary of available visualizations for a repository."""
+    # Clean repo URL
+    if repo_url.startswith('https://github.com/'):
+        repo_url = repo_url.replace('https://github.com/', '')
+    if repo_url.endswith('.git'):
+        repo_url = repo_url[:-4]
+    
+    try:
+        codebase = Codebase.from_repo(repo_url)
+        summary = get_visualization_summary(codebase)
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to analyze repository: {str(e)}")
+
+@fastapi_app.get("/function/{function_id}/call-chain")
+async def get_function_call_chain(function_id: str) -> List[str]:
+    """Get the maximum call chain for a function."""
+    try:
+        function = get_function_by_id(function_id)
+        chain = get_max_call_chain(function)
+        return [f.name for f in chain]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@fastapi_app.get("/function/{function_id}/context")
+async def get_function_context(function_id: str) -> FunctionContext:
+    """Get detailed context for a function."""
+    try:
+        function = get_function_by_id(function_id)
+        context = get_detailed_symbol_context(function)
+        return FunctionContext(
+            implementation=context,
+            dependencies=context.get('dependencies', []),
+            usages=context.get('usages', [])
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@fastapi_app.get("/symbol/{symbol_id}/context")
+async def get_symbol_context(symbol_id: str) -> Dict[str, Any]:
+    """Get detailed context for any symbol."""
+    try:
+        symbol = get_symbol_by_id(symbol_id)
+        return get_detailed_symbol_context(symbol)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Legacy endpoints for backward compatibility
+@fastapi_app.get("/api/codebase/stats")
+async def get_codebase_stats(codebase_id: str) -> CodebaseStats:
+    """Legacy endpoint - not implemented."""
+    raise HTTPException(status_code=501, detail="Legacy endpoint not implemented")
+
+@fastapi_app.get("/api/codebase/test-files")
+async def get_test_file_stats(codebase_id: str) -> List[FileTestStats]:
+    """Legacy endpoint - not implemented."""
+    raise HTTPException(status_code=501, detail="Legacy endpoint not implemented")
+
+@fastapi_app.get("/api/function/{function_id}/context")
+async def get_function_context_legacy(function_id: str) -> FunctionContext:
+    """Legacy endpoint - redirect to new endpoint."""
+    return await get_function_context(function_id)
+
+@fastapi_app.get("/api/function/{function_id}/call-chain")
+async def get_function_call_chain_legacy(function_id: str) -> List[str]:
+    """Legacy endpoint - redirect to new endpoint."""
+    return await get_function_call_chain(function_id)
+
+# Modal deployment
 @app.function(image=image)
 @modal.asgi_app()
-def fastapi_modal_app():
+def modal_app():
     return fastapi_app
 
-
 if __name__ == "__main__":
-    app.deploy("analytics-app")
+    import uvicorn
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=8001)

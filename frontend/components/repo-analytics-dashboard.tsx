@@ -1,12 +1,14 @@
 "use client"
 
 import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain } from "lucide-react"
+import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, TreePine, RotateCcw } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import RepoStructure from "@/components/RepoStructure"
+import SymbolContext from "@/components/SymbolContext"
 
 const mockRepoData = {
   name: "vercel/next.js",
@@ -39,6 +41,17 @@ const mockCommitData = [
   { month: "November", commits: 220 },
 ];
 
+interface InheritanceAnalysis {
+  deepest_class_name: string | null;
+  deepest_class_depth: number;
+  inheritance_chain: string[];
+}
+
+interface RecursionAnalysis {
+  recursive_functions: string[];
+  total_recursive_count: number;
+}
+
 interface RepoAnalyticsResponse {
   repo_url: string;
   line_metrics: {
@@ -62,6 +75,9 @@ interface RepoAnalyticsResponse {
   num_functions: number;
   num_classes: number;
   monthly_commits: Record<string, number>;
+  inheritance_analysis: InheritanceAnalysis;
+  recursion_analysis: RecursionAnalysis;
+  repo_structure: any; // Repository structure data
 }
 
 interface RepoData {
@@ -78,6 +94,8 @@ interface RepoData {
   numberOfFiles: number;
   numberOfFunctions: number;
   numberOfClasses: number;
+  inheritance_analysis?: InheritanceAnalysis;
+  recursion_analysis?: RecursionAnalysis;
 }
 
 export default function RepoAnalyticsDashboard() {
@@ -87,6 +105,9 @@ export default function RepoAnalyticsDashboard() {
   const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
+  const [repoStructure, setRepoStructure] = useState<any>(null)
+  const [selectedSymbol, setSelectedSymbol] = useState<any>(null)
+  const [showSymbolContext, setShowSymbolContext] = useState(false)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -99,6 +120,23 @@ export default function RepoAnalyticsDashboard() {
     return input;
   };
 
+  // Get backend URL - uses environment variable or falls back to defaults
+  const getBackendUrl = () => {
+    // Check for environment variable first
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      return process.env.NEXT_PUBLIC_BACKEND_URL;
+    }
+    
+    // In development, try local backend first
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      // Default to 8001 since 8000 is often occupied by Docker
+      return 'http://localhost:8001';
+    }
+    
+    // Fallback to Modal deployment for production
+    return 'https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run';
+  };
+
   const handleFetchRepo = async () => {
     console.log("Fetching repo data...");
     
@@ -109,10 +147,11 @@ export default function RepoAnalyticsDashboard() {
     setIsLandingPage(false);
     
     try {
+      const backendUrl = getBackendUrl();
+      console.log(`Using backend: ${backendUrl}`);
+      
       console.log("Fetching repo data...");
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app.modal.run/analyze_repo
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo
-      const response = await fetch('https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo', {
+      const response = await fetch(`${backendUrl}/analyze_repo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,7 +180,12 @@ export default function RepoAnalyticsDashboard() {
         numberOfFiles: data.num_files,
         numberOfFunctions: data.num_functions,
         numberOfClasses: data.num_classes,
+        inheritance_analysis: data.inheritance_analysis,
+        recursion_analysis: data.recursion_analysis,
       });
+
+      // Store repository structure
+      setRepoStructure(data.repo_structure);
 
       const transformedCommitData = Object.entries(data.monthly_commits)
         .map(([date, commits]) => ({
@@ -174,6 +218,56 @@ export default function RepoAnalyticsDashboard() {
       handleFetchRepo(); 
     }
   }
+
+  // Repository structure interaction handlers
+  const handleFileClick = (path: string) => {
+    console.log('File clicked:', path);
+    // Could expand to show file details
+  };
+
+  const handleFolderClick = (path: string) => {
+    console.log('Folder clicked:', path);
+    // Could expand to show folder contents
+  };
+
+  const handleSymbolClick = (symbol: any) => {
+    console.log('Symbol clicked:', symbol);
+    setSelectedSymbol(symbol);
+    setShowSymbolContext(true);
+  };
+
+  const handleViewCallChain = async (symbolId: string) => {
+    console.log('View call chain for symbol:', symbolId);
+    // Could fetch call chain data from API
+    try {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/function/${symbolId}/call-chain`);
+      if (response.ok) {
+        const callChain = await response.json();
+        console.log('Call chain:', callChain);
+        // Could show call chain in a modal or side panel
+      }
+    } catch (error) {
+      console.error('Error fetching call chain:', error);
+    }
+  };
+
+  const handleViewContext = async (symbolId: string) => {
+    console.log('View context for symbol:', symbolId);
+    // Could fetch symbol context from API
+    try {
+      const backendUrl = getBackendUrl();
+      const response = await fetch(`${backendUrl}/symbol/${symbolId}/context`);
+      if (response.ok) {
+        const context = await response.json();
+        console.log('Symbol context:', context);
+        setSelectedSymbol(context);
+        setShowSymbolContext(true);
+      }
+    } catch (error) {
+      console.error('Error fetching symbol context:', error);
+    }
+  };
 
 function calculateCodebaseGrade(data: RepoData) {
   const { maintainabilityIndex } = data;
@@ -393,6 +487,71 @@ function calculateCodebaseGrade(data: RepoData) {
                 </CardContent>
               </Card>
             </div>
+            
+            {/* New Analysis Features */}
+            <div className="grid gap-6 md:grid-cols-2 mt-6">
+              <Card onMouseEnter={() => handleMouseEnter('Deepest Inheritance')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Deepest Inheritance</CardTitle>
+                  <TreePine className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  {repoData.inheritance_analysis?.deepest_class_name ? (
+                    <>
+                      <div className="text-2xl font-bold">{repoData.inheritance_analysis.deepest_class_name}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {hoveredCard === 'Deepest Inheritance' 
+                          ? `Inheritance chain: ${repoData.inheritance_analysis.inheritance_chain.join(' → ')}` 
+                          : `Depth: ${repoData.inheritance_analysis.deepest_class_depth} levels`}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold text-muted-foreground">None</div>
+                      <p className="text-xs text-muted-foreground mt-1">No class inheritance found</p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card onMouseEnter={() => handleMouseEnter('Recursive Functions')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Recursive Functions</CardTitle>
+                  <RotateCcw className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{repoData.recursion_analysis?.total_recursive_count || 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {hoveredCard === 'Recursive Functions' 
+                      ? (repoData.recursion_analysis?.recursive_functions?.length > 0 
+                          ? `Functions: ${repoData.recursion_analysis.recursive_functions.join(', ')}` 
+                          : 'No recursive functions found')
+                      : 'Functions that call themselves'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Repository Structure */}
+            {repoStructure && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>📂 Repository Structure</CardTitle>
+                  <CardDescription>Interactive file tree with issue counts and symbol information</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <RepoStructure
+                    data={repoStructure}
+                    onFileClick={handleFileClick}
+                    onFolderClick={handleFolderClick}
+                    onSymbolClick={handleSymbolClick}
+                    onViewCallChain={handleViewCallChain}
+                    onViewContext={handleViewContext}
+                  />
+                </CardContent>
+              </Card>
+            )}
+            
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle>Monthly Commits</CardTitle>
@@ -433,6 +592,25 @@ function calculateCodebaseGrade(data: RepoData) {
               </Card>
             </div>
           </main>
+          
+          {/* Symbol Context Modal */}
+          {showSymbolContext && selectedSymbol && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-background rounded-lg p-6 max-w-4xl max-h-[80vh] overflow-auto">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">Symbol Details</h2>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setShowSymbolContext(false)}
+                  >
+                    Close
+                  </Button>
+                </div>
+                <SymbolContext symbol={selectedSymbol} />
+              </div>
+            </div>
+          )}
+          
           <footer className="w-full text-center text-xs text-muted-foreground py-4">
           built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
           </footer>
