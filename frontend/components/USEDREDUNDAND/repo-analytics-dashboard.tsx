@@ -1,12 +1,17 @@
 "use client"
 
 import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain } from "lucide-react"
+import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, Zap, Search, Eye } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import InteractiveCharts from "./InteractiveCharts"
+import InteractiveStructuralTree from "./InteractiveStructuralTree"
+import VisualCodebaseExplorer from "./VisualCodebaseExplorer"
+import { useInteractiveAnalysis } from "@/hooks/useInteractiveAnalysis"
 
 const mockRepoData = {
   name: "vercel/next.js",
@@ -87,6 +92,12 @@ export default function RepoAnalyticsDashboard() {
   const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
+  const [viewMode, setViewMode] = useState<'classic' | 'interactive' | 'structural' | 'visual'>('classic')
+  const [structuralData, setStructuralData] = useState<any>(null)
+  const [visualExplorationData, setVisualExplorationData] = useState<any>(null)
+  
+  // Interactive analysis hook
+  const { state: analysisState, actions: analysisActions } = useInteractiveAnalysis()
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -99,6 +110,23 @@ export default function RepoAnalyticsDashboard() {
     return input;
   };
 
+  // Get backend URL - uses environment variable or falls back to defaults
+  const getBackendUrl = () => {
+    // Check for environment variable first
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      return process.env.NEXT_PUBLIC_BACKEND_URL;
+    }
+    
+    // In development, try local backend first
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      // Connect to our deployed backend on port 8000
+      return 'http://localhost:8000';
+    }
+    
+    // Fallback to Modal deployment for production
+    return 'https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run';
+  };
+
   const handleFetchRepo = async () => {
     console.log("Fetching repo data...");
     
@@ -109,10 +137,11 @@ export default function RepoAnalyticsDashboard() {
     setIsLandingPage(false);
     
     try {
+      const backendUrl = getBackendUrl();
+      console.log(`Using backend: ${backendUrl}`);
+      
       console.log("Fetching repo data...");
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app.modal.run/analyze_repo
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo
-      const response = await fetch('https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo', {
+      const response = await fetch(`${backendUrl}/analyze_repo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -172,6 +201,85 @@ export default function RepoAnalyticsDashboard() {
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       handleFetchRepo(); 
+    }
+  }
+
+  const handleDrillDown = (metric: string, value: any) => {
+    console.log(`Drilling down into ${metric}:`, value)
+    analysisActions.drillDown(metric, value)
+    // Here you could fetch more detailed data or navigate to a detailed view
+  }
+
+  const handleStructuralAnalysis = async () => {
+    if (!repoData) return
+    
+    setIsLoading(true)
+    try {
+      const backendUrl = getBackendUrl()
+      const parsedRepoUrl = parseRepoUrl(repoUrl)
+      
+      console.log("Fetching structural analysis...")
+      const response = await fetch(`${backendUrl}/analyze_structural`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ repo_url: parsedRepoUrl }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setStructuralData(data)
+      setViewMode('structural')
+      
+      console.log("Structural analysis completed:", data)
+    } catch (error) {
+      console.error('Error fetching structural analysis:', error)
+      alert('Error fetching structural analysis. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVisualExploration = async (mode: string = 'structural_overview') => {
+    if (!repoData) return
+    
+    setIsLoading(true)
+    try {
+      const backendUrl = getBackendUrl()
+      const parsedRepoUrl = parseRepoUrl(repoUrl)
+      
+      console.log(`Fetching visual exploration in ${mode} mode...`)
+      const response = await fetch(`${backendUrl}/explore_visual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ 
+          repo_url: parsedRepoUrl,
+          mode: mode
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const data = await response.json()
+      setVisualExplorationData(data)
+      setViewMode('visual')
+      
+      console.log("Visual exploration completed:", data)
+    } catch (error) {
+      console.error('Error fetching visual exploration:', error)
+      alert('Error fetching visual exploration. Please try again.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -250,6 +358,41 @@ function calculateCodebaseGrade(data: RepoData) {
                   </h1>
                 </div>
                 <div className="flex items-center gap-3 ml-auto">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant={viewMode === 'classic' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setViewMode('classic')}
+                    >
+                      Classic
+                    </Button>
+                    <Button
+                      variant={viewMode === 'interactive' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setViewMode('interactive')}
+                    >
+                      <Zap className="h-4 w-4 mr-1" />
+                      Interactive
+                    </Button>
+                    <Button
+                      variant={viewMode === 'structural' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={handleStructuralAnalysis}
+                      disabled={isLoading}
+                    >
+                      <Search className="h-4 w-4 mr-1" />
+                      {isLoading && viewMode !== 'structural' ? 'Analyzing...' : 'Structural'}
+                    </Button>
+                    <Button
+                      variant={viewMode === 'visual' ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => handleVisualExploration('error_focused')}
+                      disabled={isLoading}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      {isLoading && viewMode !== 'visual' ? 'Exploring...' : 'Visual Explorer'}
+                    </Button>
+                  </div>
                   <Input
                     type="text"
                     placeholder="Enter the GitHub repo link or owner/repo"
@@ -267,6 +410,7 @@ function calculateCodebaseGrade(data: RepoData) {
             </div>
           </header>
           <main className="p-6 flex-grow">
+            {/* Repository Header - Always Visible */}
             <div className="grid mb-5 gap-6 grid-cols-1">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -295,6 +439,47 @@ function calculateCodebaseGrade(data: RepoData) {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Conditional Content Based on View Mode */}
+            {viewMode === 'interactive' ? (
+              <InteractiveCharts 
+                commitData={commitData}
+                repoData={repoData}
+                onDrillDown={handleDrillDown}
+              />
+            ) : viewMode === 'structural' ? (
+              structuralData ? (
+                <InteractiveStructuralTree 
+                  analysisData={structuralData}
+                  onNodeClick={(node) => console.log('Node clicked:', node)}
+                  onErrorClick={(error) => console.log('Error clicked:', error)}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <Search className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-muted-foreground">Click "Structural" to analyze codebase structure and errors</p>
+                  </div>
+                </div>
+              )
+            ) : viewMode === 'visual' ? (
+              visualExplorationData ? (
+                <VisualCodebaseExplorer 
+                  explorationData={visualExplorationData}
+                  onNodeClick={(node) => console.log('Node clicked:', node)}
+                  onModeChange={(mode) => handleVisualExploration(mode)}
+                />
+              ) : (
+                <div className="flex items-center justify-center h-64">
+                  <div className="text-center">
+                    <Eye className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-muted-foreground">Click "Visual Explorer" to start interactive codebase exploration</p>
+                  </div>
+                </div>
+              )
+            ) : (
+              /* Classic View */
+              <div>
             <div className="grid gap-6 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4">
               <Card onMouseEnter={() => handleMouseEnter('Maintainability Index')} onMouseLeave={handleMouseLeave}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -432,6 +617,8 @@ function calculateCodebaseGrade(data: RepoData) {
                 </CardContent>
               </Card>
             </div>
+              </div>
+            )}
           </main>
           <footer className="w-full text-center text-xs text-muted-foreground py-4">
           built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
