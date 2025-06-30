@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain } from "lucide-react"
+import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, TreePine, RotateCcw, Zap, Target, Trash2, Package } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
@@ -39,6 +39,47 @@ const mockCommitData = [
   { month: "November", commits: 220 },
 ];
 
+interface InheritanceAnalysis {
+  deepest_class_name: string | null;
+  deepest_class_depth: number;
+  inheritance_chain: string[];
+}
+
+interface RecursionAnalysis {
+  recursive_functions: string[];
+  total_recursive_count: number;
+}
+
+interface FunctionDetail {
+  name: string;
+  parameters: string[];
+  return_type?: string;
+  call_count: number;
+  calls_made: number;
+}
+
+interface ClassDetail {
+  name: string;
+  methods: string[];
+  attributes: string[];
+}
+
+interface ImportDetail {
+  module: string;
+  imported_symbols: string[];
+}
+
+interface FunctionAnalysis {
+  total_functions: number;
+  most_called_function?: FunctionDetail;
+  most_calling_function?: FunctionDetail;
+  dead_functions: string[];
+  dead_functions_count: number;
+  sample_functions: FunctionDetail[];
+  sample_classes: ClassDetail[];
+  sample_imports: ImportDetail[];
+}
+
 interface RepoAnalyticsResponse {
   repo_url: string;
   line_metrics: {
@@ -62,6 +103,9 @@ interface RepoAnalyticsResponse {
   num_functions: number;
   num_classes: number;
   monthly_commits: Record<string, number>;
+  inheritance_analysis: InheritanceAnalysis;
+  recursion_analysis: RecursionAnalysis;
+  function_analysis: FunctionAnalysis;
 }
 
 interface RepoData {
@@ -78,6 +122,9 @@ interface RepoData {
   numberOfFiles: number;
   numberOfFunctions: number;
   numberOfClasses: number;
+  inheritance_analysis?: InheritanceAnalysis;
+  recursion_analysis?: RecursionAnalysis;
+  function_analysis?: FunctionAnalysis;
 }
 
 export default function RepoAnalyticsDashboard() {
@@ -99,6 +146,23 @@ export default function RepoAnalyticsDashboard() {
     return input;
   };
 
+  // Get backend URL - uses environment variable or falls back to defaults
+  const getBackendUrl = () => {
+    // Check for environment variable first
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      return process.env.NEXT_PUBLIC_BACKEND_URL;
+    }
+    
+    // In development, try local backend first
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      // Default to 8001 since 8000 is often occupied by Docker
+      return 'http://localhost:8001';
+    }
+    
+    // Fallback to Modal deployment for production
+    return 'https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run';
+  };
+
   const handleFetchRepo = async () => {
     console.log("Fetching repo data...");
     
@@ -109,10 +173,11 @@ export default function RepoAnalyticsDashboard() {
     setIsLandingPage(false);
     
     try {
+      const backendUrl = getBackendUrl();
+      console.log(`Using backend: ${backendUrl}`);
+      
       console.log("Fetching repo data...");
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app.modal.run/analyze_repo
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo
-      const response = await fetch('https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo', {
+      const response = await fetch(`${backendUrl}/analyze_repo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -141,6 +206,9 @@ export default function RepoAnalyticsDashboard() {
         numberOfFiles: data.num_files,
         numberOfFunctions: data.num_functions,
         numberOfClasses: data.num_classes,
+        inheritance_analysis: data.inheritance_analysis,
+        recursion_analysis: data.recursion_analysis,
+        function_analysis: data.function_analysis,
       });
 
       const transformedCommitData = Object.entries(data.monthly_commits)
@@ -393,6 +461,136 @@ function calculateCodebaseGrade(data: RepoData) {
                 </CardContent>
               </Card>
             </div>
+            
+            {/* New Analysis Features */}
+            <div className="grid gap-6 md:grid-cols-2 mt-6">
+              <Card onMouseEnter={() => handleMouseEnter('Deepest Inheritance')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Deepest Inheritance</CardTitle>
+                  <TreePine className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  {repoData.inheritance_analysis?.deepest_class_name ? (
+                    <>
+                      <div className="text-2xl font-bold">{repoData.inheritance_analysis.deepest_class_name}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {hoveredCard === 'Deepest Inheritance' 
+                          ? `Inheritance chain: ${repoData.inheritance_analysis.inheritance_chain.join(' → ')}` 
+                          : `Depth: ${repoData.inheritance_analysis.deepest_class_depth} levels`}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold text-muted-foreground">None</div>
+                      <p className="text-xs text-muted-foreground mt-1">No class inheritance found</p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card onMouseEnter={() => handleMouseEnter('Recursive Functions')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Recursive Functions</CardTitle>
+                  <RotateCcw className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{repoData.recursion_analysis?.total_recursive_count || 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {hoveredCard === 'Recursive Functions' 
+                      ? (repoData.recursion_analysis?.recursive_functions?.length > 0 
+                          ? `Functions: ${repoData.recursion_analysis.recursive_functions.join(', ')}` 
+                          : 'No recursive functions found')
+                      : 'Functions that call themselves'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+            
+            {/* Function Analysis Features */}
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mt-6">
+              <Card onMouseEnter={() => handleMouseEnter('Most Called Function')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Most Called Function</CardTitle>
+                  <Target className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  {repoData.function_analysis?.most_called_function ? (
+                    <>
+                      <div className="text-2xl font-bold">{repoData.function_analysis.most_called_function.name}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {hoveredCard === 'Most Called Function' 
+                          ? `Called ${repoData.function_analysis.most_called_function.call_count} times, makes ${repoData.function_analysis.most_called_function.calls_made} calls` 
+                          : `${repoData.function_analysis.most_called_function.call_count} calls`}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold text-muted-foreground">None</div>
+                      <p className="text-xs text-muted-foreground mt-1">No function call data</p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card onMouseEnter={() => handleMouseEnter('Most Calling Function')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Most Calling Function</CardTitle>
+                  <Zap className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  {repoData.function_analysis?.most_calling_function ? (
+                    <>
+                      <div className="text-2xl font-bold">{repoData.function_analysis.most_calling_function.name}</div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {hoveredCard === 'Most Calling Function' 
+                          ? `Makes ${repoData.function_analysis.most_calling_function.calls_made} calls, called ${repoData.function_analysis.most_calling_function.call_count} times` 
+                          : `${repoData.function_analysis.most_calling_function.calls_made} calls made`}
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-2xl font-bold text-muted-foreground">None</div>
+                      <p className="text-xs text-muted-foreground mt-1">No function call data</p>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+              
+              <Card onMouseEnter={() => handleMouseEnter('Dead Functions')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Dead Functions</CardTitle>
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{repoData.function_analysis?.dead_functions_count || 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {hoveredCard === 'Dead Functions' 
+                      ? (repoData.function_analysis?.dead_functions?.length > 0 
+                          ? `Functions: ${repoData.function_analysis.dead_functions.slice(0, 3).join(', ')}${repoData.function_analysis.dead_functions.length > 3 ? '...' : ''}` 
+                          : 'No dead functions found')
+                      : 'Functions never called'}
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card onMouseEnter={() => handleMouseEnter('Sample Imports')} onMouseLeave={handleMouseLeave}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Sample Imports</CardTitle>
+                  <Package className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{repoData.function_analysis?.sample_imports?.length || 0}</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {hoveredCard === 'Sample Imports' 
+                      ? (repoData.function_analysis?.sample_imports?.length > 0 
+                          ? `Modules: ${repoData.function_analysis.sample_imports.slice(0, 2).map(imp => imp.module).join(', ')}${repoData.function_analysis.sample_imports.length > 2 ? '...' : ''}` 
+                          : 'No imports found')
+                      : 'Import statements detected'}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+            
             <Card className="mt-6">
               <CardHeader>
                 <CardTitle>Monthly Commits</CardTitle>
