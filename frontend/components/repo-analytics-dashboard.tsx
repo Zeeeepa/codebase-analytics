@@ -99,6 +99,23 @@ export default function RepoAnalyticsDashboard() {
     return input;
   };
 
+  // Get backend URL - uses environment variable or falls back to defaults
+  const getBackendUrl = () => {
+    // Check for environment variable first
+    if (process.env.NEXT_PUBLIC_BACKEND_URL) {
+      return process.env.NEXT_PUBLIC_BACKEND_URL;
+    }
+    
+    // In development, try local backend first
+    if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+      // Default to 8001 since 8000 is often occupied by Docker
+      return 'http://localhost:8001';
+    }
+    
+    // Fallback to Modal deployment for production
+    return 'https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run';
+  };
+
   const handleFetchRepo = async () => {
     console.log("Fetching repo data...");
     
@@ -109,10 +126,11 @@ export default function RepoAnalyticsDashboard() {
     setIsLandingPage(false);
     
     try {
+      const backendUrl = getBackendUrl();
+      console.log(`Using backend: ${backendUrl}`);
+      
       console.log("Fetching repo data...");
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app.modal.run/analyze_repo
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo
-      const response = await fetch('https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo', {
+      const response = await fetch(`${backendUrl}/analyze_repo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
