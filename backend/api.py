@@ -1,37 +1,54 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any
-from codegen import Codebase
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
-import math
-import re
-import requests
-from datetime import datetime, timedelta
-import subprocess
+#!/usr/bin/env python3
+"""
+FastAPI server for the Codebase Analytics tool.
+"""
+
 import os
 import tempfile
+import subprocess
+import json
+from datetime import datetime
+from pathlib import Path
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
-import modal
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+import uvicorn
+from typing import Optional, Dict, Any, List
+from urllib.parse import urlparse
 
-image = (
-    modal.Image.debian_slim()
-    .apt_install("git")
-    .pip_install(
-        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
-    )
+# Import consolidated analysis and visualization modules
+from analysis import (
+    analyze_codebase, analyze_code_quality, analyze_dependencies, analyze_call_graph,
+    detect_issues, get_codebase_summary, get_dependency_graph, get_symbol_references,
+    generate_dependency_graph_visualization, generate_call_graph_visualization,
+    generate_issue_visualization, generate_code_quality_visualization,
+    generate_repository_structure_visualization,
+    # New advanced analysis functions
+    get_operators_and_operands,
+    calculate_halstead_volume,
+    calculate_halstead_metrics,
+    analyze_inheritance_hierarchy,
+    detect_entry_points,
+    detect_comprehensive_issues,
+    get_function_context,
+    get_advanced_codebase_statistics,
+    build_interactive_repository_structure
+)
+from visualize import visualize_codebase, generate_html_report, run_visualization_analysis
+from enhanced_interactive_ui import build_enhanced_interactive_structure
+from codegen.sdk.core.codebase import Codebase
+
+# Create FastAPI app
+app = FastAPI(
+    title="Codebase Analytics API",
+    description="API for analyzing codebases",
+    version="1.0.0",
 )
 
-app = modal.App(name="analytics-app", image=image)
-
-fastapi_app = FastAPI()
-
-fastapi_app.add_middleware(
+# Add CORS middleware
+app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -39,393 +56,849 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
-
-def get_monthly_commits(repo_path: str) -> Dict[str, int]:
-    """
-    Get the number of commits per month for the last 12 months.
-
-    Args:
-        repo_path: Path to the git repository
-
-    Returns:
-        Dictionary with month-year as key and number of commits as value
-    """
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=365)
-
-    date_format = "%Y-%m-%d"
-    since_date = start_date.strftime(date_format)
-    until_date = end_date.strftime(date_format)
-    repo_path = "https://github.com/" + repo_path
-
-    try:
-        original_dir = os.getcwd()
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            subprocess.run(["git", "clone", repo_path, temp_dir], check=True)
-            os.chdir(temp_dir)
-
-            cmd = [
-                "git",
-                "log",
-                f"--since={since_date}",
-                f"--until={until_date}",
-                "--format=%aI",
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            commit_dates = result.stdout.strip().split("\n")
-
-            monthly_counts = {}
-            current_date = start_date
-            while current_date <= end_date:
-                month_key = current_date.strftime("%Y-%m")
-                monthly_counts[month_key] = 0
-                current_date = (
-                    current_date.replace(day=1) + timedelta(days=32)
-                ).replace(day=1)
-
-            for date_str in commit_dates:
-                if date_str:  # Skip empty lines
-                    commit_date = datetime.fromisoformat(date_str.strip())
-                    month_key = commit_date.strftime("%Y-%m")
-                    if month_key in monthly_counts:
-                        monthly_counts[month_key] += 1
-
-            os.chdir(original_dir)
-            return dict(sorted(monthly_counts.items()))
-
-    except subprocess.CalledProcessError as e:
-        print(f"Error executing git command: {e}")
-        return {}
-    except Exception as e:
-        print(f"Error processing git commits: {e}")
-        return {}
-    finally:
-        try:
-            os.chdir(original_dir)
-        except:
-            pass
-
-
-def calculate_cyclomatic_complexity(function):
-    def analyze_statement(statement):
-        complexity = 0
-
-        if isinstance(statement, IfBlockStatement):
-            complexity += 1
-            if hasattr(statement, "elif_statements"):
-                complexity += len(statement.elif_statements)
-
-        elif isinstance(statement, (ForLoopStatement, WhileStatement)):
-            complexity += 1
-
-        elif isinstance(statement, TryCatchStatement):
-            complexity += len(getattr(statement, "except_blocks", []))
-
-        if hasattr(statement, "condition") and isinstance(statement.condition, str):
-            complexity += statement.condition.count(
-                " and "
-            ) + statement.condition.count(" or ")
-
-        if hasattr(statement, "nested_code_blocks"):
-            for block in statement.nested_code_blocks:
-                complexity += analyze_block(block)
-
-        return complexity
-
-    def analyze_block(block):
-        if not block or not hasattr(block, "statements"):
-            return 0
-        return sum(analyze_statement(stmt) for stmt in block.statements)
-
-    return (
-        1 + analyze_block(function.code_block) if hasattr(function, "code_block") else 1
-    )
-
-
-def cc_rank(complexity):
-    if complexity < 0:
-        raise ValueError("Complexity must be a non-negative value")
-
-    ranks = [
-        (1, 5, "A"),
-        (6, 10, "B"),
-        (11, 20, "C"),
-        (21, 30, "D"),
-        (31, 40, "E"),
-        (41, float("inf"), "F"),
-    ]
-    for low, high, rank in ranks:
-        if low <= complexity <= high:
-            return rank
-    return "F"
-
-
-def calculate_doi(cls):
-    """Calculate the depth of inheritance for a given class."""
-    return len(cls.superclasses)
-
-
-def get_operators_and_operands(function):
-    operators = []
-    operands = []
-
-    for statement in function.code_block.statements:
-        for call in statement.function_calls:
-            operators.append(call.name)
-            for arg in call.args:
-                operands.append(arg.source)
-
-        if hasattr(statement, "expressions"):
-            for expr in statement.expressions:
-                if isinstance(expr, BinaryExpression):
-                    operators.extend([op.source for op in expr.operators])
-                    operands.extend([elem.source for elem in expr.elements])
-                elif isinstance(expr, UnaryExpression):
-                    operators.append(expr.ts_node.type)
-                    operands.append(expr.argument.source)
-                elif isinstance(expr, ComparisonExpression):
-                    operators.extend([op.source for op in expr.operators])
-                    operands.extend([elem.source for elem in expr.elements])
-
-        if hasattr(statement, "expression"):
-            expr = statement.expression
-            if isinstance(expr, BinaryExpression):
-                operators.extend([op.source for op in expr.operators])
-                operands.extend([elem.source for elem in expr.elements])
-            elif isinstance(expr, UnaryExpression):
-                operators.append(expr.ts_node.type)
-                operands.append(expr.argument.source)
-            elif isinstance(expr, ComparisonExpression):
-                operators.extend([op.source for op in expr.operators])
-                operands.extend([elem.source for elem in expr.elements])
-
-    return operators, operands
-
-
-def calculate_halstead_volume(operators, operands):
-    n1 = len(set(operators))
-    n2 = len(set(operands))
-
-    N1 = len(operators)
-    N2 = len(operands)
-
-    N = N1 + N2
-    n = n1 + n2
-
-    if n > 0:
-        volume = N * math.log2(n)
-        return volume, N1, N2, n1, n2
-    return 0, N1, N2, n1, n2
-
-
-def count_lines(source: str):
-    """Count different types of lines in source code."""
-    if not source.strip():
-        return 0, 0, 0, 0
-
-    lines = [line.strip() for line in source.splitlines()]
-    loc = len(lines)
-    sloc = len([line for line in lines if line])
-
-    in_multiline = False
-    comments = 0
-    code_lines = []
-
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        code_part = line
-        if not in_multiline and "#" in line:
-            comment_start = line.find("#")
-            if not re.search(r'["\'].*#.*["\']', line[:comment_start]):
-                code_part = line[:comment_start].strip()
-                if line[comment_start:].strip():
-                    comments += 1
-
-        if ('"""' in line or "'''" in line) and not (
-            line.count('"""') % 2 == 0 or line.count("'''") % 2 == 0
-        ):
-            if in_multiline:
-                in_multiline = False
-                comments += 1
-            else:
-                in_multiline = True
-                comments += 1
-                if line.strip().startswith('"""') or line.strip().startswith("'''"):
-                    code_part = ""
-        elif in_multiline:
-            comments += 1
-            code_part = ""
-        elif line.strip().startswith("#"):
-            comments += 1
-            code_part = ""
-
-        if code_part.strip():
-            code_lines.append(code_part)
-
-        i += 1
-
-    lloc = 0
-    continued_line = False
-    for line in code_lines:
-        if continued_line:
-            if not any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
-                continued_line = False
-            continue
-
-        lloc += len([stmt for stmt in line.split(";") if stmt.strip()])
-
-        if any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
-            continued_line = True
-
-    return loc, lloc, sloc, comments
-
-
-def calculate_maintainability_index(
-    halstead_volume: float, cyclomatic_complexity: float, loc: int
-) -> int:
-    """Calculate the normalized maintainability index for a given function."""
-    if loc <= 0:
-        return 100
-
-    try:
-        raw_mi = (
-            171
-            - 5.2 * math.log(max(1, halstead_volume))
-            - 0.23 * cyclomatic_complexity
-            - 16.2 * math.log(max(1, loc))
-        )
-        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
-        return int(normalized_mi)
-    except (ValueError, TypeError):
-        return 0
-
-
-def get_maintainability_rank(mi_score: float) -> str:
-    """Convert maintainability index score to a letter grade."""
-    if mi_score >= 85:
-        return "A"
-    elif mi_score >= 65:
-        return "B"
-    elif mi_score >= 45:
-        return "C"
-    elif mi_score >= 25:
-        return "D"
+# CLI functionality transferred from cli.py
+def parse_repo_url(repo_input: str) -> tuple[str, str]:
+    """Parse repository input to extract owner and repo name."""
+    if repo_input.startswith('https://github.com/'):
+        # Parse GitHub URL
+        parsed = urlparse(repo_input)
+        path_parts = parsed.path.strip('/').split('/')
+        if len(path_parts) >= 2:
+            return path_parts[0], path_parts[1]
+        else:
+            raise ValueError("Invalid GitHub URL format")
+    elif '/' in repo_input:
+        # Parse owner/repo format
+        parts = repo_input.split('/')
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        else:
+            raise ValueError("Invalid owner/repo format")
     else:
-        return "F"
+        raise ValueError("Invalid repository format. Use 'owner/repo' or GitHub URL")
 
+def format_cli_response(data: Dict[str, Any]) -> str:
+    """Format analysis response for CLI display."""
+    output = []
+    output.append("=" * 80)
+    output.append("🔍 COMPREHENSIVE CODEBASE ANALYSIS RESULTS")
+    output.append("=" * 80)
+    
+    # Repository info
+    repo = data.get('repository', {})
+    output.append(f"\n📁 Repository: {repo.get('name', 'Unknown')} ({repo.get('owner', 'Unknown')})")
+    output.append(f"🔗 URL: {repo.get('url', 'N/A')}")
+    output.append(f"📊 Files: {repo.get('total_files', 0)} | Functions: {repo.get('total_functions', 0)} | Classes: {repo.get('total_classes', 0)}")
+    
+    # Issues summary
+    analysis = data.get('analysis', {})
+    issues = analysis.get('issues', {})
+    output.append(f"\n🚨 ISSUES SUMMARY")
+    output.append(f"   Total Issues: {issues.get('total', 0)}")
+    
+    by_severity = issues.get('by_severity', {})
+    if by_severity:
+        output.append(f"   ⚠️  Critical: {by_severity.get('Critical', 0)}")
+        output.append(f"   🔶 High: {by_severity.get('High', 0)}")
+        output.append(f"   🔸 Medium: {by_severity.get('Medium', 0)}")
+        output.append(f"   🔹 Low: {by_severity.get('Low', 0)}")
+    
+    # Code quality
+    quality = analysis.get('code_quality', {})
+    if quality:
+        output.append(f"\n📈 CODE QUALITY METRICS")
+        output.append(f"   Maintainability Index: {quality.get('maintainability_index', 0):.2f}")
+        output.append(f"   Technical Debt Ratio: {quality.get('technical_debt_ratio', 0):.2f}%")
+        output.append(f"   Comment Density: {quality.get('comment_density', 0):.2f}%")
+        output.append(f"   Cyclomatic Complexity: {quality.get('cyclomatic_complexity', 0):.2f}")
+    
+    # Dependencies
+    deps = analysis.get('dependencies', {})
+    if deps:
+        output.append(f"\n🔗 DEPENDENCIES")
+        output.append(f"   Total: {deps.get('total', 0)}")
+        output.append(f"   Circular: {deps.get('circular', 0)}")
+        output.append(f"   External: {deps.get('external', 0)}")
+        output.append(f"   Critical: {deps.get('critical', 0)}")
+    
+    # Entry points
+    entry_points = analysis.get('most_important_entry_points', {})
+    if entry_points:
+        output.append(f"\n🚪 ENTRY POINTS")
+        main_funcs = entry_points.get('main_functions', [])
+        if main_funcs:
+            output.append(f"   Main Functions: {', '.join([str(f) for f in main_funcs[:5]])}")
+        
+        api_endpoints = entry_points.get('api_endpoints', [])
+        if api_endpoints:
+            output.append(f"   API Endpoints: {', '.join([str(e) for e in api_endpoints[:5]])}")
+    
+    output.append("\n" + "=" * 80)
+    output.append("✅ Analysis Complete!")
+    output.append("=" * 80)
+    
+    return "\n".join(output)
 
-def get_github_repo_description(repo_url):
-    api_url = f"https://api.github.com/repos/{repo_url}"
+# Create output directory
+os.makedirs("output", exist_ok=True)
 
-    response = requests.get(api_url)
+# Mount static files
+app.mount("/static", StaticFiles(directory="../frontend"), name="static")
 
-    if response.status_code == 200:
-        repo_data = response.json()
-        return repo_data.get("description", "No description available")
-    else:
-        return ""
-
-
-class RepoRequest(BaseModel):
+# Define request models
+class AnalysisRequest(BaseModel):
     repo_url: str
+    branch: Optional[str] = None
+    output_dir: Optional[str] = "output"
 
+class AnalysisResponse(BaseModel):
+    status: str
+    message: str
+    analysis_id: Optional[str] = None
 
-@fastapi_app.post("/analyze_repo")
-async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
-    repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
+# Store analysis results
+analysis_results = {}
 
-    num_files = len(codebase.files(extensions="*"))
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {"message": "Welcome to the Codebase Analytics API"}
 
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
+@app.get("/ui", response_class=HTMLResponse)
+async def interactive_ui():
+    """Serve the interactive analysis UI."""
+    try:
+        with open("../frontend/interactive-analysis.html", "r") as f:
+            return HTMLResponse(content=f.read())
+    except FileNotFoundError:
+        return HTMLResponse(content="<h1>UI not found</h1>", status_code=404)
 
-    monthly_commits = get_monthly_commits(repo_url)
-    print(monthly_commits)
-
-    for file in codebase.files:
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-
-    num_callables = 0
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
-
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
-
-    results = {
-        "repo_url": repo_url,
-        "line_metrics": {
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100)
-                if total_loc > 0
-                else 0,
+@app.get("/interactive/{repo_owner}/{repo_name}")
+async def get_interactive_structure(repo_owner: str, repo_name: str):
+    """
+    Get interactive repository structure for UI display.
+    
+    This endpoint provides the repository tree structure with issue counts,
+    symbol information, and statistical data for the interactive UI.
+    """
+    try:
+        # Construct repository URL
+        repo_url = f"{repo_owner}/{repo_name}"
+        
+        # Load codebase using Codegen SDK
+        codebase = Codebase.from_repo(repo_url)
+        
+        print(f"🌳 Building interactive structure for: {repo_url}")
+        
+        # Build enhanced interactive repository structure
+        interactive_structure = build_enhanced_interactive_structure(codebase)
+        
+        # Get additional context
+        issues = detect_comprehensive_issues(codebase)
+        advanced_stats = get_advanced_codebase_statistics(codebase)
+        
+        # Build comprehensive response for interactive UI
+        # Extract repository info from enhanced structure
+        repo_info = interactive_structure.get('repository', {})
+        repo_summary = repo_info.get('summary', {})
+        
+        response = {
+            "repository": {
+                "owner": repo_owner,
+                "name": repo_name,
+                "url": f"https://github.com/{repo_url}",
+                "tree": repo_info.get('tree', {}),
+                "summary": repo_summary
             },
-        },
-        "cyclomatic_complexity": {
-            "average": total_complexity if num_callables > 0 else 0,
-        },
-        "depth_of_inheritance": {
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        "halstead_metrics": {
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables)
-            if num_callables > 0
-            else 0,
-        },
-        "maintainability_index": {
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        "description": desc,
-        "num_files": num_files,
-        "num_functions": num_functions,
-        "num_classes": num_classes,
-        "monthly_commits": monthly_commits,
+            "interactive_tree": interactive_structure,
+            "statistics": {
+                "overview": {
+                    "total_files": repo_summary.get('total_files', 0),
+                    "total_directories": repo_summary.get('total_directories', 0),
+                    "total_functions": repo_summary.get('total_functions', 0),
+                    "total_classes": repo_summary.get('total_classes', 0),
+                    "total_issues": repo_summary.get('total_issues', 0),
+                    "total_lines_of_code": repo_summary.get('total_lines_of_code', 0)
+                },
+                "issues_by_severity": repo_summary.get('issues_by_severity', {}),
+                "advanced_metrics": advanced_stats
+            },
+            "ui_config": repo_info.get('ui_config', {
+                "theme": "dark",
+                "show_issue_details": True,
+                "show_symbol_context": True,
+                "expandable_tree": True
+            })
+        }
+        
+        return JSONResponse(content=response)
+        
+    except Exception as e:
+        import traceback
+        print(f"❌ Error building interactive structure: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to build interactive structure: {str(e)}")
+
+@app.get("/cli/analyze/{repo_input:path}", response_class=PlainTextResponse)
+async def cli_analyze(repo_input: str):
+    """
+    CLI-compatible analysis endpoint that returns formatted text output.
+    
+    Supports both 'owner/repo' and full GitHub URLs.
+    """
+    try:
+        # Parse repository input
+        owner, repo = parse_repo_url(repo_input)
+        
+        # Get analysis data using existing endpoint logic
+        repo_url = f"{owner}/{repo}"
+        codebase = Codebase.from_repo(repo_url)
+        
+        print(f"🔍 CLI Analysis for: {repo_url}")
+        
+        # Perform analysis (simplified version for CLI)
+        issues = detect_comprehensive_issues(codebase)
+        code_quality = analyze_code_quality(codebase)
+        dependencies = analyze_dependencies(codebase)
+        entry_points = detect_entry_points(codebase)
+        
+        # Build response data
+        data = {
+            "repository": {
+                "owner": owner,
+                "name": repo,
+                "url": f"https://github.com/{repo_url}",
+                "total_files": len(list(codebase.files)),
+                "total_functions": len(list(codebase.functions)),
+                "total_classes": len(list(codebase.classes))
+            },
+            "analysis": {
+                "issues": {
+                    "total": len(issues.get('detailed_issues', [])),
+                    "by_severity": issues.get('issues_by_severity', {})
+                },
+                "code_quality": {
+                    "maintainability_index": getattr(code_quality, 'maintainability_index', 0),
+                    "technical_debt_ratio": getattr(code_quality, 'technical_debt_ratio', 0),
+                    "comment_density": getattr(code_quality, 'comment_density', 0),
+                    "cyclomatic_complexity": getattr(code_quality, 'cyclomatic_complexity', 0)
+                },
+                "dependencies": {
+                    "total": getattr(dependencies, 'total_dependencies', 0),
+                    "circular": len(getattr(dependencies, 'circular_dependencies', [])),
+                    "external": len(getattr(dependencies, 'external_dependencies', [])),
+                    "critical": len(getattr(dependencies, 'critical_dependencies', []))
+                },
+                "most_important_entry_points": {
+                    "main_functions": getattr(entry_points, 'main_functions', []),
+                    "api_endpoints": getattr(entry_points, 'api_endpoints', [])
+                }
+            }
+        }
+        
+        # Format for CLI display
+        formatted_output = format_cli_response(data)
+        return formatted_output
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        import traceback
+        print(f"❌ CLI Analysis error: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+@app.get("/analyze/{repo_owner}/{repo_name}")
+async def analyze_repository(repo_owner: str, repo_name: str):
+    """
+    Comprehensive analysis of a GitHub repository with all context.
+    
+    Args:
+        repo_owner: GitHub repository owner
+        repo_name: GitHub repository name
+        
+    Returns:
+        Complete analysis results with interactive repository structure
+    """
+    try:
+        # Construct repository URL
+        repo_url = f"{repo_owner}/{repo_name}"
+        
+        # Load codebase using Codegen SDK
+        codebase = Codebase.from_repo(repo_url)
+        
+        # Run comprehensive analysis
+        print(f"🔍 Analyzing repository: {repo_url}")
+        
+        # 1. Detect issues
+        issues = detect_issues(codebase)
+        print(f"📊 Issues detected: {len(issues.issues)}")
+        
+        # 2. Analyze code quality
+        code_quality = analyze_code_quality(codebase)
+        print(f"📈 Code quality analyzed")
+        
+        # 3. Analyze dependencies
+        dependencies = analyze_dependencies(codebase)
+        print(f"🔗 Dependencies analyzed")
+        
+        # 4. Analyze call graph
+        call_graph = analyze_call_graph(codebase)
+        print(f"📞 Call graph analyzed")
+        
+        # 5. Advanced analysis features
+        print("🧮 Running Halstead metrics analysis...")
+        halstead_analysis = {}
+        for func in codebase.functions:
+            if hasattr(func, 'source') and func.source:
+                halstead_analysis[func.name] = calculate_halstead_metrics(func)
+        
+        print("🏗️ Analyzing inheritance hierarchy...")
+        inheritance_analysis = analyze_inheritance_hierarchy(codebase)
+        
+        print("🎯 Detecting entry points...")
+        entry_points_analysis = detect_entry_points(codebase)
+        
+        print("🚨 Running comprehensive issue detection...")
+        comprehensive_issues = detect_comprehensive_issues(codebase)
+        
+        print("📊 Gathering advanced statistics...")
+        advanced_stats = get_advanced_codebase_statistics(codebase)
+        
+        # 6. Build interactive repository structure
+        print("🌳 Building interactive repository structure...")
+        interactive_structure = build_interactive_repository_structure(codebase)
+        
+        # 7. Generate visualizations
+        dependency_viz = generate_dependency_graph_visualization(dependencies)
+        call_graph_viz = generate_call_graph_visualization(call_graph)
+        issue_viz = generate_issue_visualization(issues)
+        quality_viz = generate_code_quality_visualization(code_quality)
+        repo_structure_viz = generate_repository_structure_visualization(codebase)
+        
+        # 7. Build interactive repository structure with issue counts (using new advanced function)
+        interactive_structure = build_interactive_repository_structure(codebase)
+        
+        # 7. Get symbol details for interactive features
+        symbol_details = build_symbol_details_map(codebase, issues, call_graph, dependencies)
+        
+        # Helper function to convert PosixPath objects and dataclasses to JSON-serializable format
+        def convert_paths_to_strings(obj, visited=None):
+            """Recursively convert PosixPath objects and dataclasses to strings."""
+            from dataclasses import is_dataclass, asdict
+            
+            if visited is None:
+                visited = set()
+            
+            # Prevent infinite recursion
+            obj_id = id(obj)
+            if obj_id in visited:
+                return str(obj) if hasattr(obj, '__str__') else f"<circular reference: {type(obj).__name__}>"
+            
+            if isinstance(obj, (str, int, float, bool, type(None))):
+                return obj
+            elif isinstance(obj, Path):
+                return str(obj)
+            elif is_dataclass(obj):
+                visited.add(obj_id)
+                result = convert_paths_to_strings(asdict(obj), visited)
+                visited.remove(obj_id)
+                return result
+            elif isinstance(obj, dict):
+                visited.add(obj_id)
+                result = {key: convert_paths_to_strings(value, visited) for key, value in obj.items()}
+                visited.remove(obj_id)
+                return result
+            elif isinstance(obj, list):
+                visited.add(obj_id)
+                result = [convert_paths_to_strings(item, visited) for item in obj]
+                visited.remove(obj_id)
+                return result
+            elif hasattr(obj, 'name') and isinstance(obj.name, str):
+                # Handle objects with a name attribute
+                return str(obj.name)
+            else:
+                # Fallback to string representation
+                return str(obj)
+        
+        # Compile comprehensive response
+        response = {
+            "repository": {
+                "owner": repo_owner,
+                "name": repo_name,
+                "url": f"https://github.com/{repo_url}",
+                "total_files": len(codebase.files),
+                "total_functions": len(codebase.functions),
+                "total_classes": len(codebase.classes),
+                "total_symbols": len(codebase.symbols)
+            },
+            "analysis": {
+                "issues": {
+                    "total": len(issues.issues),
+                    "by_severity": issues.count_by_severity(),
+                    "by_category": issues.count_by_category(),
+                    "details": [
+                        {
+                            "id": issue.id,
+                            "category": issue.category.value,
+                            "severity": issue.severity.value,
+                            "message": issue.message,
+                            "file_path": str(issue.location.file_path),
+                            "line_start": issue.location.line_start,
+                            "line_end": issue.location.line_end
+                        }
+                        for issue in issues.issues
+                    ]
+                },
+                "comprehensive_issues": comprehensive_issues,
+                "halstead_metrics": halstead_analysis,
+                "inheritance_analysis": inheritance_analysis,
+                "entry_points": entry_points_analysis,
+                "most_important_entry_points": {
+                    "top_10_by_heat": entry_points_analysis.get('entry_points', [])[:10],
+                    "main_functions": [ep for ep in entry_points_analysis.get('entry_points', []) if hasattr(ep, 'function_type') and ep.function_type == 'main'],
+                    "api_endpoints": [ep for ep in entry_points_analysis.get('entry_points', []) if hasattr(ep, 'function_type') and ep.function_type == 'api_endpoint'],
+                    "high_usage_functions": [ep for ep in entry_points_analysis.get('entry_points', []) if hasattr(ep, 'function_type') and ep.function_type == 'high_usage']
+                },
+                "advanced_statistics": advanced_stats,
+                "code_quality": {
+                    "maintainability_index": code_quality.maintainability_index,
+                    "cyclomatic_complexity": code_quality.cyclomatic_complexity,
+                    "comment_density": code_quality.comment_density,
+                    "source_lines_of_code": code_quality.source_lines_of_code,
+                    "duplication_percentage": code_quality.duplication_percentage,
+                    "technical_debt_ratio": code_quality.technical_debt_ratio
+                },
+                "dependencies": {
+                    "total": dependencies.total_dependencies,
+                    "circular": len(dependencies.circular_dependencies),
+                    "external": len(dependencies.external_dependencies),
+                    "internal": len(dependencies.internal_dependencies),
+                    "depth": dependencies.dependency_depth,
+                    "critical": len(dependencies.critical_dependencies)
+                },
+                "call_graph": {
+                    "total_functions": call_graph.total_functions,
+                    "entry_points": len(call_graph.entry_points),
+                    "leaf_functions": len(call_graph.leaf_functions),
+                    "max_call_depth": call_graph.max_call_depth,
+                    "call_chains": len(call_graph.call_chains)
+                }
+            },
+            "interactive_structure": interactive_structure,
+            "symbol_details": symbol_details,
+            "visualizations": {
+                "dependency_graph": dependency_viz,
+                "call_graph": call_graph_viz,
+                "issues": issue_viz,
+                "code_quality": quality_viz,
+                "repository_structure": repo_structure_viz
+            },
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # Convert all PosixPath objects to strings before JSON serialization
+        response = convert_paths_to_strings(response)
+        
+        return JSONResponse(content=response)
+        
+    except Exception as e:
+        import traceback
+        print(f"❌ Error analyzing repository: {e}")
+        print(f"🔍 Full traceback:")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+# Note: build_interactive_repository_structure is now imported from analysis.py
+
+def build_symbol_details_map(codebase: Codebase, issues, call_graph, dependencies) -> Dict[str, Any]:
+    """Build detailed symbol information for interactive features."""
+    symbol_details = {}
+    
+    # Process functions
+    for func in codebase.functions:
+        func_issues = [issue for issue in issues.issues if str(issue.location.file_path) == func.filepath and issue.location.line_start >= func.line_range.start and issue.location.line_start <= func.line_range.stop - 1]
+        
+        symbol_details[f"function:{func.name}"] = {
+            "type": "function",
+            "name": func.name,
+            "filepath": str(func.filepath),
+            "start_line": func.line_range.start,
+            "end_line": func.line_range.stop - 1,
+            "parameters": [param.name for param in func.parameters] if hasattr(func, 'parameters') else [],
+            "issues": [
+                {
+                    "category": issue.category.value,
+                    "severity": issue.severity.value,
+                    "message": issue.message,
+                    "line": issue.location.line_start
+                }
+                for issue in func_issues
+            ],
+            "calls": [],  # Will be populated from call graph
+            "called_by": [],  # Will be populated from call graph
+            "dependencies": []  # Will be populated from dependencies
+        }
+    
+    # Process classes
+    for cls in codebase.classes:
+        cls_issues = [issue for issue in issues.issues if str(issue.location.file_path) == cls.filepath and issue.location.line_start >= cls.line_range.start and issue.location.line_start <= cls.line_range.stop - 1]
+        
+        symbol_details[f"class:{cls.name}"] = {
+            "type": "class",
+            "name": cls.name,
+            "filepath": str(cls.filepath),
+            "start_line": cls.line_range.start,
+            "end_line": cls.line_range.stop - 1,
+            "methods": [method.name for method in cls.methods] if hasattr(cls, 'methods') else [],
+            "issues": [
+                {
+                    "category": issue.category.value,
+                    "severity": issue.severity.value,
+                    "message": issue.message,
+                    "line": issue.location.line_start
+                }
+                for issue in cls_issues
+            ],
+            "dependencies": []
+        }
+    
+    return symbol_details
+
+@app.post("/analyze", response_model=AnalysisResponse)
+async def analyze(request: AnalysisRequest, background_tasks: BackgroundTasks):
+    """
+    Analyze a codebase.
+    
+    Args:
+        request: AnalysisRequest object
+        background_tasks: BackgroundTasks object
+        
+    Returns:
+        AnalysisResponse object
+    """
+    # Generate analysis ID
+    import uuid
+    analysis_id = str(uuid.uuid4())
+    
+    # Create output directory
+    output_dir = os.path.join(request.output_dir, analysis_id)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Store analysis request
+    analysis_results[analysis_id] = {
+        "status": "pending",
+        "message": "Analysis started",
+        "repo_url": request.repo_url,
+        "branch": request.branch,
+        "output_dir": output_dir,
+    }
+    
+    # Run analysis in background
+    background_tasks.add_task(
+        run_analysis,
+        analysis_id,
+        request.repo_url,
+        request.branch,
+        output_dir,
+    )
+    
+    return {
+        "status": "pending",
+        "message": "Analysis started",
+        "analysis_id": analysis_id,
     }
 
-    return results
+@app.get("/analysis/{analysis_id}")
+async def get_analysis(analysis_id: str):
+    """
+    Get analysis results.
+    
+    Args:
+        analysis_id: Analysis ID
+        
+    Returns:
+        Analysis results
+    """
+    if analysis_id not in analysis_results:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    
+    return analysis_results[analysis_id]
 
+@app.get("/analysis/{analysis_id}/report")
+async def get_report(analysis_id: str):
+    """
+    Get analysis report.
+    
+    Args:
+        analysis_id: Analysis ID
+        
+    Returns:
+        HTML report
+    """
+    if analysis_id not in analysis_results:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    
+    if analysis_results[analysis_id]["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Analysis not completed")
+    
+    report_path = os.path.join(analysis_results[analysis_id]["output_dir"], "report.html")
+    
+    if not os.path.exists(report_path):
+        raise HTTPException(status_code=404, detail="Report not found")
+    
+    return FileResponse(report_path)
 
-@app.function(image=image)
-@modal.asgi_app()
-def fastapi_modal_app():
-    return fastapi_app
+@app.get("/analysis/{analysis_id}/visualization/{visualization_name}")
+async def get_visualization(analysis_id: str, visualization_name: str):
+    """
+    Get visualization.
+    
+    Args:
+        analysis_id: Analysis ID
+        visualization_name: Visualization name
+        
+    Returns:
+        Visualization image
+    """
+    if analysis_id not in analysis_results:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    
+    if analysis_results[analysis_id]["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Analysis not completed")
+    
+    visualization_path = os.path.join(
+        analysis_results[analysis_id]["output_dir"],
+        "visualizations",
+        f"{visualization_name}.png",
+    )
+    
+    if not os.path.exists(visualization_path):
+        raise HTTPException(status_code=404, detail="Visualization not found")
+    
+    return FileResponse(visualization_path)
 
+@app.get("/cli/{repo_owner}/{repo_name}")
+async def cli_analysis(repo_owner: str, repo_name: str):
+    """
+    CLI-friendly analysis endpoint that returns simplified text output.
+    
+    Args:
+        repo_owner: GitHub repository owner
+        repo_name: GitHub repository name
+        
+    Returns:
+        Text-based analysis summary
+    """
+    try:
+        # Get comprehensive analysis
+        result = await analyze_repository(repo_owner, repo_name)
+        
+        # Extract data from JSONResponse
+        import json
+        if hasattr(result, 'body'):
+            analysis_data = json.loads(result.body.decode())
+        else:
+            analysis_data = result
+        
+        repo = analysis_data["repository"]
+        analysis = analysis_data["analysis"]
+        
+        cli_output = f"""
+�� CODEBASE ANALYSIS REPORT
+{'=' * 50}
+📊 Repository: {repo["owner"]}/{repo["name"]}
+🌐 URL: {repo["url"]}
+
+📈 OVERVIEW:
+- Files: {repo["total_files"]}
+- Functions: {repo["total_functions"]}
+- Classes: {repo["total_classes"]}
+- Symbols: {repo["total_symbols"]}
+
+🚨 ISSUES SUMMARY:
+- Total Issues: {analysis["issues"]["total"]}
+- Critical: {analysis["issues"]["by_severity"].get("critical", 0)}
+- Major: {analysis["issues"]["by_severity"].get("major", 0)}
+- Minor: {analysis["issues"]["by_severity"].get("minor", 0)}
+
+📊 CODE QUALITY:
+- Maintainability Index: {analysis["code_quality"]["maintainability_index"]:.1f}
+- Cyclomatic Complexity: {analysis["code_quality"]["cyclomatic_complexity"]:.1f}
+- Comment Density: {analysis["code_quality"]["comment_density"]:.2f}
+- Source Lines of Code: {analysis["code_quality"]["source_lines_of_code"]}
+- Technical Debt Ratio: {analysis["code_quality"]["technical_debt_ratio"]:.2f}
+
+🔗 DEPENDENCIES:
+- Total Dependencies: {analysis["dependencies"]["total"]}
+- Circular Dependencies: {analysis["dependencies"]["circular"]}
+- External Dependencies: {analysis["dependencies"]["external"]}
+- Dependency Depth: {analysis["dependencies"]["depth"]}
+
+📞 CALL GRAPH:
+- Total Functions: {analysis["call_graph"]["total_functions"]}
+- Entry Points: {analysis["call_graph"]["entry_points"]}
+- Leaf Functions: {analysis["call_graph"]["leaf_functions"]}
+- Max Call Depth: {analysis["call_graph"]["max_call_depth"]}
+
+🎯 ANALYSIS COMPLETE!
+"""
+        
+        return {"cli_output": cli_output}
+        
+    except Exception as e:
+        return {"error": f"CLI analysis failed: {str(e)}"}
+
+@app.get("/endpoint/{repo_name}/")
+async def cli_analyze_endpoint(repo_name: str, background_tasks: BackgroundTasks, branch: Optional[str] = None):
+    """
+    CLI endpoint for codebase analysis.
+    
+    Args:
+        repo_name: Repository name (format: owner/repo or just repo for GitHub)
+        branch: Optional branch name (defaults to main/master)
+        background_tasks: BackgroundTasks object
+        
+    Returns:
+        Analysis results or analysis ID for background processing
+    """
+    # Generate analysis ID
+    import uuid
+    analysis_id = str(uuid.uuid4())
+    
+    # Construct GitHub URL if not a full URL
+    if not repo_name.startswith(('http://', 'https://')):
+        if '/' not in repo_name:
+            # Assume it's a repo under current user/org context
+            repo_url = f"https://github.com/Zeeeepa/{repo_name}"
+        else:
+            # Assume it's owner/repo format
+            repo_url = f"https://github.com/{repo_name}"
+    else:
+        repo_url = repo_name
+    
+    # Create output directory
+    output_dir = os.path.join("output", analysis_id)
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Store analysis request
+    analysis_results[analysis_id] = {
+        "status": "pending",
+        "message": "CLI analysis started",
+        "repo_url": repo_url,
+        "repo_name": repo_name,
+        "branch": branch,
+        "output_dir": output_dir,
+    }
+    
+    # Run analysis in background
+    background_tasks.add_task(
+        run_analysis,
+        analysis_id,
+        repo_url,
+        branch,
+        output_dir,
+    )
+    
+    return {
+        "status": "pending",
+        "message": f"CLI analysis started for {repo_name}",
+        "analysis_id": analysis_id,
+        "repo_url": repo_url,
+        "check_status_url": f"/analysis/{analysis_id}",
+        "report_url": f"/analysis/{analysis_id}/report"
+    }
+
+def run_analysis(analysis_id: str, repo_url: str, branch: Optional[str], output_dir: str):
+    """
+    Run analysis in background.
+    
+    Args:
+        analysis_id: Analysis ID
+        repo_url: Repository URL
+        branch: Branch name
+        output_dir: Output directory
+    """
+    try:
+        # Update status
+        analysis_results[analysis_id]["status"] = "running"
+        analysis_results[analysis_id]["message"] = "Cloning repository"
+        
+        # Clone repository
+        with tempfile.TemporaryDirectory() as temp_dir:
+            # Clone repository
+            clone_cmd = ["git", "clone", repo_url, temp_dir]
+            if branch:
+                clone_cmd.extend(["--branch", branch])
+            
+            subprocess.run(clone_cmd, check=True)
+            
+            # Update status
+            analysis_results[analysis_id]["status"] = "running"
+            analysis_results[analysis_id]["message"] = "Analyzing codebase"
+            
+            # Run analysis using the analysis module
+            try:
+                # Create Codebase object from the cloned directory
+                codebase = Codebase.from_directory(temp_dir)
+                
+                # Use the analyze_codebase function from analysis.py
+                results = analyze_codebase(codebase)
+                
+                # Save analysis results
+                with open(os.path.join(output_dir, "analysis.json"), "w") as f:
+                    json.dump(results, f, indent=2, default=str)
+                
+                # Generate visualizations
+                visualizations = visualize_codebase(codebase, output_dir)
+                
+                # Generate HTML report
+                report_path = generate_html_report(results, visualizations, output_dir)
+                
+                # Update status
+                analysis_results[analysis_id]["status"] = "completed"
+                analysis_results[analysis_id]["message"] = "Analysis completed"
+                analysis_results[analysis_id]["results"] = results
+                analysis_results[analysis_id]["visualizations"] = visualizations
+                analysis_results[analysis_id]["report_path"] = report_path
+                
+            except Exception as analysis_error:
+                # If analysis fails, create a basic report
+                error_results = {
+                    "error": str(analysis_error),
+                    "status": "analysis_failed",
+                    "repo_url": repo_url,
+                    "branch": branch,
+                    "timestamp": str(datetime.now())
+                }
+                
+                with open(os.path.join(output_dir, "analysis.json"), "w") as f:
+                    json.dump(error_results, f, indent=2)
+                
+                analysis_results[analysis_id]["status"] = "completed_with_errors"
+                analysis_results[analysis_id]["message"] = f"Analysis completed with errors: {str(analysis_error)}"
+                analysis_results[analysis_id]["results"] = error_results
+    
+    except Exception as e:
+        # Update status
+        analysis_results[analysis_id]["status"] = "failed"
+        analysis_results[analysis_id]["message"] = f"Analysis failed: {str(e)}"
 
 if __name__ == "__main__":
-    app.deploy("analytics-app")
+    print("🚀 Starting Codebase Analytics API Server...")
+    print("=" * 50)
+    print("🌐 Server will be available at:")
+    print("   • Root API: http://localhost:8000/")
+    print("   • Interactive UI: http://localhost:8000/ui")
+    print("   • Analysis API: http://localhost:8000/analyze/{owner}/{repo}")
+    print("   • CLI API: http://localhost:8000/cli/{owner}/{repo}")
+    print("=" * 50)
+    print("📊 Example usage:")
+    print("   • UI: http://localhost:8000/ui")
+    print("   �� API: http://localhost:8000/analyze/Zeeeepa/codebase-analytics")
+    print("   • CLI: curl http://localhost:8000/cli/Zeeeepa/codebase-analytics")
+    print("=" * 50)
+    print("🔄 Starting server... (Press Ctrl+C to stop)")
+    print()
+    
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
