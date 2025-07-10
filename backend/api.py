@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any
+import graph_sitter
 from graph_sitter.core.class_definition import Class
 from graph_sitter.core.codebase import Codebase
 from graph_sitter.core.external_module import ExternalModule
@@ -123,6 +124,37 @@ def get_symbol_summary(symbol: Symbol) -> str:
 \t\t- {len([x for x in imported_symbols if isinstance(x, ExternalModule)])} external modules
 \t\t- {len([x for x in imported_symbols if isinstance(x, SourceFile)])} files
     """
+
+def get_function_context(function) -> dict:
+    """Get the implementation, dependencies, and usages of a function."""
+    context = {
+        "implementation": {"source": function.source, "filepath": function.filepath},
+        "dependencies": [],
+        "usages": [],
+    }
+
+    # Add dependencies
+    for dep in function.dependencies:
+        # Hop through imports to find the root symbol source
+        if isinstance(dep, Import):
+            dep = hop_through_imports(dep)
+
+        context["dependencies"].append({"source": dep.source, "filepath": dep.filepath})
+
+    # Add usages
+    for usage in function.usages:
+        context["usages"].append({
+            "source": usage.usage_symbol.source,
+            "filepath": usage.usage_symbol.filepath,
+        })
+
+    return context
+
+def hop_through_imports(imp: Import) -> Symbol | ExternalModule:
+    """Finds the root symbol for an import."""
+    if isinstance(imp.imported_symbol, Import):
+        return hop_through_imports(imp.imported_symbol)
+    return imp.imported_symbol
     
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
     """
