@@ -38,36 +38,44 @@ The frontend provides an interface for users to submit a GitHub repository and r
 
 ## Getting Started
 
-### Option 1: Local Development (Recommended for Testing)
+### Simple 2-Command Setup
+
+1. **Install Dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Start the Application:**
+   ```bash
+   npm run dev
+   ```
+   This will start both the backend (port 9998) and frontend (port 9999) simultaneously.
+   The UI will be available at `http://localhost:9999`.
+
+### Manual Setup (Alternative)
+
+If you prefer to start services separately:
 
 1. **Start the Backend API:**
    ```bash
-   cd backend
-   python3 test_api.py
+   python3 backend/api.py
    ```
-   This starts a local development server at `http://localhost:8000` with real repository analysis capabilities.
+   This starts the server at `http://localhost:9998` with real repository analysis capabilities.
 
-2. **Configure Frontend Environment:**
-   ```bash
-   cd frontend
-   cp .env.example .env.local
-   # Edit .env.local to set NEXT_PUBLIC_API_URL=http://localhost:8000
-   ```
-
-3. **Start the Frontend:**
+2. **Start the Frontend:**
    ```bash
    cd frontend
    npm install
    npm run dev
    ```
-   The frontend will be available at `http://localhost:3000`.
+   The frontend will be available at `http://localhost:9999`.
 
-4. **Test the Integration:**
+3. **Test the Integration:**
    ```bash
    python3 test_integration.py
    ```
 
-### Option 2: Production Deployment with Modal
+### Legacy: Production Deployment with Modal (Deprecated)
 
 1. **Deploy the Modal API:**
    ```bash
@@ -92,6 +100,8 @@ The frontend provides an interface for users to submit a GitHub repository and r
    npm run build
    npm start
    ```
+
+**Note:** Modal deployment is deprecated in favor of the simplified local setup above.
 
 ## Recent Improvements
 

@@ -16,7 +16,7 @@ def test_api_endpoint():
     
     try:
         # Test health endpoint
-        response = requests.get("http://localhost:8000/health", timeout=5)
+        response = requests.get("http://localhost:9998/health", timeout=5)
         if response.status_code == 200:
             print("✅ Health check passed")
         else:
@@ -26,7 +26,7 @@ def test_api_endpoint():
         # Test analyze endpoint with a small repo
         test_data = {"repo_url": "octocat/Hello-World"}
         response = requests.post(
-            "http://localhost:8000/analyze_repo",
+            "http://localhost:9998/analyze_repo",
             json=test_data,
             timeout=30
         )

@@ -50,18 +50,60 @@ interface RepoAnalyticsResponse {
       comment_density: number;
     }
   };
-  cyclomatic_complexity: { average: number };
-  depth_of_inheritance: { average: number };
+  cyclomatic_complexity: { 
+    average: number;
+    rank?: string;
+  };
+  depth_of_inheritance: { 
+    average: number;
+  };
   halstead_metrics: { 
     total_volume: number;
     average_volume: number;
+    operators?: number;
+    operands?: number;
   };
-  maintainability_index: { average: number };
+  maintainability_index: { 
+    average: number;
+    rank?: string;
+  };
   description: string;
   num_files: number;
   num_functions: number;
   num_classes: number;
+  num_symbols?: number;
   monthly_commits: Record<string, number>;
+  // Enhanced analysis data
+  codebase_summary?: string;
+  file_analysis?: {
+    total_files: number;
+    analyzed_files: number;
+    file_types: Record<string, number>;
+  };
+  function_analysis?: {
+    total_functions: number;
+    average_complexity: number;
+    complex_functions: Array<{
+      name: string;
+      complexity: number;
+      file: string;
+    }>;
+  };
+  class_analysis?: {
+    total_classes: number;
+    inheritance_depth: number;
+    classes_with_inheritance: number;
+  };
+  import_analysis?: {
+    total_imports: number;
+    external_modules: number;
+    internal_imports: number;
+    import_graph?: Array<{
+      from: string;
+      to: string;
+      type: string;
+    }>;
+  };
 }
 
 interface RepoData {
@@ -112,7 +154,7 @@ export default function RepoAnalyticsDashboard() {
     
     try {
       console.log("Fetching repo data...");
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:9998';
       const response = await fetch(`${apiUrl}/analyze_repo`, {
         method: 'POST',
         headers: {
@@ -446,6 +488,188 @@ function calculateCodebaseGrade(data: RepoData) {
                   </div>
                   <div className="text-2xl font-bold text-right">
                   {repoData.numberOfFiles > 1000 ? "Large" : "Moderate"}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Enhanced Analysis Sections */}
+            <div className="mt-8 space-y-6">
+              <h2 className="text-xl font-semibold mb-4">Detailed Code Analysis</h2>
+              
+              {/* Function Analysis */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Code className="h-5 w-5" />
+                    Function Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    Comprehensive analysis of functions including complexity metrics
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-blue-600">{repoData.numberOfFunctions}</div>
+                      <div className="text-sm text-muted-foreground">Total Functions</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-green-600">{repoData.cyclomaticComplexity.toFixed(1)}</div>
+                      <div className="text-sm text-muted-foreground">Avg Complexity</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-purple-600">
+                        {repoData.cyclomaticComplexity > 10 ? 'High' : repoData.cyclomaticComplexity > 5 ? 'Medium' : 'Low'}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Complexity Rank</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Class Analysis */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Settings className="h-5 w-5" />
+                    Class & Symbol Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    Object-oriented design metrics and symbol analysis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-indigo-600">{repoData.numberOfClasses}</div>
+                      <div className="text-sm text-muted-foreground">Total Classes</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-orange-600">{repoData.depthOfInheritance.toFixed(1)}</div>
+                      <div className="text-sm text-muted-foreground">Inheritance Depth</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-teal-600">{(repoData.numberOfFunctions + repoData.numberOfClasses * 3).toLocaleString()}</div>
+                      <div className="text-sm text-muted-foreground">Est. Symbols</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-pink-600">
+                        {repoData.depthOfInheritance > 4 ? 'Deep' : repoData.depthOfInheritance > 2 ? 'Moderate' : 'Shallow'}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Design Pattern</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Halstead Metrics */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Brain className="h-5 w-5" />
+                    Halstead Complexity Metrics
+                  </CardTitle>
+                  <CardDescription>
+                    Software complexity based on operators and operands analysis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-red-600">{repoData.halsteadVolume.toLocaleString()}</div>
+                      <div className="text-sm text-muted-foreground">Total Volume</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-yellow-600">{Math.round(repoData.halsteadVolume / repoData.numberOfFunctions).toLocaleString()}</div>
+                      <div className="text-sm text-muted-foreground">Avg Volume/Function</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-cyan-600">
+                        {Math.round(repoData.linesOfCode / 50).toLocaleString()}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Est. Operators</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* File & Import Analysis */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    File Structure & Import Analysis
+                  </CardTitle>
+                  <CardDescription>
+                    Codebase organization and dependency analysis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-emerald-600">{repoData.numberOfFiles}</div>
+                      <div className="text-sm text-muted-foreground">Total Files</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-violet-600">{Math.round(repoData.linesOfCode / repoData.numberOfFiles)}</div>
+                      <div className="text-sm text-muted-foreground">Avg Lines/File</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-amber-600">{Math.round(repoData.numberOfFiles * 0.3)}</div>
+                      <div className="text-sm text-muted-foreground">Est. Imports</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-2xl font-bold text-rose-600">
+                        {repoData.numberOfFiles > 500 ? 'Large' : repoData.numberOfFiles > 100 ? 'Medium' : 'Small'}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Project Size</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Maintainability Summary */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <RefreshCcw className="h-5 w-5" />
+                    Maintainability Summary
+                  </CardTitle>
+                  <CardDescription>
+                    Overall assessment of code maintainability and quality
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">Maintainability Index</span>
+                      <span className="text-2xl font-bold text-green-600">{repoData.maintainabilityIndex}/100</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-green-600 h-2 rounded-full" 
+                        style={{ width: `${repoData.maintainabilityIndex}%` }}
+                      ></div>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div className="text-center">
+                        <div className="font-semibold text-blue-600">Code Quality</div>
+                        <div>{repoData.maintainabilityIndex > 80 ? 'Excellent' : repoData.maintainabilityIndex > 60 ? 'Good' : 'Needs Work'}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold text-purple-600">Documentation</div>
+                        <div>{repoData.commentDensity > 15 ? 'Well Documented' : 'Sparse'}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold text-orange-600">Complexity</div>
+                        <div>{repoData.cyclomaticComplexity < 10 ? 'Manageable' : 'Complex'}</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="font-semibold text-teal-600">Structure</div>
+                        <div>{repoData.depthOfInheritance < 4 ? 'Clean' : 'Deep Hierarchy'}</div>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
