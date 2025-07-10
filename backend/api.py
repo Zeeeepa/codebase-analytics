@@ -1,14 +1,9 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional, Set
 from codegen import Codebase
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
+from codegen.configs.models.codebase import CodebaseConfig
+from collections import Counter, defaultdict
 import math
 import re
 import requests
@@ -18,6 +13,8 @@ import os
 import tempfile
 from fastapi.middleware.cors import CORSMiddleware
 import modal
+import logging
+import traceback
 
 image = (
     modal.Image.debian_slim()
@@ -38,6 +35,594 @@ fastapi_app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+class ComprehensiveAnalysis:
+    """Comprehensive codebase analysis using all graph-sitter capabilities."""
+    
+    def __init__(self, codebase: Codebase):
+        self.codebase = codebase
+        self.issues = []
+        self.function_contexts = {}
+        self.entry_points = []
+        self.dead_code_items = []
+        
+    def analyze(self) -> Dict[str, Any]:
+        """Perform comprehensive analysis and return detailed results."""
+        try:
+            # Core analysis
+            self._analyze_dead_code()
+            self._analyze_entry_points()
+            self._analyze_function_contexts()
+            self._detect_issues()
+            
+            return {
+                "repository_structure": self._get_repository_structure(),
+                "summary": self._generate_summary(),
+                "most_important_functions": self._find_most_important_functions(),
+                "dead_code_analysis": self._analyze_dead_code(),
+                "entry_points": self.entry_points,
+                "issues_by_severity": self._group_issues_by_severity(),
+                "function_contexts": self.function_contexts,
+                "call_graph_metrics": self._analyze_call_graph(),
+                "dependency_metrics": self._analyze_dependencies(),
+                "import_analysis": self._analyze_imports(),
+                "class_hierarchy": self._analyze_class_hierarchy(),
+                "code_quality_metrics": self._analyze_code_quality()
+            }
+        except Exception as e:
+            logging.error(f"Analysis failed: {str(e)}")
+            return {"error": f"Analysis failed: {str(e)}"}
+    
+    def _analyze_dead_code(self) -> Dict[str, Any]:
+        """Analyze dead code in the codebase."""
+        dead_functions = []
+        dead_classes = []
+        dead_imports = []
+        
+        # Find unused functions
+        for func in self.codebase.functions:
+            if not hasattr(func, 'usages') or len(func.usages) == 0:
+                dead_functions.append({
+                    'name': func.name,
+                    'file': getattr(func, 'file', {}).get('filepath', 'Unknown'),
+                    'type': 'function'
+                })
+                self.dead_code_items.append(func.name)
+        
+        # Find unused classes
+        for cls in self.codebase.classes:
+            if not hasattr(cls, 'usages') or len(cls.usages) == 0:
+                dead_classes.append({
+                    'name': cls.name,
+                    'file': getattr(cls, 'file', {}).get('filepath', 'Unknown'),
+                    'type': 'class'
+                })
+                self.dead_code_items.append(cls.name)
+        
+        # Find unused imports
+        for file in self.codebase.files:
+            for imp in getattr(file, 'imports', []):
+                if not hasattr(imp, 'usages') or len(imp.usages) == 0:
+                    dead_imports.append({
+                        'name': getattr(imp, 'name', 'Unknown'),
+                        'file': getattr(file, 'filepath', 'Unknown'),
+                        'type': 'import'
+                    })
+        
+        return {
+            'dead_functions': dead_functions,
+            'dead_classes': dead_classes,
+            'dead_imports': dead_imports,
+            'total_dead_items': len(dead_functions) + len(dead_classes) + len(dead_imports)
+        }
+    
+    def _analyze_entry_points(self):
+        """Identify entry points in the codebase."""
+        entry_points = []
+        
+        # Common entry point patterns
+        entry_patterns = ['main', '__main__', 'app', 'run', 'start', 'init']
+        
+        for func in self.codebase.functions:
+            # Check if function name matches entry patterns
+            if any(pattern in func.name.lower() for pattern in entry_patterns):
+                entry_points.append({
+                    'name': func.name,
+                    'file': getattr(func, 'file', {}).get('filepath', 'Unknown'),
+                    'type': 'function',
+                    'reason': 'name_pattern'
+                })
+            
+            # Check if function has no callers (potential entry point)
+            if hasattr(func, 'call_sites') and len(func.call_sites) == 0:
+                entry_points.append({
+                    'name': func.name,
+                    'file': getattr(func, 'file', {}).get('filepath', 'Unknown'),
+                    'type': 'function',
+                    'reason': 'no_callers'
+                })
+        
+        self.entry_points = entry_points
+    
+    def _analyze_function_contexts(self):
+        """Analyze detailed context for each function."""
+        for func in self.codebase.functions:
+            try:
+                # Get function dependencies
+                dependencies = []
+                if hasattr(func, 'dependencies'):
+                    dependencies = [getattr(dep, 'name', str(dep)) for dep in func.dependencies]
+                
+                # Get function calls made by this function
+                function_calls = []
+                if hasattr(func, 'function_calls'):
+                    function_calls = [getattr(call, 'name', str(call)) for call in func.function_calls]
+                
+                # Get call sites (where this function is called)
+                called_by = []
+                if hasattr(func, 'call_sites'):
+                    called_by = [getattr(site, 'name', str(site)) for site in func.call_sites]
+                
+                # Get parameters
+                parameters = []
+                if hasattr(func, 'parameters'):
+                    parameters = [getattr(param, 'name', str(param)) for param in func.parameters]
+                
+                # Check if it's an entry point
+                is_entry_point = func.name in [ep['name'] for ep in self.entry_points]
+                
+                # Check if it's dead code
+                is_dead_code = func.name in self.dead_code_items
+                
+                # Build call chain
+                max_call_chain = self._get_max_call_chain(func)
+                
+                # Detect issues for this function
+                function_issues = self._detect_function_issues(func)
+                
+                self.function_contexts[func.name] = {
+                    'filepath': getattr(func, 'file', {}).get('filepath', 'Unknown'),
+                    'parameters': parameters,
+                    'dependencies': dependencies,
+                    'function_calls': function_calls,
+                    'called_by': called_by,
+                    'is_entry_point': is_entry_point,
+                    'is_dead_code': is_dead_code,
+                    'max_call_chain': max_call_chain,
+                    'issues': function_issues,
+                    'is_async': getattr(func, 'is_async', False),
+                    'is_generator': getattr(func, 'is_generator', False),
+                    'decorators': [getattr(d, 'name', str(d)) for d in getattr(func, 'decorators', [])],
+                    'return_type': getattr(func, 'return_type', None)
+                }
+            except Exception as e:
+                logging.warning(f"Failed to analyze function {func.name}: {str(e)}")
+    
+    def _get_max_call_chain(self, func, visited=None, depth=0) -> List[str]:
+        """Get the maximum call chain for a function."""
+        if visited is None:
+            visited = set()
+        
+        if func.name in visited or depth > 10:  # Prevent infinite recursion
+            return [func.name]
+        
+        visited.add(func.name)
+        max_chain = [func.name]
+        
+        if hasattr(func, 'function_calls'):
+            for call in func.function_calls:
+                try:
+                    called_func = getattr(call, 'function_definition', None)
+                    if called_func:
+                        sub_chain = self._get_max_call_chain(called_func, visited.copy(), depth + 1)
+                        if len(sub_chain) > len(max_chain) - 1:
+                            max_chain = [func.name] + sub_chain
+                except:
+                    continue
+        
+        return max_chain
+    
+    def _detect_issues(self):
+        """Detect various code quality issues."""
+        self.issues = []
+        
+        # Analyze functions for issues
+        for func in self.codebase.functions:
+            self.issues.extend(self._detect_function_issues(func))
+        
+        # Analyze classes for issues
+        for cls in self.codebase.classes:
+            self.issues.extend(self._detect_class_issues(cls))
+        
+        # Analyze imports for issues
+        for file in self.codebase.files:
+            self.issues.extend(self._detect_import_issues(file))
+    
+    def _detect_function_issues(self, func) -> List[Dict[str, Any]]:
+        """Detect issues specific to a function."""
+        issues = []
+        
+        try:
+            # Check for unused parameters
+            if hasattr(func, 'parameters'):
+                for param in func.parameters:
+                    if hasattr(param, 'usages') and len(param.usages) == 0:
+                        issues.append({
+                            'type': 'unused_parameter',
+                            'severity': 'minor',
+                            'message': f"Parameter '{param.name}' is unused",
+                            'function': func.name,
+                            'file': getattr(func, 'file', {}).get('filepath', 'Unknown')
+                        })
+            
+            # Check for missing return type
+            if not hasattr(func, 'return_type') or func.return_type is None:
+                issues.append({
+                    'type': 'missing_return_type',
+                    'severity': 'minor',
+                    'message': f"Function '{func.name}' missing return type annotation",
+                    'function': func.name,
+                    'file': getattr(func, 'file', {}).get('filepath', 'Unknown')
+                })
+            
+            # Check for missing docstring
+            if not hasattr(func, 'docstring') or not func.docstring:
+                issues.append({
+                    'type': 'missing_docstring',
+                    'severity': 'minor',
+                    'message': f"Function '{func.name}' missing docstring",
+                    'function': func.name,
+                    'file': getattr(func, 'file', {}).get('filepath', 'Unknown')
+                })
+            
+            # Check for high complexity
+            if hasattr(func, 'complexity') and func.complexity > 10:
+                severity = 'critical' if func.complexity > 20 else 'major'
+                issues.append({
+                    'type': 'high_complexity',
+                    'severity': severity,
+                    'message': f"Function '{func.name}' has high complexity ({func.complexity})",
+                    'function': func.name,
+                    'file': getattr(func, 'file', {}).get('filepath', 'Unknown')
+                })
+            
+            # Check for too many parameters
+            if hasattr(func, 'parameters') and len(func.parameters) > 5:
+                issues.append({
+                    'type': 'too_many_parameters',
+                    'severity': 'major',
+                    'message': f"Function '{func.name}' has too many parameters ({len(func.parameters)})",
+                    'function': func.name,
+                    'file': getattr(func, 'file', {}).get('filepath', 'Unknown')
+                })
+            
+            # Check for recursive functions without base case detection
+            if hasattr(func, 'function_calls'):
+                for call in func.function_calls:
+                    if getattr(call, 'name', '') == func.name:
+                        issues.append({
+                            'type': 'potential_infinite_recursion',
+                            'severity': 'critical',
+                            'message': f"Function '{func.name}' may have infinite recursion",
+                            'function': func.name,
+                            'file': getattr(func, 'file', {}).get('filepath', 'Unknown')
+                        })
+                        break
+            
+        except Exception as e:
+            logging.warning(f"Error detecting issues for function {func.name}: {str(e)}")
+        
+        return issues
+    
+    def _detect_class_issues(self, cls) -> List[Dict[str, Any]]:
+        """Detect issues specific to a class."""
+        issues = []
+        
+        try:
+            # Check for classes with too many methods
+            if hasattr(cls, 'methods') and len(cls.methods) > 20:
+                issues.append({
+                    'type': 'too_many_methods',
+                    'severity': 'major',
+                    'message': f"Class '{cls.name}' has too many methods ({len(cls.methods)})",
+                    'class': cls.name,
+                    'file': getattr(cls, 'file', {}).get('filepath', 'Unknown')
+                })
+            
+            # Check for deep inheritance
+            if hasattr(cls, 'superclasses') and len(cls.superclasses) > 5:
+                issues.append({
+                    'type': 'deep_inheritance',
+                    'severity': 'major',
+                    'message': f"Class '{cls.name}' has deep inheritance chain ({len(cls.superclasses)})",
+                    'class': cls.name,
+                    'file': getattr(cls, 'file', {}).get('filepath', 'Unknown')
+                })
+            
+            # Check for missing docstring
+            if not hasattr(cls, 'docstring') or not cls.docstring:
+                issues.append({
+                    'type': 'missing_docstring',
+                    'severity': 'minor',
+                    'message': f"Class '{cls.name}' missing docstring",
+                    'class': cls.name,
+                    'file': getattr(cls, 'file', {}).get('filepath', 'Unknown')
+                })
+                
+        except Exception as e:
+            logging.warning(f"Error detecting issues for class {cls.name}: {str(e)}")
+        
+        return issues
+    
+    def _detect_import_issues(self, file) -> List[Dict[str, Any]]:
+        """Detect import-related issues."""
+        issues = []
+        
+        try:
+            # Check for unused imports
+            for imp in getattr(file, 'imports', []):
+                if hasattr(imp, 'usages') and len(imp.usages) == 0:
+                    issues.append({
+                        'type': 'unused_import',
+                        'severity': 'minor',
+                        'message': f"Import '{getattr(imp, 'name', 'Unknown')}' is unused",
+                        'file': getattr(file, 'filepath', 'Unknown')
+                    })
+            
+            # Check for circular imports (simplified detection)
+            import_files = []
+            for imp in getattr(file, 'imports', []):
+                if hasattr(imp, 'resolved_symbol') and hasattr(imp.resolved_symbol, 'file'):
+                    import_files.append(imp.resolved_symbol.file)
+            
+            # Check if any imported file imports back to this file
+            for imp_file in import_files:
+                for reverse_imp in getattr(imp_file, 'imports', []):
+                    if (hasattr(reverse_imp, 'resolved_symbol') and 
+                        hasattr(reverse_imp.resolved_symbol, 'file') and
+                        reverse_imp.resolved_symbol.file == file):
+                        issues.append({
+                            'type': 'circular_import',
+                            'severity': 'critical',
+                            'message': f"Circular import detected between {getattr(file, 'filepath', 'Unknown')} and {getattr(imp_file, 'filepath', 'Unknown')}",
+                            'file': getattr(file, 'filepath', 'Unknown')
+                        })
+                        
+        except Exception as e:
+            logging.warning(f"Error detecting import issues for file {getattr(file, 'filepath', 'Unknown')}: {str(e)}")
+        
+        return issues
+    
+    def _generate_summary(self) -> Dict[str, Any]:
+        """Generate comprehensive codebase summary."""
+        return {
+            'total_files': len(list(self.codebase.files)),
+            'total_functions': len(list(self.codebase.functions)),
+            'total_classes': len(list(self.codebase.classes)),
+            'total_imports': len(list(self.codebase.imports)),
+            'total_symbols': len(list(self.codebase.symbols)),
+            'total_issues': len(self.issues),
+            'critical_issues': len([i for i in self.issues if i['severity'] == 'critical']),
+            'major_issues': len([i for i in self.issues if i['severity'] == 'major']),
+            'minor_issues': len([i for i in self.issues if i['severity'] == 'minor']),
+            'dead_code_items': len(self.dead_code_items),
+            'entry_points': len(self.entry_points),
+            'external_modules': len(list(self.codebase.external_modules)) if hasattr(self.codebase, 'external_modules') else 0
+        }
+    
+    def _find_most_important_functions(self) -> Dict[str, Any]:
+        """Find the most important functions in the codebase."""
+        most_calls = {'name': 'N/A', 'call_count': 0, 'calls': []}
+        most_called = {'name': 'N/A', 'usage_count': 0}
+        deepest_inheritance = {'name': 'N/A', 'chain_depth': 0}
+        
+        # Find function that makes the most calls
+        for func in self.codebase.functions:
+            if hasattr(func, 'function_calls'):
+                call_count = len(func.function_calls)
+                if call_count > most_calls['call_count']:
+                    most_calls = {
+                        'name': func.name,
+                        'call_count': call_count,
+                        'calls': [getattr(call, 'name', str(call)) for call in func.function_calls[:10]]
+                    }
+        
+        # Find most called function
+        for func in self.codebase.functions:
+            if hasattr(func, 'usages'):
+                usage_count = len(func.usages)
+                if usage_count > most_called['usage_count']:
+                    most_called = {
+                        'name': func.name,
+                        'usage_count': usage_count
+                    }
+        
+        # Find class with deepest inheritance
+        for cls in self.codebase.classes:
+            if hasattr(cls, 'superclasses'):
+                chain_depth = len(cls.superclasses)
+                if chain_depth > deepest_inheritance['chain_depth']:
+                    deepest_inheritance = {
+                        'name': cls.name,
+                        'chain_depth': chain_depth
+                    }
+        
+        return {
+            'most_calls': most_calls,
+            'most_called': most_called,
+            'deepest_inheritance': deepest_inheritance
+        }
+    
+    def _group_issues_by_severity(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Group issues by severity level."""
+        grouped = {'critical': [], 'major': [], 'minor': []}
+        
+        for issue in self.issues:
+            severity = issue.get('severity', 'minor')
+            if severity in grouped:
+                grouped[severity].append(issue)
+        
+        return grouped
+    
+    def _analyze_call_graph(self) -> Dict[str, Any]:
+        """Analyze call graph metrics."""
+        total_calls = 0
+        recursive_functions = []
+        max_call_depth = 0
+        
+        for func in self.codebase.functions:
+            if hasattr(func, 'function_calls'):
+                total_calls += len(func.function_calls)
+                
+                # Check for recursion
+                for call in func.function_calls:
+                    if getattr(call, 'name', '') == func.name:
+                        recursive_functions.append(func.name)
+                        break
+                
+                # Calculate call depth
+                call_chain = self._get_max_call_chain(func)
+                if len(call_chain) > max_call_depth:
+                    max_call_depth = len(call_chain)
+        
+        return {
+            'total_function_calls': total_calls,
+            'recursive_functions': recursive_functions,
+            'max_call_depth': max_call_depth,
+            'average_calls_per_function': total_calls / len(list(self.codebase.functions)) if len(list(self.codebase.functions)) > 0 else 0
+        }
+    
+    def _analyze_dependencies(self) -> Dict[str, Any]:
+        """Analyze dependency metrics."""
+        total_dependencies = 0
+        circular_dependencies = []
+        
+        for symbol in self.codebase.symbols:
+            if hasattr(symbol, 'dependencies'):
+                total_dependencies += len(symbol.dependencies)
+        
+        # Simplified circular dependency detection
+        for issue in self.issues:
+            if issue['type'] == 'circular_import':
+                circular_dependencies.append(issue['message'])
+        
+        return {
+            'total_dependencies': total_dependencies,
+            'circular_dependencies': circular_dependencies,
+            'average_dependencies_per_symbol': total_dependencies / len(list(self.codebase.symbols)) if len(list(self.codebase.symbols)) > 0 else 0
+        }
+    
+    def _analyze_imports(self) -> Dict[str, Any]:
+        """Analyze import patterns and metrics."""
+        total_imports = 0
+        external_imports = 0
+        unused_imports = 0
+        
+        for file in self.codebase.files:
+            file_imports = getattr(file, 'imports', [])
+            total_imports += len(file_imports)
+            
+            for imp in file_imports:
+                # Check if external
+                if hasattr(imp, 'is_external') and imp.is_external:
+                    external_imports += 1
+                
+                # Check if unused
+                if hasattr(imp, 'usages') and len(imp.usages) == 0:
+                    unused_imports += 1
+        
+        return {
+            'total_imports': total_imports,
+            'external_imports': external_imports,
+            'unused_imports': unused_imports,
+            'import_efficiency': (total_imports - unused_imports) / total_imports if total_imports > 0 else 1.0
+        }
+    
+    def _analyze_class_hierarchy(self) -> Dict[str, Any]:
+        """Analyze class inheritance patterns."""
+        total_classes = len(list(self.codebase.classes))
+        classes_with_inheritance = 0
+        max_inheritance_depth = 0
+        abstract_classes = 0
+        
+        for cls in self.codebase.classes:
+            if hasattr(cls, 'superclasses') and len(cls.superclasses) > 0:
+                classes_with_inheritance += 1
+                if len(cls.superclasses) > max_inheritance_depth:
+                    max_inheritance_depth = len(cls.superclasses)
+            
+            if hasattr(cls, 'is_abstract') and cls.is_abstract:
+                abstract_classes += 1
+        
+        return {
+            'total_classes': total_classes,
+            'classes_with_inheritance': classes_with_inheritance,
+            'max_inheritance_depth': max_inheritance_depth,
+            'abstract_classes': abstract_classes,
+            'inheritance_ratio': classes_with_inheritance / total_classes if total_classes > 0 else 0
+        }
+    
+    def _analyze_code_quality(self) -> Dict[str, Any]:
+        """Analyze overall code quality metrics."""
+        functions_with_docstrings = 0
+        functions_with_type_hints = 0
+        total_functions = len(list(self.codebase.functions))
+        
+        for func in self.codebase.functions:
+            if hasattr(func, 'docstring') and func.docstring:
+                functions_with_docstrings += 1
+            
+            if hasattr(func, 'return_type') and func.return_type:
+                functions_with_type_hints += 1
+        
+        return {
+            'documentation_coverage': functions_with_docstrings / total_functions if total_functions > 0 else 0,
+            'type_hint_coverage': functions_with_type_hints / total_functions if total_functions > 0 else 0,
+            'code_quality_score': self._calculate_quality_score()
+        }
+    
+    def _calculate_quality_score(self) -> float:
+        """Calculate overall code quality score (0-100)."""
+        total_functions = len(list(self.codebase.functions))
+        if total_functions == 0:
+            return 100.0
+        
+        # Deduct points for issues
+        score = 100.0
+        critical_issues = len([i for i in self.issues if i['severity'] == 'critical'])
+        major_issues = len([i for i in self.issues if i['severity'] == 'major'])
+        minor_issues = len([i for i in self.issues if i['severity'] == 'minor'])
+        
+        score -= critical_issues * 10  # 10 points per critical issue
+        score -= major_issues * 5      # 5 points per major issue
+        score -= minor_issues * 1      # 1 point per minor issue
+        
+        # Deduct for dead code
+        score -= len(self.dead_code_items) * 2
+        
+        return max(0.0, score)
+    
+    def _get_repository_structure(self) -> Dict[str, Any]:
+        """Get repository structure information."""
+        file_types = defaultdict(int)
+        total_size = 0
+        
+        for file in self.codebase.files:
+            filepath = getattr(file, 'filepath', '')
+            if filepath:
+                ext = filepath.split('.')[-1] if '.' in filepath else 'no_extension'
+                file_types[ext] += 1
+                
+                # Estimate size based on source length
+                source = getattr(file, 'source', '')
+                total_size += len(source)
+        
+        return {
+            'file_types': dict(file_types),
+            'estimated_total_size': total_size,
+            'average_file_size': total_size / len(list(self.codebase.files)) if len(list(self.codebase.files)) > 0 else 0
+        }
 
 
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
@@ -337,88 +922,119 @@ class RepoRequest(BaseModel):
 async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
     """Analyze a repository and return comprehensive metrics."""
     repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
+    
+    try:
+        # Initialize codebase with advanced configuration
+        config = CodebaseConfig(
+            method_usages=True,          # Enable method usage resolution
+            generics=True,               # Enable generic type resolution
+            sync_enabled=True,           # Enable graph sync during commits
+            full_range_index=True,       # Full range-to-node mapping
+            py_resolve_syspath=True,     # Resolve sys.path imports
+            exp_lazy_graph=False,        # Lazy graph construction
+        )
+        
+        codebase = Codebase.from_repo(repo_url, config=config)
+        
+        # Perform comprehensive analysis
+        analyzer = ComprehensiveAnalysis(codebase)
+        analysis_results = analyzer.analyze()
+        
+        # Get traditional metrics for backward compatibility
+        monthly_commits = get_monthly_commits(repo_url)
+        desc = get_github_repo_description(repo_url)
+        
+        # Calculate traditional line metrics
+        total_loc = total_lloc = total_sloc = total_comments = 0
+        total_complexity = 0
+        total_volume = 0
+        total_mi = 0
+        total_doi = 0
+        
+        for file in codebase.files:
+            try:
+                source = getattr(file, 'source', '')
+                if source:
+                    loc, lloc, sloc, comments = count_lines(source)
+                    total_loc += loc
+                    total_lloc += lloc
+                    total_sloc += sloc
+                    total_comments += comments
+            except Exception as e:
+                logging.warning(f"Error processing file {getattr(file, 'filepath', 'Unknown')}: {str(e)}")
+        
+        # Calculate complexity metrics for functions
+        num_callables = 0
+        for func in codebase.functions:
+            try:
+                if hasattr(func, "code_block") and func.code_block:
+                    complexity = calculate_cyclomatic_complexity(func)
+                    operators, operands = get_operators_and_operands(func)
+                    volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
+                    loc = len(getattr(func.code_block, 'source', '').splitlines())
+                    mi_score = calculate_maintainability_index(volume, complexity, loc)
 
-    num_files = len(codebase.files(extensions="*"))
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
-
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
-
-    monthly_commits = get_monthly_commits(repo_url)
-    print(monthly_commits)
-
-    for file in codebase.files:
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-
-    num_callables = 0
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
-
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
-
-    results = {
-        "repo_url": repo_url,
-        "line_metrics": {
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100)
-                if total_loc > 0
-                else 0,
+                    total_complexity += complexity
+                    total_volume += volume
+                    total_mi += mi_score
+                    num_callables += 1
+            except Exception as e:
+                logging.warning(f"Error processing function {func.name}: {str(e)}")
+        
+        # Calculate class metrics
+        for cls in codebase.classes:
+            try:
+                doi = calculate_doi(cls)
+                total_doi += doi
+            except Exception as e:
+                logging.warning(f"Error processing class {cls.name}: {str(e)}")
+        
+        # Combine comprehensive analysis with traditional metrics
+        results = {
+            "repo_url": repo_url,
+            "description": desc,
+            "monthly_commits": monthly_commits,
+            
+            # Traditional metrics for backward compatibility
+            "line_metrics": {
+                "total": {
+                    "loc": total_loc,
+                    "lloc": total_lloc,
+                    "sloc": total_sloc,
+                    "comments": total_comments,
+                    "comment_density": (total_comments / total_loc * 100) if total_loc > 0 else 0,
+                },
             },
-        },
-        "cyclomatic_complexity": {
-            "average": total_complexity if num_callables > 0 else 0,
-        },
-        "depth_of_inheritance": {
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        "halstead_metrics": {
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables)
-            if num_callables > 0
-            else 0,
-        },
-        "maintainability_index": {
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        "description": desc,
-        "num_files": num_files,
-        "num_functions": num_functions,
-        "num_classes": num_classes,
-        "monthly_commits": monthly_commits,
-    }
-
-    return results
+            "cyclomatic_complexity": {
+                "average": total_complexity / num_callables if num_callables > 0 else 0,
+            },
+            "depth_of_inheritance": {
+                "average": total_doi / len(list(codebase.classes)) if len(list(codebase.classes)) > 0 else 0,
+            },
+            "halstead_metrics": {
+                "total_volume": int(total_volume),
+                "average_volume": int(total_volume / num_callables) if num_callables > 0 else 0,
+            },
+            "maintainability_index": {
+                "average": int(total_mi / num_callables) if num_callables > 0 else 0,
+            },
+            "num_files": len(list(codebase.files)),
+            "num_functions": len(list(codebase.functions)),
+            "num_classes": len(list(codebase.classes)),
+            
+            # NEW: Comprehensive analysis results
+            **analysis_results
+        }
+        
+        return results
+        
+    except Exception as e:
+        logging.error(f"Repository analysis failed: {str(e)}")
+        return {
+            "error": f"Repository analysis failed: {str(e)}",
+            "repo_url": repo_url,
+            "traceback": traceback.format_exc()
+        }
 
 
 @app.function(image=image)
