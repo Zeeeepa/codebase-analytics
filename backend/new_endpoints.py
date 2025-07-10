@@ -217,14 +217,14 @@ def register_new_endpoints(app):
                 "comprehensive_analysis": "/comprehensive_codebase_analysis"
             },
             "features": {
-                "call_graph_generation": True,
-                "multi_view_analysis": True,
-                "advanced_metrics": True,
-                "security_pattern_detection": True,
-                "performance_optimization": True,
-                "incremental_parsing": True,
-                "caching_system": True,
-                "error_validation": True
+                "call_graph_generation": ADVANCED_FEATURES_AVAILABLE,
+                "multi_view_analysis": ADVANCED_FEATURES_AVAILABLE,
+                "advanced_metrics": ADVANCED_FEATURES_AVAILABLE,
+                "security_pattern_detection": ADVANCED_FEATURES_AVAILABLE,
+                "performance_optimization": ADVANCED_FEATURES_AVAILABLE,
+                "incremental_parsing": ADVANCED_FEATURES_AVAILABLE,
+                "caching_system": ADVANCED_FEATURES_AVAILABLE,
+                "error_validation": ADVANCED_FEATURES_AVAILABLE
             }
         }
 
