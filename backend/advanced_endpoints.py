@@ -263,13 +263,13 @@ def register_advanced_endpoints(app):
             "advanced_analysis_available": ADVANCED_ANALYSIS_AVAILABLE,
             "graph_sitter_version": getattr(graph_sitter, '__version__', 'unknown'),
             "available_features": {
-                "semantic_analysis": True,
-                "dependency_analysis": True,
-                "architectural_analysis": True,
-                "language_specific_analysis": True,
-                "performance_analysis": True,
-                "comprehensive_error_analysis": True,
-                "ultimate_analysis": True
+                "semantic_analysis": ADVANCED_ANALYSIS_AVAILABLE,
+                "dependency_analysis": ADVANCED_ANALYSIS_AVAILABLE,
+                "architectural_analysis": ADVANCED_ANALYSIS_AVAILABLE,
+                "language_specific_analysis": ADVANCED_ANALYSIS_AVAILABLE,
+                "performance_analysis": ADVANCED_ANALYSIS_AVAILABLE,
+                "comprehensive_error_analysis": ADVANCED_ANALYSIS_AVAILABLE,
+                "ultimate_analysis": ADVANCED_ANALYSIS_AVAILABLE
             },
             "supported_languages": ["Python", "TypeScript", "JavaScript"],
             "advanced_capabilities": [
