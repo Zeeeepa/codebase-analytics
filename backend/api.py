@@ -1,14 +1,25 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any
-from codegen import Codebase
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
+from graph_sitter.codebase.codebase_analysis import Codebase
+# Import codegen SDK classes for complexity analysis
+try:
+    from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
+    from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
+    from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
+    from codegen.sdk.core.statements.while_statement import WhileStatement
+    from codegen.sdk.core.expressions.binary_expression import BinaryExpression
+    from codegen.sdk.core.expressions.unary_expression import UnaryExpression
+    from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
+except ImportError:
+    # Fallback if specific SDK classes are not available
+    ForLoopStatement = type('ForLoopStatement', (), {})
+    IfBlockStatement = type('IfBlockStatement', (), {})
+    TryCatchStatement = type('TryCatchStatement', (), {})
+    WhileStatement = type('WhileStatement', (), {})
+    BinaryExpression = type('BinaryExpression', (), {})
+    UnaryExpression = type('UnaryExpression', (), {})
+    ComparisonExpression = type('ComparisonExpression', (), {})
 import math
 import re
 import requests
@@ -1024,7 +1035,7 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
         print(f"🚀 Starting comprehensive analysis of {repo_url}")
         
         # Initialize codebase with advanced configuration
-        from graph_sitter.configs.models.codebase import CodebaseConfig
+        from graph_sitter.codebase.config import CodebaseConfig
         
         config = CodebaseConfig(
             # Performance optimizations
