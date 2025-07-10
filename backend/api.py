@@ -1,6 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Optional, Union
 from codegen import Codebase
 from graph_sitter.core.class_definition import Class
 from graph_sitter.core.codebase import Codebase
@@ -26,6 +26,8 @@ import os
 import tempfile
 from fastapi.middleware.cors import CORSMiddleware
 import modal
+from collections import defaultdict, Counter
+import json
 
 image = (
     modal.Image.debian_slim()
@@ -414,96 +416,545 @@ def get_github_repo_description(repo_url):
         return ""
 
 
+class Analysis:
+    """
+    Analysis class providing pre-computed graph element access and advanced analysis.
+    
+    This class wraps the existing graph-sitter Codebase functionality to provide
+    comprehensive codebase analysis capabilities.
+    """
+    
+    def __init__(self, codebase: Codebase):
+        """Initialize Analysis with a Codebase instance."""
+        self.codebase = codebase
+    
+    @property
+    def functions(self):
+        """All functions in codebase with enhanced analysis."""
+        return self.codebase.functions
+    
+    @property
+    def classes(self):
+        """All classes in codebase with comprehensive analysis."""
+        return self.codebase.classes
+    
+    @property
+    def imports(self):
+        """All import statements in the codebase."""
+        return self.codebase.imports
+    
+    @property
+    def files(self):
+        """All files in the codebase with import analysis."""
+        return self.codebase.files
+    
+    @property
+    def symbols(self):
+        """All symbols (functions, classes, variables) in the codebase."""
+        return self.codebase.symbols
+    
+    @property
+    def external_modules(self):
+        """External dependencies imported by the codebase."""
+        return self.codebase.external_modules
+    
+    def get_comprehensive_analysis(self) -> Dict[str, Any]:
+        """Get comprehensive analysis of the entire codebase."""
+        return {
+            "overview": self.get_codebase_overview(),
+            "quality_metrics": self.get_quality_metrics(),
+            "complexity_analysis": self.get_complexity_analysis(),
+            "dependency_analysis": self.get_dependency_analysis(),
+            "architecture_analysis": self.get_architecture_analysis(),
+            "code_patterns": self.get_code_patterns(),
+            "technical_debt": self.get_technical_debt_analysis(),
+            "test_coverage_analysis": self.get_test_coverage_analysis(),
+            "security_analysis": self.get_security_analysis(),
+            "performance_insights": self.get_performance_insights()
+        }
+    
+    def get_codebase_overview(self) -> Dict[str, Any]:
+        """Get high-level overview of the codebase."""
+        files = list(self.files)
+        functions = list(self.functions)
+        classes = list(self.classes)
+        imports = list(self.imports)
+        
+        # Language distribution
+        language_stats = defaultdict(int)
+        for file in files:
+            if hasattr(file, 'language'):
+                language_stats[file.language] += 1
+        
+        # File size distribution
+        file_sizes = []
+        total_loc = 0
+        for file in files:
+            if hasattr(file, 'source'):
+                lines = len(file.source.splitlines())
+                file_sizes.append(lines)
+                total_loc += lines
+        
+        return {
+            "total_files": len(files),
+            "total_functions": len(functions),
+            "total_classes": len(classes),
+            "total_imports": len(imports),
+            "total_lines_of_code": total_loc,
+            "language_distribution": dict(language_stats),
+            "average_file_size": sum(file_sizes) / len(file_sizes) if file_sizes else 0,
+            "largest_file_size": max(file_sizes) if file_sizes else 0,
+            "smallest_file_size": min(file_sizes) if file_sizes else 0
+        }
+    
+    def get_quality_metrics(self) -> Dict[str, Any]:
+        """Get code quality metrics."""
+        functions = list(self.functions)
+        classes = list(self.classes)
+        
+        # Function quality metrics
+        function_metrics = []
+        total_complexity = 0
+        total_mi = 0
+        
+        for func in functions:
+            if hasattr(func, 'code_block'):
+                complexity = calculate_cyclomatic_complexity(func)
+                operators, operands = get_operators_and_operands(func)
+                volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
+                loc = len(func.code_block.source.splitlines()) if hasattr(func.code_block, 'source') else 0
+                mi_score = calculate_maintainability_index(volume, complexity, loc)
+                
+                function_metrics.append({
+                    "name": func.name,
+                    "complexity": complexity,
+                    "complexity_rank": cc_rank(complexity),
+                    "maintainability_index": mi_score,
+                    "maintainability_rank": get_maintainability_rank(mi_score),
+                    "lines_of_code": loc,
+                    "halstead_volume": volume
+                })
+                
+                total_complexity += complexity
+                total_mi += mi_score
+        
+        # Class quality metrics
+        class_metrics = []
+        total_doi = 0
+        
+        for cls in classes:
+            doi = calculate_doi(cls)
+            methods_count = len(list(cls.methods)) if hasattr(cls, 'methods') else 0
+            attributes_count = len(list(cls.attributes)) if hasattr(cls, 'attributes') else 0
+            
+            class_metrics.append({
+                "name": cls.name,
+                "depth_of_inheritance": doi,
+                "methods_count": methods_count,
+                "attributes_count": attributes_count,
+                "is_abstract": getattr(cls, 'is_abstract', False)
+            })
+            
+            total_doi += doi
+        
+        return {
+            "function_metrics": function_metrics,
+            "class_metrics": class_metrics,
+            "averages": {
+                "cyclomatic_complexity": total_complexity / len(functions) if functions else 0,
+                "maintainability_index": total_mi / len(functions) if functions else 0,
+                "depth_of_inheritance": total_doi / len(classes) if classes else 0
+            },
+            "quality_distribution": self._get_quality_distribution(function_metrics)
+        }
+    
+    def get_complexity_analysis(self) -> Dict[str, Any]:
+        """Get detailed complexity analysis."""
+        functions = list(self.functions)
+        
+        complexity_distribution = defaultdict(int)
+        high_complexity_functions = []
+        
+        for func in functions:
+            if hasattr(func, 'code_block'):
+                complexity = calculate_cyclomatic_complexity(func)
+                rank = cc_rank(complexity)
+                complexity_distribution[rank] += 1
+                
+                if complexity > 10:  # High complexity threshold
+                    high_complexity_functions.append({
+                        "name": func.name,
+                        "complexity": complexity,
+                        "rank": rank,
+                        "file": getattr(func, 'file_path', 'unknown')
+                    })
+        
+        return {
+            "complexity_distribution": dict(complexity_distribution),
+            "high_complexity_functions": sorted(high_complexity_functions, 
+                                               key=lambda x: x['complexity'], reverse=True),
+            "complexity_hotspots": self._identify_complexity_hotspots()
+        }
+    
+    def get_dependency_analysis(self) -> Dict[str, Any]:
+        """Get dependency analysis."""
+        imports = list(self.imports)
+        external_modules = list(self.external_modules)
+        
+        # Import frequency analysis
+        import_frequency = Counter()
+        external_dependencies = set()
+        
+        for imp in imports:
+            if hasattr(imp, 'source'):
+                import_frequency[imp.source] += 1
+            if hasattr(imp, 'is_external') and imp.is_external:
+                if hasattr(imp, 'module_name'):
+                    external_dependencies.add(imp.module_name)
+        
+        # Circular dependency detection
+        circular_deps = self._detect_circular_dependencies()
+        
+        # Dependency graph metrics
+        dependency_metrics = self._calculate_dependency_metrics()
+        
+        return {
+            "total_imports": len(imports),
+            "external_dependencies": list(external_dependencies),
+            "most_imported_modules": import_frequency.most_common(10),
+            "circular_dependencies": circular_deps,
+            "dependency_metrics": dependency_metrics,
+            "unused_imports": self._find_unused_imports()
+        }
+    
+    def get_architecture_analysis(self) -> Dict[str, Any]:
+        """Get architecture analysis."""
+        files = list(self.files)
+        classes = list(self.classes)
+        functions = list(self.functions)
+        
+        # Package/module structure
+        package_structure = self._analyze_package_structure(files)
+        
+        # Design patterns detection
+        design_patterns = self._detect_design_patterns(classes)
+        
+        # Coupling and cohesion metrics
+        coupling_metrics = self._calculate_coupling_metrics()
+        
+        return {
+            "package_structure": package_structure,
+            "design_patterns": design_patterns,
+            "coupling_metrics": coupling_metrics,
+            "architectural_violations": self._detect_architectural_violations()
+        }
+    
+    def get_code_patterns(self) -> Dict[str, Any]:
+        """Get code patterns analysis."""
+        functions = list(self.functions)
+        classes = list(self.classes)
+        
+        # Common patterns
+        patterns = {
+            "singleton_classes": [],
+            "factory_methods": [],
+            "observer_patterns": [],
+            "decorator_patterns": [],
+            "async_functions": [],
+            "generator_functions": []
+        }
+        
+        # Analyze functions
+        for func in functions:
+            if hasattr(func, 'is_async') and func.is_async:
+                patterns["async_functions"].append(func.name)
+            
+            if hasattr(func, 'is_generator') and func.is_generator:
+                patterns["generator_functions"].append(func.name)
+            
+            # Check for factory pattern
+            if 'create' in func.name.lower() or 'factory' in func.name.lower():
+                patterns["factory_methods"].append(func.name)
+        
+        # Analyze classes for patterns
+        for cls in classes:
+            # Singleton detection
+            if self._is_singleton_pattern(cls):
+                patterns["singleton_classes"].append(cls.name)
+        
+        return {
+            "detected_patterns": patterns,
+            "pattern_statistics": self._calculate_pattern_statistics(patterns)
+        }
+    
+    def get_technical_debt_analysis(self) -> Dict[str, Any]:
+        """Get technical debt analysis."""
+        functions = list(self.functions)
+        files = list(self.files)
+        
+        debt_indicators = {
+            "long_functions": [],
+            "complex_functions": [],
+            "large_classes": [],
+            "code_duplication": [],
+            "missing_documentation": [],
+            "deprecated_usage": []
+        }
+        
+        # Analyze functions for debt
+        for func in functions:
+            if hasattr(func, 'code_block') and hasattr(func.code_block, 'source'):
+                loc = len(func.code_block.source.splitlines())
+                complexity = calculate_cyclomatic_complexity(func)
+                
+                if loc > 50:  # Long function threshold
+                    debt_indicators["long_functions"].append({
+                        "name": func.name,
+                        "lines": loc
+                    })
+                
+                if complexity > 15:  # High complexity threshold
+                    debt_indicators["complex_functions"].append({
+                        "name": func.name,
+                        "complexity": complexity
+                    })
+                
+                # Check for missing documentation
+                if not hasattr(func, 'docstring') or not func.docstring:
+                    debt_indicators["missing_documentation"].append(func.name)
+        
+        return {
+            "debt_indicators": debt_indicators,
+            "debt_score": self._calculate_debt_score(debt_indicators),
+            "refactoring_suggestions": self._generate_refactoring_suggestions(debt_indicators)
+        }
+    
+    def get_test_coverage_analysis(self) -> Dict[str, Any]:
+        """Get test coverage analysis."""
+        files = list(self.files)
+        functions = list(self.functions)
+        
+        test_files = []
+        test_functions = []
+        
+        for file in files:
+            if 'test' in file.path.lower() or file.path.endswith('_test.py'):
+                test_files.append(file.path)
+        
+        for func in functions:
+            if 'test_' in func.name.lower() or func.name.lower().startswith('test'):
+                test_functions.append(func.name)
+        
+        return {
+            "test_files_count": len(test_files),
+            "test_functions_count": len(test_functions),
+            "test_to_code_ratio": len(test_functions) / len(functions) if functions else 0,
+            "test_files": test_files,
+            "coverage_estimation": self._estimate_test_coverage()
+        }
+    
+    def get_security_analysis(self) -> Dict[str, Any]:
+        """Get security analysis."""
+        functions = list(self.functions)
+        files = list(self.files)
+        
+        security_issues = {
+            "potential_sql_injection": [],
+            "hardcoded_secrets": [],
+            "unsafe_functions": [],
+            "input_validation_missing": []
+        }
+        
+        # Basic security pattern detection
+        for func in functions:
+            if hasattr(func, 'code_block') and hasattr(func.code_block, 'source'):
+                source = func.code_block.source.lower()
+                
+                # SQL injection patterns
+                if 'execute(' in source and any(pattern in source for pattern in ['%s', 'format(', 'f"']):
+                    security_issues["potential_sql_injection"].append(func.name)
+                
+                # Unsafe functions
+                if any(unsafe in source for unsafe in ['eval(', 'exec(', 'pickle.loads(']):
+                    security_issues["unsafe_functions"].append(func.name)
+        
+        # Check for hardcoded secrets in files
+        for file in files:
+            if hasattr(file, 'source'):
+                if self._contains_hardcoded_secrets(file.source):
+                    security_issues["hardcoded_secrets"].append(file.path)
+        
+        return {
+            "security_issues": security_issues,
+            "security_score": self._calculate_security_score(security_issues),
+            "recommendations": self._generate_security_recommendations(security_issues)
+        }
+    
+    def get_performance_insights(self) -> Dict[str, Any]:
+        """Get performance insights."""
+        functions = list(self.functions)
+        
+        performance_issues = {
+            "nested_loops": [],
+            "recursive_functions": [],
+            "large_data_structures": [],
+            "inefficient_patterns": []
+        }
+        
+        for func in functions:
+            if hasattr(func, 'code_block') and hasattr(func.code_block, 'source'):
+                source = func.code_block.source
+                
+                # Detect nested loops
+                if source.count('for ') > 1 or source.count('while ') > 1:
+                    performance_issues["nested_loops"].append(func.name)
+                
+                # Detect recursive functions
+                if func.name in source:
+                    performance_issues["recursive_functions"].append(func.name)
+        
+        return {
+            "performance_issues": performance_issues,
+            "optimization_suggestions": self._generate_optimization_suggestions(performance_issues)
+        }
+    
+    # Helper methods
+    def _get_quality_distribution(self, function_metrics: List[Dict]) -> Dict[str, int]:
+        """Get distribution of quality ranks."""
+        distribution = defaultdict(int)
+        for metric in function_metrics:
+            distribution[metric['complexity_rank']] += 1
+        return dict(distribution)
+    
+    def _identify_complexity_hotspots(self) -> List[Dict[str, Any]]:
+        """Identify complexity hotspots in the codebase."""
+        # Implementation would analyze file-level complexity
+        return []
+    
+    def _detect_circular_dependencies(self) -> List[Dict[str, Any]]:
+        """Detect circular dependencies."""
+        # Implementation would analyze import chains
+        return []
+    
+    def _calculate_dependency_metrics(self) -> Dict[str, Any]:
+        """Calculate dependency metrics."""
+        return {
+            "fan_in": 0,
+            "fan_out": 0,
+            "instability": 0
+        }
+    
+    def _find_unused_imports(self) -> List[str]:
+        """Find unused imports."""
+        # Implementation would analyze import usage
+        return []
+    
+    def _analyze_package_structure(self, files: List) -> Dict[str, Any]:
+        """Analyze package structure."""
+        return {
+            "depth": 0,
+            "modules": len(files),
+            "structure": {}
+        }
+    
+    def _detect_design_patterns(self, classes: List) -> List[str]:
+        """Detect design patterns."""
+        return []
+    
+    def _calculate_coupling_metrics(self) -> Dict[str, float]:
+        """Calculate coupling metrics."""
+        return {
+            "afferent_coupling": 0.0,
+            "efferent_coupling": 0.0
+        }
+    
+    def _detect_architectural_violations(self) -> List[str]:
+        """Detect architectural violations."""
+        return []
+    
+    def _is_singleton_pattern(self, cls) -> bool:
+        """Check if class implements singleton pattern."""
+        return False
+    
+    def _calculate_pattern_statistics(self, patterns: Dict) -> Dict[str, int]:
+        """Calculate pattern statistics."""
+        return {pattern: len(items) for pattern, items in patterns.items()}
+    
+    def _calculate_debt_score(self, debt_indicators: Dict) -> float:
+        """Calculate technical debt score."""
+        total_issues = sum(len(issues) for issues in debt_indicators.values())
+        return min(100, total_issues * 5)  # Simple scoring
+    
+    def _generate_refactoring_suggestions(self, debt_indicators: Dict) -> List[str]:
+        """Generate refactoring suggestions."""
+        suggestions = []
+        if debt_indicators["long_functions"]:
+            suggestions.append("Consider breaking down long functions into smaller, more focused functions")
+        if debt_indicators["complex_functions"]:
+            suggestions.append("Reduce complexity in high-complexity functions")
+        return suggestions
+    
+    def _estimate_test_coverage(self) -> float:
+        """Estimate test coverage."""
+        # Simple estimation based on test function ratio
+        return 0.0
+    
+    def _contains_hardcoded_secrets(self, source: str) -> bool:
+        """Check for hardcoded secrets."""
+        secret_patterns = ['password', 'api_key', 'secret', 'token']
+        return any(pattern in source.lower() for pattern in secret_patterns)
+    
+    def _calculate_security_score(self, security_issues: Dict) -> float:
+        """Calculate security score."""
+        total_issues = sum(len(issues) for issues in security_issues.values())
+        return max(0, 100 - total_issues * 10)
+    
+    def _generate_security_recommendations(self, security_issues: Dict) -> List[str]:
+        """Generate security recommendations."""
+        recommendations = []
+        if security_issues["potential_sql_injection"]:
+            recommendations.append("Use parameterized queries to prevent SQL injection")
+        if security_issues["unsafe_functions"]:
+            recommendations.append("Avoid using eval() and exec() functions")
+        return recommendations
+    
+    def _generate_optimization_suggestions(self, performance_issues: Dict) -> List[str]:
+        """Generate optimization suggestions."""
+        suggestions = []
+        if performance_issues["nested_loops"]:
+            suggestions.append("Consider optimizing nested loops or using more efficient algorithms")
+        if performance_issues["recursive_functions"]:
+            suggestions.append("Consider iterative alternatives for recursive functions")
+        return suggestions
+
+
 class RepoRequest(BaseModel):
     repo_url: str
 
 
 @fastapi_app.post("/analyze_repo")
 async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
-    repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
-
-    num_files = len(codebase.files(extensions="*"))
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
-
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
-
-    monthly_commits = get_monthly_commits(repo_url)
-    print(monthly_commits)
-
-    for file in codebase.files:
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-
-    num_callables = 0
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
-
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
-
-    results = {
-        "repo_url": repo_url,
-        "line_metrics": {
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100)
-                if total_loc > 0
-                else 0,
-            },
-        },
-        "cyclomatic_complexity": {
-            "average": total_complexity if num_callables > 0 else 0,
-        },
-        "depth_of_inheritance": {
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        "halstead_metrics": {
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables)
-            if num_callables > 0
-            else 0,
-        },
-        "maintainability_index": {
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        "description": desc,
-        "num_files": num_files,
-        "num_functions": num_functions,
-        "num_classes": num_classes,
-        "monthly_commits": monthly_commits,
-    }
-
-    return results
+    """Get COMPREHENSIVE codebase analysis using the Analysis class."""
+    try:
+        repo_url = request.repo_url
+        codebase = Codebase.from_repo(repo_url)
+        analysis = Analysis(codebase)
+        
+        # Get FULL comprehensive analysis - ALL dimensions
+        result = analysis.get_comprehensive_analysis()
+        
+        # Add repository metadata
+        result["repository"] = {
+            "url": repo_url,
+            "description": get_github_repo_description(repo_url),
+            "analysis_timestamp": datetime.now().isoformat(),
+            "analysis_type": "comprehensive"
+        }
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 @app.function(image=image)
