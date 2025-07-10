@@ -1,15 +1,16 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any, Optional, Set
-from codegen import Codebase
+from codegen_sdk_pink import Codebase
 from codegen.configs.models.codebase import CodebaseConfig
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
+# Note: These statement/expression imports may need to be updated based on graph_sitter structure
+# from graph_sitter.core.statements.for_loop_statement import ForLoopStatement
+# from graph_sitter.core.statements.if_block_statement import IfBlockStatement
+# from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
+# from graph_sitter.core.statements.while_statement import WhileStatement
+# from graph_sitter.core.expressions.binary_expression import BinaryExpression
+# from graph_sitter.core.expressions.unary_expression import UnaryExpression
+# from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
 from collections import Counter, defaultdict
 import math
 import re
@@ -58,6 +59,20 @@ class ComprehensiveAnalysis:
         self.function_contexts = {}
         self.entry_points = []
         self.dead_code_items = []
+    
+    def _get_all_functions(self):
+        """Get all functions from all files in the codebase."""
+        all_functions = []
+        for file in self.codebase.files:
+            all_functions.extend(file.functions)
+        return all_functions
+    
+    def _get_all_classes(self):
+        """Get all classes from all files in the codebase."""
+        all_classes = []
+        for file in self.codebase.files:
+            all_classes.extend(file.classes)
+        return all_classes
         
     def analyze(self) -> Dict[str, Any]:
         """Perform comprehensive analysis and return detailed results."""
@@ -96,7 +111,9 @@ class ComprehensiveAnalysis:
         dead_imports = []
         
         # Find unused functions
-        for func in self.codebase.functions:
+        all_functions = self._get_all_functions()
+        
+        for func in all_functions:
             if not hasattr(func, 'usages') or len(func.usages) == 0:
                 dead_functions.append({
                     'name': func.name,
@@ -106,7 +123,7 @@ class ComprehensiveAnalysis:
                 self.dead_code_items.append(func.name)
         
         # Find unused classes
-        for cls in self.codebase.classes:
+        for cls in self._get_all_classes():
             if not hasattr(cls, 'usages') or len(cls.usages) == 0:
                 dead_classes.append({
                     'name': cls.name,
@@ -139,7 +156,7 @@ class ComprehensiveAnalysis:
         # Common entry point patterns
         entry_patterns = ['main', '__main__', 'app', 'run', 'start', 'init']
         
-        for func in self.codebase.functions:
+        for func in self._get_all_functions():
             # Check if function name matches entry patterns
             if any(pattern in func.name.lower() for pattern in entry_patterns):
                 entry_points.append({
@@ -162,7 +179,7 @@ class ComprehensiveAnalysis:
     
     def _analyze_function_contexts(self):
         """Analyze detailed context for each function."""
-        for func in self.codebase.functions:
+        for func in self._get_all_functions():
             try:
                 # Get function dependencies
                 dependencies = []
@@ -243,11 +260,11 @@ class ComprehensiveAnalysis:
         self.issues = []
         
         # Analyze functions for issues
-        for func in self.codebase.functions:
+        for func in self._get_all_functions():
             self.issues.extend(self._detect_function_issues(func))
         
         # Analyze classes for issues
-        for cls in self.codebase.classes:
+        for cls in self._get_all_classes():
             self.issues.extend(self._detect_class_issues(cls))
         
         # Analyze imports for issues
@@ -413,17 +430,17 @@ class ComprehensiveAnalysis:
         """Generate comprehensive codebase summary."""
         return {
             'total_files': len(list(self.codebase.files)),
-            'total_functions': len(list(self.codebase.functions)),
-            'total_classes': len(list(self.codebase.classes)),
-            'total_imports': len(list(self.codebase.imports)),
-            'total_symbols': len(list(self.codebase.symbols)),
+            'total_functions': len(self._get_all_functions()),
+            'total_classes': len(self._get_all_classes()),
+            'total_imports': 0,  # TODO: Implement imports extraction from files
+            'total_symbols': len(self._get_all_functions()) + len(self._get_all_classes()),
             'total_issues': len(self.issues),
             'critical_issues': len([i for i in self.issues if i['severity'] == 'critical']),
             'major_issues': len([i for i in self.issues if i['severity'] == 'major']),
             'minor_issues': len([i for i in self.issues if i['severity'] == 'minor']),
             'dead_code_items': len(self.dead_code_items),
             'entry_points': len(self.entry_points),
-            'external_modules': len(list(self.codebase.external_modules)) if hasattr(self.codebase, 'external_modules') else 0
+            'external_modules': 0  # TODO: Implement external modules extraction with codegen_sdk_pink
         }
     
     def _find_most_important_functions(self) -> Dict[str, Any]:
@@ -433,7 +450,7 @@ class ComprehensiveAnalysis:
         deepest_inheritance = {'name': 'N/A', 'chain_depth': 0}
         
         # Find function that makes the most calls
-        for func in self.codebase.functions:
+        for func in self._get_all_functions():
             if hasattr(func, 'function_calls'):
                 call_count = len(func.function_calls)
                 if call_count > most_calls['call_count']:
@@ -444,7 +461,7 @@ class ComprehensiveAnalysis:
                     }
         
         # Find most called function
-        for func in self.codebase.functions:
+        for func in self._get_all_functions():
             if hasattr(func, 'usages'):
                 usage_count = len(func.usages)
                 if usage_count > most_called['usage_count']:
@@ -454,7 +471,7 @@ class ComprehensiveAnalysis:
                     }
         
         # Find class with deepest inheritance
-        for cls in self.codebase.classes:
+        for cls in self._get_all_classes():
             if hasattr(cls, 'superclasses'):
                 chain_depth = len(cls.superclasses)
                 if chain_depth > deepest_inheritance['chain_depth']:
@@ -486,7 +503,7 @@ class ComprehensiveAnalysis:
         recursive_functions = []
         max_call_depth = 0
         
-        for func in self.codebase.functions:
+        for func in self._get_all_functions():
             if hasattr(func, 'function_calls'):
                 total_calls += len(func.function_calls)
                 
@@ -505,7 +522,7 @@ class ComprehensiveAnalysis:
             'total_function_calls': total_calls,
             'recursive_functions': recursive_functions,
             'max_call_depth': max_call_depth,
-            'average_calls_per_function': total_calls / len(list(self.codebase.functions)) if len(list(self.codebase.functions)) > 0 else 0
+            'average_calls_per_function': total_calls / len(self._get_all_functions()) if len(self._get_all_functions()) > 0 else 0
         }
     
     def _analyze_dependencies(self) -> Dict[str, Any]:
@@ -513,7 +530,9 @@ class ComprehensiveAnalysis:
         total_dependencies = 0
         circular_dependencies = []
         
-        for symbol in self.codebase.symbols:
+        # TODO: Implement symbol dependencies analysis with codegen_sdk_pink
+        all_symbols = self._get_all_functions() + self._get_all_classes()
+        for symbol in all_symbols:
             if hasattr(symbol, 'dependencies'):
                 total_dependencies += len(symbol.dependencies)
         
@@ -525,7 +544,7 @@ class ComprehensiveAnalysis:
         return {
             'total_dependencies': total_dependencies,
             'circular_dependencies': circular_dependencies,
-            'average_dependencies_per_symbol': total_dependencies / len(list(self.codebase.symbols)) if len(list(self.codebase.symbols)) > 0 else 0
+            'average_dependencies_per_symbol': total_dependencies / len(all_symbols) if len(all_symbols) > 0 else 0
         }
     
     def _analyze_imports(self) -> Dict[str, Any]:
@@ -556,12 +575,12 @@ class ComprehensiveAnalysis:
     
     def _analyze_class_hierarchy(self) -> Dict[str, Any]:
         """Analyze class inheritance patterns."""
-        total_classes = len(list(self.codebase.classes))
+        total_classes = len(self._get_all_classes())
         classes_with_inheritance = 0
         max_inheritance_depth = 0
         abstract_classes = 0
         
-        for cls in self.codebase.classes:
+        for cls in self._get_all_classes():
             if hasattr(cls, 'superclasses') and len(cls.superclasses) > 0:
                 classes_with_inheritance += 1
                 if len(cls.superclasses) > max_inheritance_depth:
@@ -582,9 +601,9 @@ class ComprehensiveAnalysis:
         """Analyze overall code quality metrics."""
         functions_with_docstrings = 0
         functions_with_type_hints = 0
-        total_functions = len(list(self.codebase.functions))
+        total_functions = len(self._get_all_functions())
         
-        for func in self.codebase.functions:
+        for func in self._get_all_functions():
             if hasattr(func, 'docstring') and func.docstring:
                 functions_with_docstrings += 1
             
@@ -599,7 +618,7 @@ class ComprehensiveAnalysis:
     
     def _calculate_quality_score(self) -> float:
         """Calculate overall code quality score (0-100)."""
-        total_functions = len(list(self.codebase.functions))
+        total_functions = len(self._get_all_functions())
         if total_functions == 0:
             return 100.0
         
@@ -664,7 +683,7 @@ class ComprehensiveAnalysis:
         
         # Find most called functions across codebase
         function_call_counts = {}
-        for function in self.codebase.functions:
+        for function in self._get_all_functions():
             call_count = len(getattr(function, 'call_sites', []))
             if call_count > 0:
                 function_call_counts[function] = call_count
@@ -777,7 +796,7 @@ class ComprehensiveAnalysis:
         }
         
         # 1. Type-related errors
-        for function in self.codebase.functions:
+        for function in self._get_all_functions():
             # Missing type annotations
             if not getattr(function, 'return_type', None):
                 error_analysis["type_errors"].append({
@@ -801,7 +820,7 @@ class ComprehensiveAnalysis:
                     })
         
         # 2. Runtime risk analysis
-        for function in self.codebase.functions:
+        for function in self._get_all_functions():
             runtime_risks = self._analyze_runtime_risks(function)
             if runtime_risks:
                 error_analysis["runtime_risks"].extend(runtime_risks)
@@ -811,7 +830,7 @@ class ComprehensiveAnalysis:
         error_analysis["circular_dependencies"].extend(circular_deps)
         
         # 4. Dead code detection
-        for function in self.codebase.functions:
+        for function in self._get_all_functions():
             usages = getattr(function, 'usages', [])
             call_sites = getattr(function, 'call_sites', [])
             if not usages and not call_sites:
@@ -918,7 +937,7 @@ class ComprehensiveAnalysis:
             ('raw_input(', 'user_input_risk')
         ]
         
-        for function in self.codebase.functions:
+        for function in self._get_all_functions():
             if hasattr(function, 'code_block') and function.code_block:
                 source = getattr(function.code_block, 'source', '')
                 for pattern, risk_type in dangerous_patterns:
