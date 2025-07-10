@@ -1,6 +1,6 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from typing import Dict, List, Tuple, Any, Optional, Union
 import graph_sitter
 from graph_sitter.core.class_definition import Class
 from graph_sitter.core.codebase import Codebase
@@ -26,12 +26,17 @@ import os
 import tempfile
 from fastapi.middleware.cors import CORSMiddleware
 import modal
+import ast
+import json
+from collections import defaultdict, Counter
+from enum import Enum
+import hashlib
 
 image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
+        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime", "networkx", "pygments"
     )
 )
 
@@ -445,8 +450,615 @@ def get_github_repo_description(repo_url):
         return ""
 
 
+# ============================================================================
+# COMPREHENSIVE CODEBASE ANALYSIS FUNCTIONS
+# ============================================================================
+
+def detect_entrypoints(codebase: Codebase) -> List[EntryPoint]:
+    """Detect various types of entry points in the codebase."""
+    entrypoints = []
+    
+    for file in codebase.files:
+        # Skip non-Python files for now (can be extended)
+        if not file.name.endswith(('.py', '.js', '.ts', '.java', '.cpp', '.c')):
+            continue
+            
+        try:
+            # Detect main functions
+            for func in file.functions:
+                if func.name in ['main', '__main__', 'run', 'start', 'execute']:
+                    entrypoints.append(EntryPoint(
+                        type="main",
+                        file_path=file.filepath,
+                        function_name=func.name,
+                        line_number=getattr(func, 'line_number', None),
+                        description=f"Main function '{func.name}' in {file.name}",
+                        confidence=0.9,
+                        dependencies=[dep.name for dep in func.dependencies[:5]]
+                    ))
+                
+                # Detect CLI entry points
+                if any(keyword in func.name.lower() for keyword in ['cli', 'command', 'parse_args', 'argparse']):
+                    entrypoints.append(EntryPoint(
+                        type="cli",
+                        file_path=file.filepath,
+                        function_name=func.name,
+                        line_number=getattr(func, 'line_number', None),
+                        description=f"CLI function '{func.name}' in {file.name}",
+                        confidence=0.7,
+                        dependencies=[dep.name for dep in func.dependencies[:5]]
+                    ))
+                
+                # Detect web endpoints
+                if any(decorator in str(func.decorators) for decorator in ['@app.route', '@router.', '@fastapi_app.', '@get', '@post', '@put', '@delete']):
+                    entrypoints.append(EntryPoint(
+                        type="web_endpoint",
+                        file_path=file.filepath,
+                        function_name=func.name,
+                        line_number=getattr(func, 'line_number', None),
+                        description=f"Web endpoint '{func.name}' in {file.name}",
+                        confidence=0.95,
+                        dependencies=[dep.name for dep in func.dependencies[:5]]
+                    ))
+                
+                # Detect test functions
+                if func.name.startswith('test_') or any(keyword in func.name.lower() for keyword in ['test', 'spec']):
+                    entrypoints.append(EntryPoint(
+                        type="test",
+                        file_path=file.filepath,
+                        function_name=func.name,
+                        line_number=getattr(func, 'line_number', None),
+                        description=f"Test function '{func.name}' in {file.name}",
+                        confidence=0.8,
+                        dependencies=[dep.name for dep in func.dependencies[:3]]
+                    ))
+            
+            # Detect script entry points (if __name__ == "__main__")
+            if '__name__' in file.source and '__main__' in file.source:
+                entrypoints.append(EntryPoint(
+                    type="script",
+                    file_path=file.filepath,
+                    description=f"Script entry point in {file.name}",
+                    confidence=0.85,
+                    dependencies=[]
+                ))
+                
+        except Exception as e:
+            print(f"Error analyzing file {file.name}: {e}")
+            continue
+    
+    return entrypoints
+
+
+def analyze_code_issues(codebase: Codebase, max_issues: int = 100) -> List[CodeIssue]:
+    """Comprehensive code issue analysis using graph-sitter AST."""
+    issues = []
+    issue_counter = 0
+    
+    for file in codebase.files:
+        if issue_counter >= max_issues:
+            break
+            
+        try:
+            # Syntax and parsing issues
+            if not file.source.strip():
+                issues.append(CodeIssue(
+                    id=f"empty_file_{hashlib.md5(file.filepath.encode()).hexdigest()[:8]}",
+                    type=IssueType.CODE_SMELL,
+                    severity=IssueSeverity.LOW,
+                    file_path=file.filepath,
+                    message="Empty file",
+                    description="File contains no code",
+                    context={"file_size": len(file.source)}
+                ))
+                issue_counter += 1
+                continue
+            
+            # Analyze functions for complexity and maintainability issues
+            for func in file.functions:
+                if issue_counter >= max_issues:
+                    break
+                    
+                try:
+                    # High cyclomatic complexity
+                    complexity = calculate_cyclomatic_complexity(func)
+                    if complexity > 15:
+                        severity = IssueSeverity.CRITICAL if complexity > 30 else IssueSeverity.HIGH
+                        issues.append(CodeIssue(
+                            id=f"complexity_{hashlib.md5(f'{file.filepath}_{func.name}'.encode()).hexdigest()[:8]}",
+                            type=IssueType.COMPLEXITY_ISSUE,
+                            severity=severity,
+                            file_path=file.filepath,
+                            function_name=func.name,
+                            line_number=getattr(func, 'line_number', None),
+                            message=f"High cyclomatic complexity: {complexity}",
+                            description=f"Function '{func.name}' has cyclomatic complexity of {complexity}, which exceeds recommended threshold of 15",
+                            context={
+                                "complexity": complexity,
+                                "complexity_rank": cc_rank(complexity),
+                                "parameters_count": len(func.parameters),
+                                "return_statements": len(func.return_statements)
+                            },
+                            related_symbols=[func.name],
+                            fix_suggestions=[
+                                "Break down the function into smaller, more focused functions",
+                                "Extract complex conditional logic into separate methods",
+                                "Consider using strategy pattern for complex branching logic"
+                            ]
+                        ))
+                        issue_counter += 1
+                    
+                    # Long functions (high LOC)
+                    func_lines = len(func.source.splitlines()) if hasattr(func, 'source') else 0
+                    if func_lines > 50:
+                        severity = IssueSeverity.HIGH if func_lines > 100 else IssueSeverity.MEDIUM
+                        issues.append(CodeIssue(
+                            id=f"long_func_{hashlib.md5(f'{file.filepath}_{func.name}'.encode()).hexdigest()[:8]}",
+                            type=IssueType.MAINTAINABILITY_ISSUE,
+                            severity=severity,
+                            file_path=file.filepath,
+                            function_name=func.name,
+                            line_number=getattr(func, 'line_number', None),
+                            message=f"Long function: {func_lines} lines",
+                            description=f"Function '{func.name}' is {func_lines} lines long, exceeding recommended maximum of 50 lines",
+                            context={
+                                "lines_of_code": func_lines,
+                                "parameters_count": len(func.parameters),
+                                "complexity": complexity
+                            },
+                            related_symbols=[func.name],
+                            fix_suggestions=[
+                                "Split function into smaller, single-responsibility functions",
+                                "Extract reusable logic into utility functions",
+                                "Consider using composition over large monolithic functions"
+                            ]
+                        ))
+                        issue_counter += 1
+                    
+                    # Too many parameters
+                    if len(func.parameters) > 7:
+                        issues.append(CodeIssue(
+                            id=f"many_params_{hashlib.md5(f'{file.filepath}_{func.name}'.encode()).hexdigest()[:8]}",
+                            type=IssueType.CODE_SMELL,
+                            severity=IssueSeverity.MEDIUM,
+                            file_path=file.filepath,
+                            function_name=func.name,
+                            line_number=getattr(func, 'line_number', None),
+                            message=f"Too many parameters: {len(func.parameters)}",
+                            description=f"Function '{func.name}' has {len(func.parameters)} parameters, exceeding recommended maximum of 7",
+                            context={
+                                "parameters_count": len(func.parameters),
+                                "parameter_names": [p.name for p in func.parameters]
+                            },
+                            related_symbols=[func.name],
+                            fix_suggestions=[
+                                "Group related parameters into a configuration object",
+                                "Use builder pattern for complex parameter sets",
+                                "Consider if some parameters can have default values"
+                            ]
+                        ))
+                        issue_counter += 1
+                        
+                except Exception as e:
+                    print(f"Error analyzing function {func.name}: {e}")
+                    continue
+            
+            # Analyze classes for design issues
+            for cls in file.classes:
+                if issue_counter >= max_issues:
+                    break
+                    
+                try:
+                    # Too many methods (God class)
+                    if len(cls.methods) > 20:
+                        severity = IssueSeverity.HIGH if len(cls.methods) > 30 else IssueSeverity.MEDIUM
+                        issues.append(CodeIssue(
+                            id=f"god_class_{hashlib.md5(f'{file.filepath}_{cls.name}'.encode()).hexdigest()[:8]}",
+                            type=IssueType.CODE_SMELL,
+                            severity=severity,
+                            file_path=file.filepath,
+                            class_name=cls.name,
+                            line_number=getattr(cls, 'line_number', None),
+                            message=f"God class: {len(cls.methods)} methods",
+                            description=f"Class '{cls.name}' has {len(cls.methods)} methods, indicating it may have too many responsibilities",
+                            context={
+                                "methods_count": len(cls.methods),
+                                "attributes_count": len(cls.attributes),
+                                "method_names": [m.name for m in cls.methods[:10]]
+                            },
+                            related_symbols=[cls.name],
+                            affected_functions=[m.name for m in cls.methods],
+                            fix_suggestions=[
+                                "Apply Single Responsibility Principle - split class into smaller classes",
+                                "Extract related methods into separate classes or modules",
+                                "Consider using composition instead of inheritance"
+                            ]
+                        ))
+                        issue_counter += 1
+                    
+                    # Deep inheritance hierarchy
+                    doi = calculate_doi(cls)
+                    if doi > 5:
+                        issues.append(CodeIssue(
+                            id=f"deep_inheritance_{hashlib.md5(f'{file.filepath}_{cls.name}'.encode()).hexdigest()[:8]}",
+                            type=IssueType.CODE_SMELL,
+                            severity=IssueSeverity.MEDIUM,
+                            file_path=file.filepath,
+                            class_name=cls.name,
+                            line_number=getattr(cls, 'line_number', None),
+                            message=f"Deep inheritance: {doi} levels",
+                            description=f"Class '{cls.name}' has inheritance depth of {doi}, which may indicate over-engineering",
+                            context={
+                                "depth_of_inheritance": doi,
+                                "parent_classes": cls.parent_class_names
+                            },
+                            related_symbols=[cls.name] + cls.parent_class_names,
+                            fix_suggestions=[
+                                "Consider using composition over inheritance",
+                                "Flatten the inheritance hierarchy",
+                                "Use interfaces/protocols instead of deep inheritance"
+                            ]
+                        ))
+                        issue_counter += 1
+                        
+                except Exception as e:
+                    print(f"Error analyzing class {cls.name}: {e}")
+                    continue
+            
+            # Security vulnerability patterns
+            security_patterns = [
+                (r'eval\s*\(', "Use of eval() function", IssueSeverity.CRITICAL),
+                (r'exec\s*\(', "Use of exec() function", IssueSeverity.CRITICAL),
+                (r'subprocess\.call\s*\(.*shell\s*=\s*True', "Shell injection vulnerability", IssueSeverity.HIGH),
+                (r'pickle\.loads?\s*\(', "Unsafe pickle deserialization", IssueSeverity.HIGH),
+                (r'input\s*\(.*\)', "Use of input() function", IssueSeverity.MEDIUM),
+                (r'password\s*=\s*["\'][^"\']+["\']', "Hardcoded password", IssueSeverity.HIGH),
+                (r'api_key\s*=\s*["\'][^"\']+["\']', "Hardcoded API key", IssueSeverity.HIGH),
+            ]
+            
+            for pattern, message, severity in security_patterns:
+                if issue_counter >= max_issues:
+                    break
+                    
+                matches = re.finditer(pattern, file.source, re.IGNORECASE)
+                for match in matches:
+                    line_num = file.source[:match.start()].count('\n') + 1
+                    issues.append(CodeIssue(
+                        id=f"security_{hashlib.md5(f'{file.filepath}_{line_num}_{message}'.encode()).hexdigest()[:8]}",
+                        type=IssueType.SECURITY_VULNERABILITY,
+                        severity=severity,
+                        file_path=file.filepath,
+                        line_number=line_num,
+                        message=message,
+                        description=f"Potential security vulnerability: {message}",
+                        context={
+                            "matched_text": match.group(),
+                            "pattern": pattern
+                        },
+                        fix_suggestions=[
+                            "Review and validate the security implications",
+                            "Consider safer alternatives",
+                            "Add proper input validation and sanitization"
+                        ]
+                    ))
+                    issue_counter += 1
+                    if issue_counter >= max_issues:
+                        break
+                        
+        except Exception as e:
+            print(f"Error analyzing file {file.name}: {e}")
+            continue
+    
+    return issues
+
+
+def identify_critical_files(codebase: Codebase) -> List[CriticalFile]:
+    """Identify the most critical/important files in the codebase."""
+    file_metrics = {}
+    
+    for file in codebase.files:
+        try:
+            # Calculate various importance metrics
+            dependencies_count = len(file.imports)
+            dependents_count = len([f for f in codebase.files if any(imp.imported_symbol == file for imp in f.imports)])
+            
+            # Count symbols defined in file
+            symbols_count = len(file.functions) + len(file.classes) + len(file.global_vars)
+            
+            # Calculate complexity score
+            total_complexity = 0
+            for func in file.functions:
+                try:
+                    total_complexity += calculate_cyclomatic_complexity(func)
+                except:
+                    pass
+            
+            # Calculate lines of code
+            loc, _, _, _ = count_lines(file.source)
+            
+            # Calculate importance score (0-100)
+            importance_score = min(100, (
+                dependents_count * 10 +  # Files that depend on this file
+                dependencies_count * 2 +  # External dependencies
+                symbols_count * 3 +      # Number of symbols defined
+                (total_complexity / max(1, len(file.functions))) * 2 +  # Average complexity
+                (loc / 100) * 1          # Size factor
+            ))
+            
+            reasons = []
+            if dependents_count > 5:
+                reasons.append(f"High dependency usage ({dependents_count} files depend on it)")
+            if dependencies_count > 10:
+                reasons.append(f"Many external dependencies ({dependencies_count})")
+            if symbols_count > 10:
+                reasons.append(f"Defines many symbols ({symbols_count})")
+            if total_complexity > 50:
+                reasons.append(f"High total complexity ({total_complexity})")
+            if loc > 500:
+                reasons.append(f"Large file ({loc} lines)")
+            if file.name in ['main.py', 'app.py', 'server.py', 'index.js', 'main.js']:
+                reasons.append("Common entry point filename")
+                importance_score += 20
+            
+            if not reasons:
+                reasons.append("Standard file")
+            
+            file_metrics[file.filepath] = CriticalFile(
+                file_path=file.filepath,
+                importance_score=importance_score,
+                reasons=reasons,
+                metrics={
+                    "functions_count": len(file.functions),
+                    "classes_count": len(file.classes),
+                    "global_vars_count": len(file.global_vars),
+                    "total_complexity": total_complexity,
+                    "average_complexity": total_complexity / max(1, len(file.functions))
+                },
+                dependencies_count=dependencies_count,
+                dependents_count=dependents_count,
+                complexity_score=total_complexity,
+                lines_of_code=loc
+            )
+            
+        except Exception as e:
+            print(f"Error analyzing file {file.name}: {e}")
+            continue
+    
+    # Sort by importance score and return top files
+    critical_files = sorted(file_metrics.values(), key=lambda x: x.importance_score, reverse=True)
+    return critical_files[:20]  # Return top 20 critical files
+
+
+def build_dependency_graph(codebase: Codebase) -> Dict[str, DependencyNode]:
+    """Build a comprehensive dependency graph of the codebase."""
+    nodes = {}
+    
+    # Create nodes for files
+    for file in codebase.files:
+        node_id = f"file:{file.filepath}"
+        nodes[node_id] = DependencyNode(
+            name=file.name,
+            type="file",
+            file_path=file.filepath,
+            dependencies=[],
+            dependents=[]
+        )
+    
+    # Create nodes for functions
+    for file in codebase.files:
+        for func in file.functions:
+            node_id = f"function:{file.filepath}:{func.name}"
+            nodes[node_id] = DependencyNode(
+                name=func.name,
+                type="function",
+                file_path=file.filepath,
+                dependencies=[],
+                dependents=[]
+            )
+    
+    # Create nodes for classes
+    for file in codebase.files:
+        for cls in file.classes:
+            node_id = f"class:{file.filepath}:{cls.name}"
+            nodes[node_id] = DependencyNode(
+                name=cls.name,
+                type="class",
+                file_path=file.filepath,
+                dependencies=[],
+                dependents=[]
+            )
+    
+    # Build dependency relationships
+    for file in codebase.files:
+        file_node_id = f"file:{file.filepath}"
+        
+        # File-level dependencies
+        for imp in file.imports:
+            if hasattr(imp, 'imported_symbol') and hasattr(imp.imported_symbol, 'filepath'):
+                dep_file_id = f"file:{imp.imported_symbol.filepath}"
+                if dep_file_id in nodes:
+                    nodes[file_node_id].dependencies.append(dep_file_id)
+                    nodes[dep_file_id].dependents.append(file_node_id)
+        
+        # Function-level dependencies
+        for func in file.functions:
+            func_node_id = f"function:{file.filepath}:{func.name}"
+            for dep in func.dependencies:
+                if hasattr(dep, 'filepath') and hasattr(dep, 'name'):
+                    dep_id = f"function:{dep.filepath}:{dep.name}"
+                    if dep_id in nodes:
+                        nodes[func_node_id].dependencies.append(dep_id)
+                        nodes[dep_id].dependents.append(func_node_id)
+    
+    # Calculate centrality scores (simplified betweenness centrality)
+    for node_id, node in nodes.items():
+        # Simple centrality based on number of connections
+        centrality = (len(node.dependencies) + len(node.dependents)) / max(1, len(nodes))
+        node.centrality_score = min(1.0, centrality * 10)  # Normalize to 0-1
+    
+    return nodes
+
+
+def get_file_detailed_analysis(codebase: Codebase, file_path: str) -> Dict[str, Any]:
+    """Get detailed analysis for a specific file."""
+    target_file = None
+    for file in codebase.files:
+        if file.filepath == file_path or file.name == file_path:
+            target_file = file
+            break
+    
+    if not target_file:
+        raise HTTPException(status_code=404, detail=f"File not found: {file_path}")
+    
+    # Analyze the file comprehensively
+    loc, lloc, sloc, comments = count_lines(target_file.source)
+    
+    functions_analysis = []
+    for func in target_file.functions:
+        try:
+            complexity = calculate_cyclomatic_complexity(func)
+            operators, operands = get_operators_and_operands(func)
+            volume, n1, n2, N1, N2 = calculate_halstead_volume(operators, operands)
+            mi_score = calculate_maintainability_index(volume, complexity, len(func.source.splitlines()) if hasattr(func, 'source') else 0)
+            
+            functions_analysis.append({
+                "name": func.name,
+                "line_number": getattr(func, 'line_number', None),
+                "parameters_count": len(func.parameters),
+                "return_statements_count": len(func.return_statements),
+                "cyclomatic_complexity": complexity,
+                "complexity_rank": cc_rank(complexity),
+                "halstead_volume": volume,
+                "maintainability_index": mi_score,
+                "maintainability_rank": get_maintainability_rank(mi_score),
+                "dependencies": [dep.name for dep in func.dependencies[:10]],
+                "function_calls": [call.name for call in func.function_calls[:10]]
+            })
+        except Exception as e:
+            functions_analysis.append({
+                "name": func.name,
+                "error": str(e)
+            })
+    
+    classes_analysis = []
+    for cls in target_file.classes:
+        try:
+            classes_analysis.append({
+                "name": cls.name,
+                "line_number": getattr(cls, 'line_number', None),
+                "methods_count": len(cls.methods),
+                "attributes_count": len(cls.attributes),
+                "parent_classes": cls.parent_class_names,
+                "depth_of_inheritance": calculate_doi(cls),
+                "dependencies": [dep.name for dep in cls.dependencies[:10]]
+            })
+        except Exception as e:
+            classes_analysis.append({
+                "name": cls.name,
+                "error": str(e)
+            })
+    
+    return {
+        "file_path": target_file.filepath,
+        "file_name": target_file.name,
+        "line_metrics": {
+            "loc": loc,
+            "lloc": lloc,
+            "sloc": sloc,
+            "comments": comments,
+            "comment_density": (comments / loc * 100) if loc > 0 else 0
+        },
+        "symbols_count": {
+            "functions": len(target_file.functions),
+            "classes": len(target_file.classes),
+            "global_vars": len(target_file.global_vars),
+            "imports": len(target_file.imports)
+        },
+        "functions": functions_analysis,
+        "classes": classes_analysis,
+        "imports": [{"name": imp.name, "source": getattr(imp, 'source', 'unknown')} for imp in target_file.imports[:20]],
+        "issues": analyze_code_issues(Codebase.from_files([target_file]), max_issues=50)
+    }
+
+
+# Enums for issue severity and types
+class IssueSeverity(str, Enum):
+    CRITICAL = "critical"
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+    INFO = "info"
+
+class IssueType(str, Enum):
+    SYNTAX_ERROR = "syntax_error"
+    TYPE_ERROR = "type_error"
+    SECURITY_VULNERABILITY = "security_vulnerability"
+    CODE_SMELL = "code_smell"
+    PERFORMANCE_ISSUE = "performance_issue"
+    MAINTAINABILITY_ISSUE = "maintainability_issue"
+    COMPLEXITY_ISSUE = "complexity_issue"
+    DEPENDENCY_ISSUE = "dependency_issue"
+
+# Data models
+class CodeIssue(BaseModel):
+    id: str = Field(..., description="Unique identifier for the issue")
+    type: IssueType
+    severity: IssueSeverity
+    file_path: str
+    line_number: Optional[int] = None
+    column_number: Optional[int] = None
+    function_name: Optional[str] = None
+    class_name: Optional[str] = None
+    message: str
+    description: str
+    context: Dict[str, Any] = Field(default_factory=dict)
+    related_symbols: List[str] = Field(default_factory=list)
+    affected_functions: List[str] = Field(default_factory=list)
+    affected_classes: List[str] = Field(default_factory=list)
+    fix_suggestions: List[str] = Field(default_factory=list)
+
+class EntryPoint(BaseModel):
+    type: str  # "main", "cli", "web_endpoint", "test", "script"
+    file_path: str
+    function_name: Optional[str] = None
+    class_name: Optional[str] = None
+    line_number: Optional[int] = None
+    description: str
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    dependencies: List[str] = Field(default_factory=list)
+
+class CriticalFile(BaseModel):
+    file_path: str
+    importance_score: float = Field(..., ge=0.0, le=100.0)
+    reasons: List[str]
+    metrics: Dict[str, Any] = Field(default_factory=dict)
+    dependencies_count: int = 0
+    dependents_count: int = 0
+    complexity_score: float = 0.0
+    lines_of_code: int = 0
+
+class DependencyNode(BaseModel):
+    name: str
+    type: str  # "file", "function", "class", "module"
+    file_path: str
+    dependencies: List[str] = Field(default_factory=list)
+    dependents: List[str] = Field(default_factory=list)
+    centrality_score: float = 0.0
+
 class RepoRequest(BaseModel):
     repo_url: str
+
+class DetailedAnalysisRequest(BaseModel):
+    repo_url: str
+    include_issues: bool = Field(default=True, description="Include code issue analysis")
+    include_entrypoints: bool = Field(default=True, description="Include entrypoint detection")
+    include_critical_files: bool = Field(default=True, description="Include critical file analysis")
+    include_dependency_graph: bool = Field(default=True, description="Include dependency graph analysis")
+    max_issues: int = Field(default=100, description="Maximum number of issues to return")
+
+class FileAnalysisRequest(BaseModel):
+    repo_url: str
+    file_path: str
 
 
 @fastapi_app.post("/analyze_repo")
@@ -535,6 +1147,263 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
     }
 
     return results
+
+
+@fastapi_app.post("/comprehensive_analysis")
+async def comprehensive_analysis(request: DetailedAnalysisRequest) -> Dict[str, Any]:
+    """
+    Perform comprehensive codebase analysis including:
+    - Entry point detection
+    - Critical file identification  
+    - Code issue analysis
+    - Dependency graph analysis
+    """
+    try:
+        codebase = Codebase.from_repo(request.repo_url)
+        
+        result = {
+            "repo_url": request.repo_url,
+            "analysis_timestamp": datetime.now().isoformat(),
+            "summary": get_codebase_summary(codebase)
+        }
+        
+        if request.include_entrypoints:
+            print("Detecting entry points...")
+            entrypoints = detect_entrypoints(codebase)
+            result["entrypoints"] = {
+                "total_count": len(entrypoints),
+                "by_type": {
+                    entry_type: len([ep for ep in entrypoints if ep.type == entry_type])
+                    for entry_type in ["main", "cli", "web_endpoint", "test", "script"]
+                },
+                "details": [ep.dict() for ep in entrypoints]
+            }
+        
+        if request.include_critical_files:
+            print("Identifying critical files...")
+            critical_files = identify_critical_files(codebase)
+            result["critical_files"] = {
+                "total_count": len(critical_files),
+                "top_10": [cf.dict() for cf in critical_files[:10]],
+                "summary": {
+                    "avg_importance_score": sum(cf.importance_score for cf in critical_files) / len(critical_files) if critical_files else 0,
+                    "high_importance_count": len([cf for cf in critical_files if cf.importance_score > 70]),
+                    "medium_importance_count": len([cf for cf in critical_files if 40 <= cf.importance_score <= 70]),
+                    "low_importance_count": len([cf for cf in critical_files if cf.importance_score < 40])
+                }
+            }
+        
+        if request.include_issues:
+            print("Analyzing code issues...")
+            issues = analyze_code_issues(codebase, request.max_issues)
+            result["issues"] = {
+                "total_count": len(issues),
+                "by_severity": {
+                    severity.value: len([issue for issue in issues if issue.severity == severity])
+                    for severity in IssueSeverity
+                },
+                "by_type": {
+                    issue_type.value: len([issue for issue in issues if issue.type == issue_type])
+                    for issue_type in IssueType
+                },
+                "critical_issues": [issue.dict() for issue in issues if issue.severity == IssueSeverity.CRITICAL],
+                "high_priority_issues": [issue.dict() for issue in issues if issue.severity == IssueSeverity.HIGH][:20],
+                "all_issues": [issue.dict() for issue in issues] if len(issues) <= 50 else [issue.dict() for issue in issues[:50]]
+            }
+        
+        if request.include_dependency_graph:
+            print("Building dependency graph...")
+            dependency_graph = build_dependency_graph(codebase)
+            
+            # Get top nodes by centrality
+            top_central_nodes = sorted(dependency_graph.values(), key=lambda x: x.centrality_score, reverse=True)[:20]
+            
+            result["dependency_graph"] = {
+                "total_nodes": len(dependency_graph),
+                "node_types": {
+                    "files": len([n for n in dependency_graph.values() if n.type == "file"]),
+                    "functions": len([n for n in dependency_graph.values() if n.type == "function"]),
+                    "classes": len([n for n in dependency_graph.values() if n.type == "class"])
+                },
+                "most_central_nodes": [node.dict() for node in top_central_nodes],
+                "graph_metrics": {
+                    "avg_centrality": sum(n.centrality_score for n in dependency_graph.values()) / len(dependency_graph),
+                    "max_centrality": max(n.centrality_score for n in dependency_graph.values()) if dependency_graph else 0,
+                    "highly_connected_nodes": len([n for n in dependency_graph.values() if n.centrality_score > 0.1])
+                }
+            }
+        
+        return result
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+@fastapi_app.post("/analyze_file")
+async def analyze_file(request: FileAnalysisRequest) -> Dict[str, Any]:
+    """Get detailed analysis for a specific file in the repository."""
+    try:
+        codebase = Codebase.from_repo(request.repo_url)
+        return get_file_detailed_analysis(codebase, request.file_path)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"File analysis failed: {str(e)}")
+
+
+@fastapi_app.post("/detect_entrypoints")
+async def detect_entrypoints_endpoint(request: RepoRequest) -> Dict[str, Any]:
+    """Detect all entry points in the codebase."""
+    try:
+        codebase = Codebase.from_repo(request.repo_url)
+        entrypoints = detect_entrypoints(codebase)
+        
+        return {
+            "repo_url": request.repo_url,
+            "total_entrypoints": len(entrypoints),
+            "entrypoints_by_type": {
+                entry_type: [ep.dict() for ep in entrypoints if ep.type == entry_type]
+                for entry_type in ["main", "cli", "web_endpoint", "test", "script"]
+            },
+            "all_entrypoints": [ep.dict() for ep in entrypoints]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Entry point detection failed: {str(e)}")
+
+
+@fastapi_app.post("/identify_critical_files")
+async def identify_critical_files_endpoint(request: RepoRequest) -> Dict[str, Any]:
+    """Identify the most critical files in the codebase."""
+    try:
+        codebase = Codebase.from_repo(request.repo_url)
+        critical_files = identify_critical_files(codebase)
+        
+        return {
+            "repo_url": request.repo_url,
+            "total_files_analyzed": len(list(codebase.files)),
+            "critical_files_count": len(critical_files),
+            "critical_files": [cf.dict() for cf in critical_files],
+            "summary": {
+                "avg_importance_score": sum(cf.importance_score for cf in critical_files) / len(critical_files) if critical_files else 0,
+                "highest_score": max(cf.importance_score for cf in critical_files) if critical_files else 0,
+                "files_above_80": len([cf for cf in critical_files if cf.importance_score > 80]),
+                "files_above_60": len([cf for cf in critical_files if cf.importance_score > 60])
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Critical file identification failed: {str(e)}")
+
+
+@fastapi_app.post("/analyze_issues")
+async def analyze_issues_endpoint(request: DetailedAnalysisRequest) -> Dict[str, Any]:
+    """Comprehensive code issue analysis."""
+    try:
+        codebase = Codebase.from_repo(request.repo_url)
+        issues = analyze_code_issues(codebase, request.max_issues)
+        
+        # Group issues by file for better organization
+        issues_by_file = defaultdict(list)
+        for issue in issues:
+            issues_by_file[issue.file_path].append(issue)
+        
+        # Get severity statistics
+        severity_stats = {severity.value: 0 for severity in IssueSeverity}
+        type_stats = {issue_type.value: 0 for issue_type in IssueType}
+        
+        for issue in issues:
+            severity_stats[issue.severity.value] += 1
+            type_stats[issue.type.value] += 1
+        
+        return {
+            "repo_url": request.repo_url,
+            "analysis_summary": {
+                "total_issues": len(issues),
+                "files_with_issues": len(issues_by_file),
+                "critical_issues": severity_stats[IssueSeverity.CRITICAL.value],
+                "high_priority_issues": severity_stats[IssueSeverity.HIGH.value],
+                "medium_priority_issues": severity_stats[IssueSeverity.MEDIUM.value],
+                "low_priority_issues": severity_stats[IssueSeverity.LOW.value]
+            },
+            "issues_by_severity": severity_stats,
+            "issues_by_type": type_stats,
+            "issues_by_file": {
+                file_path: {
+                    "issue_count": len(file_issues),
+                    "critical_count": len([i for i in file_issues if i.severity == IssueSeverity.CRITICAL]),
+                    "high_count": len([i for i in file_issues if i.severity == IssueSeverity.HIGH]),
+                    "issues": [issue.dict() for issue in file_issues]
+                }
+                for file_path, file_issues in issues_by_file.items()
+            },
+            "most_problematic_files": [
+                {
+                    "file_path": file_path,
+                    "total_issues": len(file_issues),
+                    "critical_issues": len([i for i in file_issues if i.severity == IssueSeverity.CRITICAL]),
+                    "high_issues": len([i for i in file_issues if i.severity == IssueSeverity.HIGH])
+                }
+                for file_path, file_issues in sorted(issues_by_file.items(), key=lambda x: len(x[1]), reverse=True)[:10]
+            ],
+            "all_issues": [issue.dict() for issue in issues]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Issue analysis failed: {str(e)}")
+
+
+@fastapi_app.post("/dependency_graph")
+async def dependency_graph_endpoint(request: RepoRequest) -> Dict[str, Any]:
+    """Build and analyze the dependency graph of the codebase."""
+    try:
+        codebase = Codebase.from_repo(request.repo_url)
+        dependency_graph = build_dependency_graph(codebase)
+        
+        # Calculate graph statistics
+        total_edges = sum(len(node.dependencies) for node in dependency_graph.values())
+        
+        # Find most connected nodes
+        most_connected = sorted(dependency_graph.values(), 
+                              key=lambda x: len(x.dependencies) + len(x.dependents), 
+                              reverse=True)[:20]
+        
+        # Find nodes with highest centrality
+        most_central = sorted(dependency_graph.values(), 
+                            key=lambda x: x.centrality_score, 
+                            reverse=True)[:20]
+        
+        return {
+            "repo_url": request.repo_url,
+            "graph_statistics": {
+                "total_nodes": len(dependency_graph),
+                "total_edges": total_edges,
+                "average_connections": total_edges / len(dependency_graph) if dependency_graph else 0,
+                "node_types": {
+                    "files": len([n for n in dependency_graph.values() if n.type == "file"]),
+                    "functions": len([n for n in dependency_graph.values() if n.type == "function"]),
+                    "classes": len([n for n in dependency_graph.values() if n.type == "class"])
+                }
+            },
+            "most_connected_nodes": [
+                {
+                    "name": node.name,
+                    "type": node.type,
+                    "file_path": node.file_path,
+                    "total_connections": len(node.dependencies) + len(node.dependents),
+                    "dependencies_count": len(node.dependencies),
+                    "dependents_count": len(node.dependents)
+                }
+                for node in most_connected
+            ],
+            "most_central_nodes": [node.dict() for node in most_central],
+            "dependency_graph": {node_id: node.dict() for node_id, node in dependency_graph.items()}
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Dependency graph analysis failed: {str(e)}")
+
+
+@fastapi_app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
 @app.function(image=image)
