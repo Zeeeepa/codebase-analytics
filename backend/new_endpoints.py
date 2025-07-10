@@ -182,18 +182,17 @@ def register_new_endpoints(app):
             results["code_views"] = {}
             
             for critical_file in critical_files:
-                try:
-                    file_path = critical_file["file_path"]
-                    target_file = None
-                    for file in codebase.files:
-                        if file.filepath == file_path:
-                            target_file = file
-                            break
-                    
-                    if target_file:
-                        results["code_views"][file_path] = generate_code_views(target_file)
-                except Exception as e:
-                    results["code_views"][file_path] = {"error": str(e)}
+                file_path = critical_file["file_path"]
+                target_file = None
+                for file in codebase.files:
+                    if file.filepath == file_path:
+                        target_file = file
+                        break
+                
+                if target_file:
+                    results["code_views"][file_path] = generate_code_views(target_file)
+                else:
+                    raise HTTPException(status_code=500, detail=f"Critical file {file_path} not found in codebase")
             
             print("✅ Comprehensive analysis complete!")
             
