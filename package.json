@@ -4,8 +4,8 @@
   "description": "Codebase Analytics Application",
   "scripts": {
     "install": "cd frontend && npm install",
-    "dev": "concurrently \"python3 backend/api.py\" \"cd frontend && npm run dev\"",
-    "start-backend": "python3 backend/api.py",
+    "dev": "concurrently \"python3 backend/simple_server.py\" \"cd frontend && npm run dev\"",
+    "start-backend": "python3 backend/simple_server.py",
     "start-frontend": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build"
   },
