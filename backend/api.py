@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any
-from codegen import Codebase
 from graph_sitter.core.class_definition import Class
 from graph_sitter.core.codebase import Codebase
 from graph_sitter.core.external_module import ExternalModule
@@ -10,13 +9,13 @@ from graph_sitter.core.function import Function
 from graph_sitter.core.import_resolution import Import
 from graph_sitter.core.symbol import Symbol
 from graph_sitter.enums import EdgeType, SymbolType
-from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
-from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
-from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
-from codegen.sdk.core.statements.while_statement import WhileStatement
-from codegen.sdk.core.expressions.binary_expression import BinaryExpression
-from codegen.sdk.core.expressions.unary_expression import UnaryExpression
-from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
+from graph_sitter.statements.for_loop_statement import ForLoopStatement
+from graph_sitter.core.statements.if_block_statement import IfBlockStatement
+from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
+from graph_sitter.core.statements.while_statement import WhileStatement
+from graph_sitter.core.expressions.binary_expression import BinaryExpression
+from graph_sitter.core.expressions.unary_expression import UnaryExpression
+from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
 import math
 import re
 import requests
