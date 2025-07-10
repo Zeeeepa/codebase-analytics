@@ -1,0 +1,18 @@
+{
+  "name": "codebase-analytics",
+  "version": "1.0.0",
+  "description": "Codebase Analytics Application",
+  "scripts": {
+    "install": "cd frontend && npm install",
+    "dev": "concurrently \"python3 backend/simple_server.py\" \"cd frontend && npm run dev\"",
+    "start-backend": "python3 backend/simple_server.py",
+    "start-frontend": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["codebase", "analytics", "repository", "analysis"],
+  "author": "",
+  "license": "MIT"
+}
