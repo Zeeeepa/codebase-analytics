@@ -122,6 +122,16 @@ except ImportError as e:
 except Exception as e:
     print(f"❌ Error registering advanced endpoints: {e}")
 
+# Register new advanced features endpoints
+try:
+    from .new_endpoints import register_new_endpoints
+    register_new_endpoints(fastapi_app)
+    print("✅ New advanced features endpoints registered successfully")
+except ImportError as e:
+    print(f"⚠️ Could not register new endpoints: {e}")
+except Exception as e:
+    print(f"❌ Error registering new endpoints: {e}")
+
 def get_codebase_summary(codebase: Codebase) -> str:
     node_summary = f"""Contains {len(codebase.ctx.get_nodes())} nodes
 - {len(list(codebase.files))} files
