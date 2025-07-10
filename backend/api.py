@@ -3,9 +3,21 @@ from pydantic import BaseModel
 from typing import Dict, List, Tuple, Any, Optional, Set
 from codegen import Codebase
 from codegen.configs.models.codebase import CodebaseConfig
+from codegen.sdk.core.statements.for_loop_statement import ForLoopStatement
+from codegen.sdk.core.statements.if_block_statement import IfBlockStatement
+from codegen.sdk.core.statements.try_catch_statement import TryCatchStatement
+from codegen.sdk.core.statements.while_statement import WhileStatement
+from codegen.sdk.core.expressions.binary_expression import BinaryExpression
+from codegen.sdk.core.expressions.unary_expression import UnaryExpression
+from codegen.sdk.core.expressions.comparison_expression import ComparisonExpression
 from collections import Counter, defaultdict
 import math
 import re
+from .analysis_helpers import (
+    has_error_handling, has_potential_null_references, has_unhandled_critical_operations,
+    is_special_function, analyze_control_flow, analyze_error_patterns, 
+    analyze_performance_indicators, has_potential_null_references_in_source
+)
 import requests
 from datetime import datetime, timedelta
 import subprocess
@@ -68,7 +80,10 @@ class ComprehensiveAnalysis:
                 "dependency_metrics": self._analyze_dependencies(),
                 "import_analysis": self._analyze_imports(),
                 "class_hierarchy": self._analyze_class_hierarchy(),
-                "code_quality_metrics": self._analyze_code_quality()
+                "code_quality_metrics": self._analyze_code_quality(),
+                # NEW: Enhanced analysis features
+                "most_important_files": self.identify_critical_files(),
+                "comprehensive_error_analysis": self.comprehensive_error_analysis()
             }
         except Exception as e:
             logging.error(f"Analysis failed: {str(e)}")
@@ -623,6 +638,353 @@ class ComprehensiveAnalysis:
             'estimated_total_size': total_size,
             'average_file_size': total_size / len(list(self.codebase.files)) if len(list(self.codebase.files)) > 0 else 0
         }
+    
+    def identify_critical_files(self) -> Dict[str, Any]:
+        """Identify the most critical files in the codebase."""
+        critical_analysis = {
+            "entry_points": [],
+            "most_called_functions": [],
+            "highest_dependency_files": [],
+            "architectural_hubs": [],
+            "error_prone_files": []
+        }
+        
+        # Find entry points (main files, __init__.py, etc.)
+        entry_patterns = ['main.py', '__main__.py', 'app.py', 'server.py', 'index.ts', 'index.js', '__init__.py']
+        for file in self.codebase.files:
+            filepath = getattr(file, 'filepath', '')
+            if any(pattern in filepath.lower() for pattern in entry_patterns):
+                critical_analysis["entry_points"].append({
+                    "file": filepath,
+                    "functions": len(getattr(file, 'functions', [])),
+                    "classes": len(getattr(file, 'classes', [])),
+                    "imports": len(getattr(file, 'imports', [])),
+                    "importance_score": self._calculate_file_importance(file)
+                })
+        
+        # Find most called functions across codebase
+        function_call_counts = {}
+        for function in self.codebase.functions:
+            call_count = len(getattr(function, 'call_sites', []))
+            if call_count > 0:
+                function_call_counts[function] = call_count
+        
+        # Sort by call count and get top 20
+        most_called = sorted(function_call_counts.items(), key=lambda x: x[1], reverse=True)[:20]
+        for func, count in most_called:
+            critical_analysis["most_called_functions"].append({
+                "function": func.name,
+                "file": getattr(func, 'file', {}).get('filepath', 'Unknown'),
+                "call_count": count,
+                "dependencies": len(getattr(func, 'dependencies', [])),
+                "error_indicators": self._analyze_function_errors(func)
+            })
+        
+        # Find files with highest dependency counts
+        file_dependency_counts = {}
+        for file in self.codebase.files:
+            symbols = getattr(file, 'symbols', [])
+            total_deps = sum(len(getattr(symbol, 'dependencies', [])) for symbol in symbols)
+            total_usages = sum(len(getattr(symbol, 'usages', [])) for symbol in symbols)
+            file_dependency_counts[file] = total_deps + total_usages
+        
+        highest_deps = sorted(file_dependency_counts.items(), key=lambda x: x[1], reverse=True)[:15]
+        for file, dep_count in highest_deps:
+            critical_analysis["highest_dependency_files"].append({
+                "file": getattr(file, 'filepath', 'Unknown'),
+                "dependency_score": dep_count,
+                "symbols": len(getattr(file, 'symbols', [])),
+                "potential_issues": self._analyze_file_issues(file)
+            })
+        
+        return critical_analysis
+    
+    def _calculate_file_importance(self, file) -> int:
+        """Calculate comprehensive importance score for a file."""
+        importance = 0
+        
+        # Add importance from functions
+        functions = getattr(file, 'functions', [])
+        for func in functions:
+            importance += len(getattr(func, 'call_sites', [])) * 2  # Called functions are important
+            importance += len(getattr(func, 'dependencies', []))  # Dependencies add importance
+        
+        # Add importance from classes
+        classes = getattr(file, 'classes', [])
+        for cls in classes:
+            importance += len(getattr(cls, 'methods', [])) * 2  # Methods add importance
+            importance += len(getattr(cls, 'subclasses', [])) * 3  # Inheritance adds importance
+        
+        # Add import importance
+        importance += len(getattr(file, 'imports', []))
+        
+        return importance
+    
+    def _analyze_function_errors(self, func) -> List[str]:
+        """Analyze potential errors in a function."""
+        errors = []
+        
+        # Check for missing error handling in async functions
+        if getattr(func, 'is_async', False):
+            if not has_error_handling(func):
+                errors.append("missing_async_error_handling")
+        
+        # Check for potential null references
+        if has_potential_null_references(func):
+            errors.append("potential_null_references")
+        
+        # Check for unhandled critical operations
+        if has_unhandled_critical_operations(func):
+            errors.append("unhandled_critical_operations")
+        
+        return errors
+    
+    def _analyze_file_issues(self, file) -> List[str]:
+        """Analyze potential issues in a file."""
+        issues = []
+        
+        # Check for too many imports
+        imports = getattr(file, 'imports', [])
+        if len(imports) > 20:
+            issues.append("too_many_imports")
+        
+        # Check for large files
+        source = getattr(file, 'source', '')
+        if len(source.split('\n')) > 500:
+            issues.append("large_file")
+        
+        # Check for missing documentation
+        functions = getattr(file, 'functions', [])
+        undocumented_functions = [f for f in functions if not getattr(f, 'docstring', None)]
+        if len(undocumented_functions) > len(functions) * 0.5:
+            issues.append("poor_documentation")
+        
+        return issues
+    
+    def comprehensive_error_analysis(self) -> Dict[str, Any]:
+        """Maximum depth error and issue analysis."""
+        error_analysis = {
+            "syntax_issues": [],
+            "type_errors": [],
+            "runtime_risks": [],
+            "missing_parameters": [],
+            "undefined_references": [],
+            "circular_dependencies": [],
+            "dead_code": [],
+            "security_risks": [],
+            "performance_issues": [],
+            "maintainability_issues": []
+        }
+        
+        # 1. Type-related errors
+        for function in self.codebase.functions:
+            # Missing type annotations
+            if not getattr(function, 'return_type', None):
+                error_analysis["type_errors"].append({
+                    "type": "missing_return_type",
+                    "function": function.name,
+                    "file": getattr(function, 'file', {}).get('filepath', 'Unknown'),
+                    "severity": "medium",
+                    "context": self.get_function_context(function)
+                })
+            
+            # Missing parameter types
+            for param in getattr(function, 'parameters', []):
+                if not getattr(param, 'type', None):
+                    error_analysis["missing_parameters"].append({
+                        "type": "missing_parameter_type",
+                        "function": function.name,
+                        "parameter": getattr(param, 'name', 'unknown'),
+                        "file": getattr(function, 'file', {}).get('filepath', 'Unknown'),
+                        "severity": "medium",
+                        "context": self.get_function_context(function)
+                    })
+        
+        # 2. Runtime risk analysis
+        for function in self.codebase.functions:
+            runtime_risks = self._analyze_runtime_risks(function)
+            if runtime_risks:
+                error_analysis["runtime_risks"].extend(runtime_risks)
+        
+        # 3. Circular dependency detection
+        circular_deps = self._detect_circular_dependencies()
+        error_analysis["circular_dependencies"].extend(circular_deps)
+        
+        # 4. Dead code detection
+        for function in self.codebase.functions:
+            usages = getattr(function, 'usages', [])
+            call_sites = getattr(function, 'call_sites', [])
+            if not usages and not call_sites:
+                if not is_special_function(function):
+                    error_analysis["dead_code"].append({
+                        "type": "unused_function",
+                        "function": function.name,
+                        "file": getattr(function, 'file', {}).get('filepath', 'Unknown'),
+                        "severity": "low",
+                        "context": self.get_function_context(function)
+                    })
+        
+        # 5. Security risk analysis
+        security_risks = self._analyze_security_risks()
+        error_analysis["security_risks"].extend(security_risks)
+        
+        return error_analysis
+    
+    def _analyze_runtime_risks(self, function) -> List[Dict[str, Any]]:
+        """Analyze potential runtime errors in a function."""
+        risks = []
+        
+        # Check for unhandled exceptions in async functions
+        if getattr(function, 'is_async', False):
+            if not has_error_handling(function):
+                risks.append({
+                    "type": "unhandled_async_exception",
+                    "function": function.name,
+                    "file": getattr(function, 'file', {}).get('filepath', 'Unknown'),
+                    "severity": "high",
+                    "description": "Async function without error handling",
+                    "context": self.get_function_context(function)
+                })
+        
+        # Check for potential null pointer exceptions
+        if hasattr(function, 'code_block') and function.code_block:
+            source = getattr(function.code_block, 'source', '')
+            if has_potential_null_references_in_source(source):
+                risks.append({
+                    "type": "potential_null_reference",
+                    "function": function.name,
+                    "file": getattr(function, 'file', {}).get('filepath', 'Unknown'),
+                    "severity": "medium",
+                    "description": "Potential null reference in function",
+                    "context": self.get_function_context(function)
+                })
+        
+        # Check for missing error handling in critical operations
+        if has_unhandled_critical_operations(function):
+            risks.append({
+                "type": "unhandled_critical_operation",
+                "function": function.name,
+                "file": getattr(function, 'file', {}).get('filepath', 'Unknown'),
+                "severity": "high",
+                "description": "Critical operation without error handling",
+                "context": self.get_function_context(function)
+            })
+        
+        return risks
+    
+    def _detect_circular_dependencies(self) -> List[Dict[str, Any]]:
+        """Detect circular dependencies in imports."""
+        circular_deps = []
+        file_imports = {}
+        
+        # Build import graph
+        for file in self.codebase.files:
+            filepath = getattr(file, 'filepath', '')
+            imports = getattr(file, 'imports', [])
+            file_imports[filepath] = []
+            
+            for imp in imports:
+                if hasattr(imp, 'resolved_symbol') and hasattr(imp.resolved_symbol, 'file'):
+                    imported_file = getattr(imp.resolved_symbol.file, 'filepath', '')
+                    if imported_file:
+                        file_imports[filepath].append(imported_file)
+        
+        # Simple cycle detection
+        for file, imports in file_imports.items():
+            for imported_file in imports:
+                if imported_file in file_imports:
+                    if file in file_imports[imported_file]:
+                        circular_deps.append({
+                            "type": "circular_import",
+                            "files": [file, imported_file],
+                            "severity": "high",
+                            "description": f"Circular import between {file} and {imported_file}"
+                        })
+        
+        return circular_deps
+    
+    def _analyze_security_risks(self) -> List[Dict[str, Any]]:
+        """Analyze potential security vulnerabilities."""
+        security_risks = []
+        
+        dangerous_patterns = [
+            ('eval(', 'code_injection'),
+            ('exec(', 'code_injection'),
+            ('os.system(', 'command_injection'),
+            ('subprocess.call(', 'command_injection'),
+            ('pickle.loads(', 'deserialization'),
+            ('yaml.load(', 'unsafe_deserialization'),
+            ('input(', 'user_input_risk'),
+            ('raw_input(', 'user_input_risk')
+        ]
+        
+        for function in self.codebase.functions:
+            if hasattr(function, 'code_block') and function.code_block:
+                source = getattr(function.code_block, 'source', '')
+                for pattern, risk_type in dangerous_patterns:
+                    if pattern in source:
+                        security_risks.append({
+                            "type": risk_type,
+                            "function": function.name,
+                            "file": getattr(function, 'file', {}).get('filepath', 'Unknown'),
+                            "pattern": pattern,
+                            "severity": "critical",
+                            "description": f"Potentially dangerous pattern: {pattern}",
+                            "context": self.get_function_context(function)
+                        })
+        
+        return security_risks
+    
+    def get_function_context(self, function) -> Dict[str, Any]:
+        """Get comprehensive context for a function including all relationships."""
+        context = {
+            "implementation": {
+                "source": getattr(function, 'source', ''),
+                "filepath": getattr(function, 'file', {}).get('filepath', 'Unknown'),
+                "line_count": len(getattr(function, 'source', '').split('\n')),
+            },
+            "dependencies": [],
+            "usages": [],
+            "call_graph": {},
+            "control_flow": {},
+            "error_patterns": {},
+            "performance_indicators": {}
+        }
+        
+        # Add dependencies with full context
+        for dep in getattr(function, 'dependencies', []):
+            dep_info = {
+                "name": getattr(dep, 'name', str(dep)),
+                "type": type(dep).__name__
+            }
+            if hasattr(dep, 'source'):
+                dep_info["source"] = dep.source
+            if hasattr(dep, 'file') and hasattr(dep.file, 'filepath'):
+                dep_info["filepath"] = dep.file.filepath
+            context["dependencies"].append(dep_info)
+        
+        # Add usage information
+        for usage in getattr(function, 'usages', []):
+            usage_info = {
+                "type": type(usage).__name__
+            }
+            if hasattr(usage, 'usage_symbol'):
+                if hasattr(usage.usage_symbol, 'source'):
+                    usage_info["source"] = usage.usage_symbol.source
+                if hasattr(usage.usage_symbol, 'file') and hasattr(usage.usage_symbol.file, 'filepath'):
+                    usage_info["filepath"] = usage.usage_symbol.file.filepath
+            context["usages"].append(usage_info)
+        
+        # Analyze control flow
+        context["control_flow"] = analyze_control_flow(function)
+        
+        # Analyze error patterns
+        context["error_patterns"] = analyze_error_patterns(function)
+        
+        # Performance indicators
+        context["performance_indicators"] = analyze_performance_indicators(function)
+        
+        return context
 
 
 def get_monthly_commits(repo_path: str) -> Dict[str, int]:
