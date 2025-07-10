@@ -38,12 +38,38 @@ The frontend provides an interface for users to submit a GitHub repository and r
 
 ## Getting Started
 
-1. Set up environment variables in an `.env` file:
+### Option 1: Local Development (Recommended for Testing)
+
+1. **Start the Backend API:**
+   ```bash
+   cd backend
+   python3 test_api.py
    ```
-   OPENAI_API_KEY=your_key_here
+   This starts a local development server at `http://localhost:8000` with real repository analysis capabilities.
+
+2. **Configure Frontend Environment:**
+   ```bash
+   cd frontend
+   cp .env.example .env.local
+   # Edit .env.local to set NEXT_PUBLIC_API_URL=http://localhost:8000
    ```
 
-2. Deploy or serve the Modal API:
+3. **Start the Frontend:**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+   The frontend will be available at `http://localhost:3000`.
+
+4. **Test the Integration:**
+   ```bash
+   python3 test_integration.py
+   ```
+
+### Option 2: Production Deployment with Modal
+
+1. **Deploy the Modal API:**
    ```bash
    modal serve backend/api.py
    ```
@@ -52,15 +78,41 @@ The frontend provides an interface for users to submit a GitHub repository and r
    modal deploy backend/api.py
    ```
    `modal deploy` creates a persistent Modal app and deploys the FastAPI app to it, generating a permanent API endpoint.
-   
-   After deployment, you'll need to update the API endpoint in the frontend configuration to point to your deployed Modal app URL.
 
-3. Run the Next.js frontend:
+2. **Configure Frontend for Production:**
    ```bash
    cd frontend
-   npm install
-   npm run dev
+   # Update .env.local with your Modal app URL:
+   # NEXT_PUBLIC_API_URL=https://your-modal-app-url.modal.run
    ```
+
+3. **Build and Deploy Frontend:**
+   ```bash
+   cd frontend
+   npm run build
+   npm start
+   ```
+
+## Recent Improvements
+
+### Frontend Enhancements
+- ✅ **Environment Configuration**: Added support for configurable API endpoints via environment variables
+- ✅ **Improved Error Handling**: Better error messages and user feedback for failed requests
+- ✅ **Enhanced Loading States**: More informative loading screens showing which repository is being analyzed
+- ✅ **New Analysis Button**: Easy way to start a new analysis from the results page
+- ✅ **Better UX**: Improved responsive design and interactive elements
+
+### Backend Improvements
+- ✅ **Local Development API**: Created `test_api.py` for local development and testing
+- ✅ **Real Repository Analysis**: Actual git repository cloning and analysis
+- ✅ **Comprehensive Metrics**: Real line counting, commit history, and repository metadata
+- ✅ **Error Handling**: Robust error handling for various failure scenarios
+- ✅ **Health Checks**: Added health endpoint for monitoring
+
+### Testing & Validation
+- ✅ **Integration Tests**: Automated testing script to verify frontend-backend communication
+- ✅ **Build Validation**: Ensures frontend builds successfully with all changes
+- ✅ **API Testing**: Direct API endpoint testing with real repositories
 
 ## Learn More
 

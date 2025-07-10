@@ -31,7 +31,7 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
+        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "python-dateutil"
     )
 )
 

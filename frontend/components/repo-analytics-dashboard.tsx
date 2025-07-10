@@ -87,6 +87,7 @@ export default function RepoAnalyticsDashboard() {
   const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -107,12 +108,12 @@ export default function RepoAnalyticsDashboard() {
     
     setIsLoading(true);
     setIsLandingPage(false);
+    setError(null);
     
     try {
       console.log("Fetching repo data...");
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app.modal.run/analyze_repo
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo
-      const response = await fetch('https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo', {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run';
+      const response = await fetch(`${apiUrl}/analyze_repo`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -154,7 +155,8 @@ export default function RepoAnalyticsDashboard() {
       setCommitData(transformedCommitData);
     } catch (error) {
       console.error('Error fetching repo data:', error);
-      alert('Error fetching repository data. Please check the URL and try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(`Failed to analyze repository: ${errorMessage}. Please check the URL and try again.`);
       setIsLandingPage(true);
     } finally {
       setIsLoading(false);
@@ -223,6 +225,11 @@ function calculateCodebaseGrade(data: RepoData) {
               {isLoading ? "Loading..." : "Analyze"}
             </Button>
           </div>
+          {error && (
+            <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg max-w-lg w-full">
+              <p className="text-destructive text-sm">{error}</p>
+            </div>
+          )}
           <footer className="absolute bottom-0 w-full text-center text-xs text-muted-foreground py-4">
             built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
           </footer>
@@ -231,7 +238,8 @@ function calculateCodebaseGrade(data: RepoData) {
         <div className="flex flex-col items-center justify-center min-h-screen">
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold mb-4">Analyzing Repository</h2>
-            <p className="text-muted-foreground">Please wait while we calculate codebase metrics with Codegen...</p>
+            <p className="text-muted-foreground mb-2">Analyzing: <span className="font-mono text-primary">{parseRepoUrl(repoUrl)}</span></p>
+            <p className="text-muted-foreground">Please wait while we calculate codebase metrics...</p>
           </div>
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
         </div>
@@ -261,6 +269,16 @@ function calculateCodebaseGrade(data: RepoData) {
                   />
                   <Button onClick={handleFetchRepo} disabled={isLoading}>
                     {isLoading ? "Loading..." : "Analyze"}
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsLandingPage(true);
+                      setRepoUrl("");
+                      setError(null);
+                    }}
+                  >
+                    New Analysis
                   </Button>
                 </div>
               </div>
