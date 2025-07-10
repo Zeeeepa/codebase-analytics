@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain } from "lucide-react"
+import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain, Search, ArrowLeft, Activity, Layers, TreePine, Database, Target } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
 import { Button } from "@/components/ui/button"
@@ -50,18 +50,60 @@ interface RepoAnalyticsResponse {
       comment_density: number;
     }
   };
-  cyclomatic_complexity: { average: number };
-  depth_of_inheritance: { average: number };
+  cyclomatic_complexity: { 
+    average: number;
+    rank?: string;
+  };
+  depth_of_inheritance: { 
+    average: number;
+  };
   halstead_metrics: { 
     total_volume: number;
     average_volume: number;
+    operators?: number;
+    operands?: number;
   };
-  maintainability_index: { average: number };
+  maintainability_index: { 
+    average: number;
+    rank?: string;
+  };
   description: string;
   num_files: number;
   num_functions: number;
   num_classes: number;
+  num_symbols?: number;
   monthly_commits: Record<string, number>;
+  // Enhanced analysis data
+  codebase_summary?: string;
+  file_analysis?: {
+    total_files: number;
+    analyzed_files: number;
+    file_types: Record<string, number>;
+  };
+  function_analysis?: {
+    total_functions: number;
+    average_complexity: number;
+    complex_functions: Array<{
+      name: string;
+      complexity: number;
+      file: string;
+    }>;
+  };
+  class_analysis?: {
+    total_classes: number;
+    inheritance_depth: number;
+    classes_with_inheritance: number;
+  };
+  import_analysis?: {
+    total_imports: number;
+    external_modules: number;
+    internal_imports: number;
+    import_graph?: Array<{
+      from: string;
+      to: string;
+      type: string;
+    }>;
+  };
 }
 
 interface RepoData {
@@ -82,11 +124,10 @@ interface RepoData {
 
 export default function RepoAnalyticsDashboard() {
   const [repoUrl, setRepoUrl] = useState("")
-  const [repoData, setRepoData] = useState(mockRepoData)
-  const [hoveredCard, setHoveredCard] = useState<string | null>(null)
-  const [commitData, setCommitData] = useState(mockCommitData)
   const [isLoading, setIsLoading] = useState(false)
-  const [isLandingPage, setIsLandingPage] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [showAnalysis, setShowAnalysis] = useState(false)
+  const [analysisData, setAnalysisData] = useState<RepoAnalyticsResponse | null>(null)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -99,343 +140,468 @@ export default function RepoAnalyticsDashboard() {
     return input;
   };
 
-  const handleFetchRepo = async () => {
-    console.log("Fetching repo data...");
-    
-    const parsedRepoUrl = parseRepoUrl(repoUrl);
-    console.log(parsedRepoUrl);
-    
+  const handleAnalyze = async () => {
+    if (!repoUrl.trim()) {
+      setError("Please enter a repository URL or name");
+      return;
+    }
+
     setIsLoading(true);
-    setIsLandingPage(false);
+    setError(null);
     
     try {
-      console.log("Fetching repo data...");
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app.modal.run/analyze_repo
-      // https://codegen-sh-staging--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo
-      const response = await fetch('https://zeeeepa--analytics-app-fastapi-modal-app-dev.modal.run/analyze_repo', {
+      const response = await fetch('http://localhost:9998/analyze_repo', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json'
         },
-        body: JSON.stringify({ repo_url: parsedRepoUrl }),
+        body: JSON.stringify({
+          repo_url: repoUrl.trim()
+        }),
       });
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: RepoAnalyticsResponse = await response.json();
+      const data = await response.json();
       
-      setRepoData({
-        name: parsedRepoUrl,
-        description: data.description,
-        linesOfCode: data.line_metrics.total.loc,
-        cyclomaticComplexity: data.cyclomatic_complexity.average,
-        depthOfInheritance: data.depth_of_inheritance.average,
-        halsteadVolume: data.halstead_metrics.total_volume,
-        maintainabilityIndex: data.maintainability_index.average,
-        commentDensity: data.line_metrics.total.comment_density,
-        sloc: data.line_metrics.total.sloc,
-        lloc: data.line_metrics.total.lloc,
-        numberOfFiles: data.num_files,
-        numberOfFunctions: data.num_functions,
-        numberOfClasses: data.num_classes,
-      });
+      if (data.error) {
+        throw new Error(data.error);
+      }
 
-      const transformedCommitData = Object.entries(data.monthly_commits)
-        .map(([date, commits]) => ({
-          month: new Date(date).toLocaleString('default', { month: 'long' }),
-          commits,
-        }))
-        .slice(0, 12)
-        .reverse();
-
-      setCommitData(transformedCommitData);
-    } catch (error) {
-      console.error('Error fetching repo data:', error);
-      alert('Error fetching repository data. Please check the URL and try again.');
-      setIsLandingPage(true);
+      setAnalysisData(data);
+      setShowAnalysis(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to analyze repository. Please check the URL and try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleMouseEnter = (cardName: string) => {
-    setHoveredCard(cardName)
-  }
-
-  const handleMouseLeave = () => {
-    setHoveredCard(null)
-  }
+  const handleBack = () => {
+    setShowAnalysis(false);
+    setAnalysisData(null);
+    setError(null);
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      handleFetchRepo(); 
+      handleAnalyze(); 
     }
-  }
-
-function calculateCodebaseGrade(data: RepoData) {
-  const { maintainabilityIndex } = data;
-  
-  if (maintainabilityIndex >= 90) return 'A+';
-  if (maintainabilityIndex >= 85) return 'A';
-  if (maintainabilityIndex >= 80) return 'A-';
-  if (maintainabilityIndex >= 75) return 'B+';
-  if (maintainabilityIndex >= 70) return 'B';
-  if (maintainabilityIndex >= 65) return 'B-';
-  if (maintainabilityIndex >= 60) return 'C+';
-  if (maintainabilityIndex >= 55) return 'C';
-  if (maintainabilityIndex >= 50) return 'C-';
-  if (maintainabilityIndex >= 45) return 'D+';
-  if (maintainabilityIndex >= 40) return 'D';
-  return 'F';
-}
-
-
-
+  };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {isLandingPage ? (
+      {!showAnalysis ? (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold flex items-center justify-center gap-3 mb-4">
-              <img src="cg.png" alt="CG Logo" className="h-12 w-12" />
+              <Search className="h-12 w-12 text-primary" />
               <span>Codebase Analytics</span>
             </h1>
-            <p className="text-muted-foreground">Effortlessly calculate GitHub repository metrics in seconds</p>
+            <p className="text-muted-foreground text-lg">Analyze any GitHub repository with comprehensive metrics</p>
           </div>
           <div className="flex items-center gap-3 w-full max-w-lg">
             <Input
               type="text"
-              placeholder="Enter the GitHub repo link or owner/repo"
+              placeholder="Enter GitHub repository URL or owner/repo"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
               onKeyPress={handleKeyPress}
-              className="flex-1"
+              className="flex-1 text-lg py-3"
               title="Format: https://github.com/owner/repo or owner/repo"
             />
             <Button 
-              onClick={handleFetchRepo} 
+              onClick={handleAnalyze} 
               disabled={isLoading}
+              size="lg"
+              className="px-8"
             >
-              {isLoading ? "Loading..." : "Analyze"}
+              {isLoading ? "Analyzing..." : "Analyze"}
             </Button>
           </div>
+          {error && (
+            <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg max-w-lg w-full">
+              <p className="text-destructive text-sm">{error}</p>
+            </div>
+          )}
           <footer className="absolute bottom-0 w-full text-center text-xs text-muted-foreground py-4">
             built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
           </footer>
         </div>
-      ) : isLoading ? (
-        <div className="flex flex-col items-center justify-center min-h-screen">
-          <div className="text-center mb-8">
-            <h2 className="text-2xl font-bold mb-4">Analyzing Repository</h2>
-            <p className="text-muted-foreground">Please wait while we calculate codebase metrics with Codegen...</p>
-          </div>
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
-        </div>
       ) : (
         <div className="flex flex-col min-h-screen">
+          {/* Header */}
           <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="w-full px-8 py-4">
+            <div className="w-full px-6 py-4">
               <div className="flex items-center justify-between">
-                <div className="flex-shrink-0">
-                  <h1
-                    className="text-2xl font-bold flex items-center space-x-3 cursor-pointer"
-                    onClick={() => window.location.reload()}
+                <div className="flex items-center gap-4">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleBack}
+                    className="flex items-center gap-2"
                   >
-                    <img src="cg.png" alt="CG Logo" className="h-8 w-8" />
-                    <span>Codebase Analytics</span>
-                  </h1>
-                </div>
-                <div className="flex items-center gap-3 ml-auto">
-                  <Input
-                    type="text"
-                    placeholder="Enter the GitHub repo link or owner/repo"
-                    value={repoUrl}
-                    onChange={(e) => setRepoUrl(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    className="w-[320px]"
-                    title="Format: https://github.com/owner/repo or owner/repo"
-                  />
-                  <Button onClick={handleFetchRepo} disabled={isLoading}>
-                    {isLoading ? "Loading..." : "Analyze"}
+                    <ArrowLeft className="h-4 w-4" />
+                    Back
                   </Button>
+                  <div>
+                    <h1 className="text-xl font-bold">Repository Analysis</h1>
+                    <p className="text-sm text-muted-foreground">{analysisData?.repo_url}</p>
+                  </div>
                 </div>
+                {isLoading && (
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary" />
+                    <span className="text-sm">Analyzing...</span>
+                  </div>
+                )}
               </div>
             </div>
           </header>
+          {/* Main Content */}
           <main className="p-6 flex-grow">
-            <div className="grid mb-5 gap-6 grid-cols-1">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Repository</CardTitle>
-                  <Github className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <a href={`https://github.com/${repoData.name}`} target="_blank" rel="noopener noreferrer" className="block">
-                    <div className="text-2xl font-bold">{repoData.name}</div>
-                    <p className="text-xs text-muted-foreground mt-1">{repoData.description}</p>
-                  </a>
-                  <div className="flex flex-wrap mt-4 gap-4">
-                    <div className="flex items-center">
-                      <FileCode2 className="h-4 w-4 text-muted-foreground mr-2" />
-                      <span className="text-sm font-medium">{repoData.numberOfFiles.toLocaleString()} Files</span>
+            {analysisData && (
+              <div className="space-y-6">
+                {/* Repository Overview */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Github className="h-5 w-5" />
+                      Repository Overview
+                    </CardTitle>
+                    <CardDescription>{analysisData.description}</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-primary">{analysisData.num_files?.toLocaleString() || 0}</div>
+                        <div className="text-sm text-muted-foreground">Files</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-primary">{analysisData.num_functions?.toLocaleString() || 0}</div>
+                        <div className="text-sm text-muted-foreground">Functions</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-primary">{analysisData.num_classes?.toLocaleString() || 0}</div>
+                        <div className="text-sm text-muted-foreground">Classes</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-primary">{analysisData.num_symbols?.toLocaleString() || 0}</div>
+                        <div className="text-sm text-muted-foreground">Symbols</div>
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <Code className="h-4 w-4 text-muted-foreground mr-2" />
-                      <span className="text-sm font-medium">{repoData.numberOfFunctions.toLocaleString()} Functions</span>
+                  </CardContent>
+                </Card>
+
+                {/* Analysis Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  
+                  {/* Line Metrics Analysis */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        Line Metrics Analysis
+                      </CardTitle>
+                      <CardDescription>Code line counting and density metrics</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm">Total Lines (LOC)</span>
+                          <span className="font-mono text-sm">{analysisData.line_metrics?.total.loc?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Logical Lines (LLOC)</span>
+                          <span className="font-mono text-sm">{analysisData.line_metrics?.total.lloc?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Source Lines (SLOC)</span>
+                          <span className="font-mono text-sm">{analysisData.line_metrics?.total.sloc?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Comments</span>
+                          <span className="font-mono text-sm">{analysisData.line_metrics?.total.comments?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Comment Density</span>
+                          <span className="font-mono text-sm">{analysisData.line_metrics?.total.comment_density}%</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Cyclomatic Complexity Analysis */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Brain className="h-5 w-5" />
+                        Cyclomatic Complexity
+                      </CardTitle>
+                      <CardDescription>Code complexity and maintainability metrics</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-primary">{analysisData.cyclomatic_complexity.average}</div>
+                        <div className="text-sm text-muted-foreground">Average Complexity</div>
+                      </div>
+                      <div className="text-center">
+                        <div className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                          analysisData.cyclomatic_complexity.rank === 'Low' ? 'bg-green-100 text-green-800' :
+                          analysisData.cyclomatic_complexity.rank === 'Medium' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-red-100 text-red-800'
+                        }`}>
+                          {analysisData.cyclomatic_complexity.rank} Complexity
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground text-center">
+                        Lower complexity indicates easier maintenance
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Maintainability Index */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5" />
+                        Maintainability Index
+                      </CardTitle>
+                      <CardDescription>Overall code quality assessment</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-primary">{analysisData.maintainability_index?.average}</div>
+                        <div className="text-sm text-muted-foreground">out of 100</div>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-primary h-2 rounded-full transition-all duration-500" 
+                          style={{ width: `${analysisData.maintainability_index?.average}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-center">
+                        <div className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                          analysisData.maintainability_index?.rank === 'Excellent' ? 'bg-green-100 text-green-800' :
+                          analysisData.maintainability_index?.rank === 'Good' ? 'bg-blue-100 text-blue-800' :
+                          'bg-orange-100 text-orange-800'
+                        }`}>
+                          {analysisData.maintainability_index?.rank}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Halstead Metrics */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Activity className="h-5 w-5" />
+                        Halstead Metrics
+                      </CardTitle>
+                      <CardDescription>Software complexity based on operators and operands</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm">Total Volume</span>
+                          <span className="font-mono text-sm">{analysisData.halstead_metrics?.total_volume?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Average Volume</span>
+                          <span className="font-mono text-sm">{analysisData.halstead_metrics?.average_volume?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Operators</span>
+                          <span className="font-mono text-sm">{analysisData.halstead_metrics?.operators?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Operands</span>
+                          <span className="font-mono text-sm">{analysisData.halstead_metrics?.operands?.toLocaleString() || 0}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Depth of Inheritance */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Layers className="h-5 w-5" />
+                        Inheritance Analysis
+                      </CardTitle>
+                      <CardDescription>Object-oriented design metrics</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-primary">{analysisData.depth_of_inheritance.average}</div>
+                        <div className="text-sm text-muted-foreground">Average Depth</div>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm">Total Classes</span>
+                          <span className="font-mono text-sm">{analysisData.class_analysis?.total_classes?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">With Inheritance</span>
+                          <span className="font-mono text-sm">{analysisData.class_analysis?.classes_with_inheritance?.toLocaleString() || 0}</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* File Structure Analysis */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Database className="h-5 w-5" />
+                        File Structure Analysis
+                      </CardTitle>
+                      <CardDescription>Codebase organization and file types</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-sm">Total Files</span>
+                          <span className="font-mono text-sm">{analysisData.file_analysis?.total_files?.toLocaleString() || 0}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-sm">Analyzed Files</span>
+                          <span className="font-mono text-sm">{analysisData.file_analysis?.analyzed_files?.toLocaleString() || 0}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-sm font-medium">File Types:</div>
+                        {Object.entries(analysisData.file_analysis?.file_types || {}).map(([ext, count]) => (
+                          <div key={ext} className="flex justify-between text-sm">
+                            <span className="font-mono">{ext}</span>
+                            <span>{count}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                </div>
+
+                {/* Function Analysis Details */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Code2 className="h-5 w-5" />
+                      Function Analysis Details
+                    </CardTitle>
+                    <CardDescription>Detailed function complexity analysis</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="font-medium mb-3">Overview</h4>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-sm">Total Functions</span>
+                            <span className="font-mono text-sm">{analysisData.function_analysis?.total_functions?.toLocaleString() || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm">Average Complexity</span>
+                            <span className="font-mono text-sm">{analysisData.function_analysis?.average_complexity}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-medium mb-3">Complex Functions</h4>
+                        <div className="space-y-2">
+                          {analysisData.function_analysis?.complex_functions.map((func, index) => (
+                            <div key={index} className="flex justify-between text-sm">
+                              <span className="font-mono truncate">{func.name}</span>
+                              <span className="text-red-600 font-medium">{func.complexity}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <BarChart3 className="h-4 w-4 text-muted-foreground mr-2" />
-                      <span className="text-sm font-medium">{repoData.numberOfClasses.toLocaleString()} Classes</span>
+                  </CardContent>
+                </Card>
+
+                {/* Import Analysis */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TreePine className="h-5 w-5" />
+                      Import & Dependency Analysis
+                    </CardTitle>
+                    <CardDescription>Module relationships and dependencies</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="font-medium mb-3">Import Statistics</h4>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span className="text-sm">Total Imports</span>
+                            <span className="font-mono text-sm">{analysisData.import_analysis?.total_imports?.toLocaleString() || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm">External Modules</span>
+                            <span className="font-mono text-sm">{analysisData.import_analysis?.external_modules?.toLocaleString() || 0}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-sm">Internal Imports</span>
+                            <span className="font-mono text-sm">{analysisData.import_analysis?.internal_imports?.toLocaleString() || 0}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-medium mb-3">Import Graph Sample</h4>
+                        <div className="space-y-1">
+                          {(analysisData.import_analysis?.import_graph || []).slice(0, 5).map((imp, index) => (
+                            <div key={index} className="text-sm font-mono">
+                              <span className="text-blue-600">{imp.from}</span>
+                              <span className="mx-2">→</span>
+                              <span className="text-green-600">{imp.to}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-            <div className="grid gap-6 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-4">
-              <Card onMouseEnter={() => handleMouseEnter('Maintainability Index')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Maintainability Index</CardTitle>
-                  <Settings className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.maintainabilityIndex}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Maintainability Index' ? 'This evaluates how easy it is to understand, modify, and maintain a codebase (ranging from 0 to 100).' : 'Code maintainability score (0-100)'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Cyclomatic Complexity')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Cyclomatic Complexity</CardTitle>
-                  <RefreshCcw className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.cyclomaticComplexity.toFixed(1)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Cyclomatic Complexity' ? 'This measures the number of independent paths through a program\'s source code' : 'Average complexity score'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Halstead Volume')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Halstead Volume</CardTitle>
-                  <PaintBucket className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.halsteadVolume.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Halstead Volume' ? 'This quantifies the amount of information in a program by measuring the size and complexity of its code using operators and operands.' : 'Code volume metric'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Depth of Inheritance')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Depth of Inheritance</CardTitle>
-                  <GitBranch className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.depthOfInheritance.toFixed(1)}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Depth of Inheritance' ? 'This is the average measure of the number of classes that a class inherits from.' : 'Average inheritance depth'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Lines of Code')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Lines of Code</CardTitle>
-                  <Code2 className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.linesOfCode.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Lines of Code' ? 'This is the total number of lines of code within this codebase.' : 'Total lines in the repository'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('SLOC')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">SLOC</CardTitle>
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.sloc.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'SLOC' ? 'This is the number of textual lines of code within the codebase, ignoring whitespace and comments.' : 'Source Lines of Code'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('LLOC')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">LLOC</CardTitle>
-                  <Brain className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.lloc.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'LLOC' ? 'This is the number of lines of code that contribute to executable statements in the codebase.' : 'Logical Lines of Code'}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card onMouseEnter={() => handleMouseEnter('Comment Density')} onMouseLeave={handleMouseLeave}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Comment Density</CardTitle>
-                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{repoData.commentDensity.toFixed(1)}%</div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {hoveredCard === 'Comment Density' ? 'This is the percentage of the lines in the codebase that are comments.' : 'Percentage of comments in code'}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Monthly Commits</CardTitle>
-                <CardDescription>Number of commits, batched by month over the past year</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={commitData}>
-                    <XAxis dataKey="month" stroke="#888888" />
-                    <YAxis stroke="#888888" />
-                    <Bar dataKey="commits" fill="#2563eb" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card className="mt-6">
-                <CardContent className="pt-5 flex justify-between items-center">
-                  <div>
-                    <CardTitle>Codebase Grade</CardTitle>
-                    <CardDescription>Overall grade based on code metrics</CardDescription>
-                  </div>
-                  <div className="text-4xl font-bold text-right">
-                    {calculateCodebaseGrade(repoData)}
-                  </div>
-                </CardContent>
-              </Card>
-              <Card className="mt-6">
-                <CardContent className="pt-5 flex justify-between items-center">
-                  <div>
-                    <CardTitle>Codebase Complexity</CardTitle>
-                    <CardDescription>Judgment based on size and complexity</CardDescription>
-                  </div>
-                  <div className="text-2xl font-bold text-right">
-                  {repoData.numberOfFiles > 1000 ? "Large" : "Moderate"}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  </CardContent>
+                </Card>
+
+                {/* Monthly Commits Chart */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      Monthly Commit Activity
+                    </CardTitle>
+                    <CardDescription>Repository development activity over time</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={Object.entries(analysisData.monthly_commits).map(([month, commits]) => ({ month, commits }))}>
+                        <XAxis dataKey="month" />
+                        <YAxis />
+                        <Bar dataKey="commits" fill="hsl(var(--primary))" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+
+                {/* Summary */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Codebase Summary</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-muted-foreground">{analysisData.codebase_summary}</p>
+                  </CardContent>
+                </Card>
+
+              </div>
+            )}
           </main>
-          <footer className="w-full text-center text-xs text-muted-foreground py-4">
-          built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
-          </footer>
         </div>
       )}
     </div>

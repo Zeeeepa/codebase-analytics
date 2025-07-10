@@ -25,21 +25,9 @@ import subprocess
 import os
 import tempfile
 from fastapi.middleware.cors import CORSMiddleware
-import modal
+app = FastAPI()
 
-image = (
-    modal.Image.debian_slim()
-    .apt_install("git")
-    .pip_install(
-        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
-    )
-)
-
-app = modal.App(name="analytics-app", image=image)
-
-fastapi_app = FastAPI()
-
-fastapi_app.add_middleware(
+app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_credentials=True,
@@ -449,7 +437,7 @@ class RepoRequest(BaseModel):
     repo_url: str
 
 
-@fastapi_app.post("/analyze_repo")
+@app.post("/analyze_repo")
 async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
     """Analyze a repository and return comprehensive metrics."""
     repo_url = request.repo_url
@@ -537,11 +525,16 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
     return results
 
 
-@app.function(image=image)
-@modal.asgi_app()
-def fastapi_modal_app():
-    return fastapi_app
+@app.get("/")
+async def root():
+    return {"message": "Codebase Analytics API", "status": "running"}
+
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
 
 
 if __name__ == "__main__":
-    app.deploy("analytics-app")
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=9998)
