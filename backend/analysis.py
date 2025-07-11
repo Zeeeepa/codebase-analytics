@@ -28,7 +28,6 @@ from .models import (
     CodeIssue, IssueType, IssueSeverity, FunctionContext, 
     AnalysisResults, AutomatedResolution, AnalysisConfig
 )
-from .enhanced_analysis import create_health_dashboard, get_codebase_summary
 
 
 # ============================================================================
@@ -556,17 +555,66 @@ class AdvancedIssueDetector:
     
     def _detect_type_mismatches(self):
         """Detect type mismatch issues"""
-        # Placeholder for advanced type analysis
-        pass
+        for source_file in self.codebase.source_files:
+            if source_file.source:
+                lines = source_file.source.split('\n')
+                for i, line in enumerate(lines):
+                    # Check for common type mismatches
+                    if 'str(' in line and 'int(' in line:
+                        issue = CodeIssue(
+                            issue_type=IssueType.TYPE_MISMATCH,
+                            severity=IssueSeverity.MAJOR,
+                            message="Potential type mismatch: mixing str() and int() conversions",
+                            filepath=source_file.file_path,
+                            line_number=i + 1,
+                            column_number=0,
+                            context={"line": line.strip()},
+                            suggested_fix="Ensure consistent type handling"
+                        )
+                        self.issues.append(issue)
     
     def _detect_undefined_variables(self):
         """Detect undefined variable usage"""
-        # Placeholder for advanced variable analysis
+        for source_file in self.codebase.source_files:
+            if source_file.source:
+                lines = source_file.source.split("\n")
+                for i, line in enumerate(lines):
+                    # Simple check for common undefined variable patterns
+                    if "NameError" in line or "undefined" in line.lower():
+                        issue = CodeIssue(
+                            issue_type=IssueType.UNDEFINED_VARIABLE,
+                            severity=IssueSeverity.CRITICAL,
+                            message="Potential undefined variable usage",
+                            filepath=source_file.file_path,
+                            line_number=i + 1,
+                            column_number=0,
+                            context={"line": line.strip()},
+                            suggested_fix="Define variable before use or check spelling"
+                        )
+                        self.issues.append(issue)
         pass
     
     def _detect_missing_returns(self):
         """Detect functions missing return statements"""
-        # Placeholder for return statement analysis
+        for source_file in self.codebase.source_files:
+            for symbol in source_file.symbols:
+                if isinstance(symbol, Function):
+                    if hasattr(symbol, "source") and symbol.source:
+                        # Check if function has return statements
+                        if "return" not in symbol.source and "def " in symbol.source:
+                            # Skip if function is a generator or has yield
+                            if "yield" not in symbol.source:
+                                issue = CodeIssue(
+                                    issue_type=IssueType.MISSING_RETURN,
+                                    severity=IssueSeverity.MINOR,
+                                    message=f"Function {symbol.name} may be missing return statement",
+                                    filepath=source_file.file_path,
+                                    line_number=symbol.line_start,
+                                    column_number=0,
+                                    function_name=symbol.name,
+                                    suggested_fix="Add explicit return statement"
+                                )
+                                self.issues.append(issue)
         pass
     
     def _detect_unreachable_code(self):
@@ -744,14 +792,9 @@ class CodebaseAnalyzer:
             context.fan_out = len(context.function_calls)
         
         # Enhanced analysis: coupling, cohesion, and importance
-        from .enhanced_analysis import (
-            calculate_coupling_cohesion_metrics, 
-            detect_function_importance, 
-            build_call_chains
-        )
-        calculate_coupling_cohesion_metrics(self)
-        detect_function_importance(self, results)
-        build_call_chains(self)
+        self._calculate_coupling_cohesion_metrics()
+        self._detect_function_importance(results)
+        self._build_call_chains()
         
         results.function_contexts = self.function_contexts
     
@@ -1421,3 +1464,255 @@ def _generate_recommendations(results: AnalysisResults) -> List[str]:
         recommendations.append("⏰ Significant technical debt detected - plan refactoring sprint")
     
     return recommendations
+
+
+# ============================================================================
+# ENHANCED ANALYSIS METHODS (Consolidated from enhanced_analysis.py)
+# ============================================================================
+
+def _calculate_coupling_cohesion_metrics(self):
+    """Calculate coupling and cohesion metrics for functions"""
+    
+    for func_name, context in self.function_contexts.items():
+        # Coupling score: based on number of external dependencies
+        external_calls = len([call for call in context.function_calls 
+                            if call not in self.function_contexts])
+        internal_calls = len([call for call in context.function_calls 
+                            if call in self.function_contexts])
+        
+        total_calls = external_calls + internal_calls
+        context.coupling_score = external_calls / max(total_calls, 1)
+        
+        # Cohesion score: simplified metric based on function focus
+        lines_of_code = context.line_end - context.line_start
+        complexity = context.complexity_metrics.get('cyclomatic_complexity', 1)
+        
+        # Simple heuristic: cohesion inversely related to complexity per line
+        context.cohesion_score = max(0, 1 - (complexity / max(lines_of_code, 1)))
+
+
+def _detect_function_importance(self, results):
+    """Detect and rank function importance"""
+    
+    importance_scores = {}
+    
+    for func_name, context in self.function_contexts.items():
+        score = 0
+        
+        # Entry points get high importance
+        if context.is_entry_point:
+            score += 10
+        
+        # Functions called by many others are important
+        score += context.fan_in * 2
+        
+        # Functions that call many others might be coordinators
+        score += context.fan_out * 0.5
+        
+        # Long call chains indicate important orchestration functions
+        score += len(context.max_call_chain) * 0.3
+        
+        # Lower coupling is better (more maintainable)
+        score += (1 - context.coupling_score) * 2
+        
+        # Higher cohesion is better
+        score += context.cohesion_score * 2
+        
+        importance_scores[func_name] = score
+    
+    # Sort by importance and store top functions
+    sorted_functions = sorted(importance_scores.items(), key=lambda x: x[1], reverse=True)
+    results.most_important_functions = [
+        {
+            "name": func_name,
+            "importance_score": score,
+            "filepath": self.function_contexts[func_name].filepath,
+            "fan_in": self.function_contexts[func_name].fan_in,
+            "fan_out": self.function_contexts[func_name].fan_out,
+            "is_entry_point": self.function_contexts[func_name].is_entry_point,
+            "coupling_score": self.function_contexts[func_name].coupling_score,
+            "cohesion_score": self.function_contexts[func_name].cohesion_score
+        }
+        for func_name, score in sorted_functions[:20]  # Top 20
+    ]
+    
+    # Detect entry points
+    results.entry_points = [
+        func_name for func_name, context in self.function_contexts.items()
+        if context.is_entry_point
+    ]
+
+
+def _build_call_chains(self):
+    """Build call chains for all functions"""
+    
+    for func_name, context in self.function_contexts.items():
+        context.max_call_chain = self._build_call_chain(func_name, set())
+        context.call_depth = len(context.max_call_chain) - 1
+
+
+def _build_call_chain(self, function_name, visited):
+    """Build the maximum call chain from a function"""
+    if function_name in visited or function_name not in self.function_contexts:
+        return [function_name]
+    
+    visited.add(function_name)
+    context = self.function_contexts[function_name]
+    
+    max_chain = [function_name]
+    for called_func in context.function_calls:
+        if called_func not in visited:
+            chain = self._build_call_chain(called_func, visited.copy())
+            if len(chain) > len(max_chain) - 1:
+                max_chain = [function_name] + chain
+    
+    return max_chain
+
+
+def create_health_dashboard(results):
+    """Create comprehensive health dashboard data"""
+    
+    dashboard = {
+        "health_score": results.health_score,
+        "health_grade": results.health_grade,
+        "risk_level": results.risk_level,
+        "technical_debt_hours": results.technical_debt_hours,
+        
+        # Issue summary
+        "issues_summary": {
+            "total_issues": len(results.issues),
+            "by_severity": results.issues_by_severity,
+            "by_type": results.issues_by_type,
+            "automated_fixes_available": len(results.automated_resolutions)
+        },
+        
+        # Function metrics
+        "function_metrics": {
+            "total_functions": len(results.function_contexts),
+            "entry_points": len(results.entry_points),
+            "dead_functions": len(results.dead_functions),
+            "most_important": results.most_important_functions[:5]  # Top 5
+        },
+        
+        # Quality indicators
+        "quality_indicators": {
+            "maintainability_index": results.maintainability_metrics.get("maintainability_index", 0),
+            "documentation_coverage": results.maintainability_metrics.get("documentation_coverage", 0),
+            "average_complexity": results.complexity_metrics.get("average_cyclomatic_complexity", 0),
+            "code_duplication": results.complexity_metrics.get("duplication_percentage", 0)
+        },
+        
+        # Recommendations
+        "recommendations": generate_health_recommendations(results),
+        
+        # Trends (placeholder for future implementation)
+        "trends": {
+            "health_trend": "stable",
+            "issue_trend": "improving",
+            "debt_trend": "stable"
+        }
+    }
+    
+    return dashboard
+
+
+def generate_health_recommendations(results):
+    """Generate actionable health recommendations"""
+    
+    recommendations = []
+    
+    # Critical issues
+    critical_count = results.issues_by_severity.get("critical", 0)
+    if critical_count > 0:
+        recommendations.append({
+            "priority": "critical",
+            "category": "issues",
+            "title": "Address Critical Issues",
+            "description": f"{critical_count} critical issues require immediate attention",
+            "action": "Review and fix critical issues in issue list",
+            "impact": "high"
+        })
+    
+    # Technical debt
+    if results.technical_debt_hours > 40:
+        recommendations.append({
+            "priority": "high",
+            "category": "debt",
+            "title": "Reduce Technical Debt",
+            "description": f"{results.technical_debt_hours:.1f} hours of technical debt detected",
+            "action": "Plan refactoring sprint to address major issues",
+            "impact": "medium"
+        })
+    
+    # Dead code
+    dead_count = len(results.dead_functions)
+    if dead_count > 5:
+        recommendations.append({
+            "priority": "medium",
+            "category": "cleanup",
+            "title": "Remove Dead Code",
+            "description": f"{dead_count} unused functions found",
+            "action": "Review and remove unused functions",
+            "impact": "low"
+        })
+    
+    # Documentation
+    doc_coverage = results.maintainability_metrics.get("documentation_coverage", 0)
+    if doc_coverage < 50:
+        recommendations.append({
+            "priority": "medium",
+            "category": "documentation",
+            "title": "Improve Documentation",
+            "description": f"Only {doc_coverage:.1f}% of functions are documented",
+            "action": "Add docstrings to undocumented functions",
+            "impact": "medium"
+        })
+    
+    # Automated fixes
+    auto_fixes = len(results.automated_resolutions)
+    if auto_fixes > 0:
+        recommendations.append({
+            "priority": "low",
+            "category": "automation",
+            "title": "Apply Automated Fixes",
+            "description": f"{auto_fixes} issues can be automatically resolved",
+            "action": "Review and apply high-confidence automated fixes",
+            "impact": "low"
+        })
+    
+    return recommendations
+
+
+def get_codebase_summary(codebase):
+    """Generate a brief summary of the codebase"""
+    
+    file_count = len(codebase.source_files)
+    
+    # Count functions and classes
+    function_count = 0
+    class_count = 0
+    
+    for source_file in codebase.source_files:
+        for symbol in source_file.symbols:
+            if hasattr(symbol, '__class__'):
+                if 'Function' in str(symbol.__class__):
+                    function_count += 1
+                elif 'Class' in str(symbol.__class__):
+                    class_count += 1
+    
+    # Detect primary languages
+    languages = set()
+    for source_file in codebase.source_files:
+        if hasattr(source_file, 'language') and source_file.language:
+            languages.add(source_file.language)
+    
+    language_str = ", ".join(sorted(languages)) if languages else "Multiple languages"
+    
+    return f"Codebase with {file_count} files, {function_count} functions, {class_count} classes. Primary languages: {language_str}."
+
+
+# Bind methods to CodebaseAnalyzer class
+CodebaseAnalyzer._calculate_coupling_cohesion_metrics = _calculate_coupling_cohesion_metrics
+CodebaseAnalyzer._detect_function_importance = _detect_function_importance
+CodebaseAnalyzer._build_call_chains = _build_call_chains
+CodebaseAnalyzer._build_call_chain = _build_call_chain

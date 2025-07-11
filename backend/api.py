@@ -19,8 +19,7 @@ from .models import (
     RepoRequest, CodebaseAnalysisRequest, CodebaseAnalysisResponse,
     HealthCheckResponse, RootResponse
 )
-from .analysis import CodebaseAnalyzer
-from .enhanced_analysis import get_codebase_summary, create_health_dashboard
+from .analysis import CodebaseAnalyzer, get_codebase_summary, create_health_dashboard
 
 
 # ============================================================================

@@ -1,26 +1,26 @@
 {
   "analysis_metadata": {
     "repository": "Zeeeepa/codebase-analytics",
-    "analysis_timestamp": "2025-07-11T08:14:34.651148",
+    "analysis_timestamp": "2025-07-11T08:32:24.439060",
     "processing_time_seconds": 0.02,
     "analyzer_version": "2.0.0-enhanced"
   },
   "repository_overview": {
-    "summary": "Codebase with 65 files, 84 functions, 18 classes. Languages: CSS, Python, TypeScript.",
-    "total_files": 65,
+    "summary": "Codebase with 64 files, 84 functions, 19 classes. Languages: CSS, Python, TypeScript.",
+    "total_files": 64,
     "total_functions": 84,
-    "total_classes": 18,
-    "total_lines_of_code": 8396,
+    "total_classes": 19,
+    "total_lines_of_code": 8440,
     "languages": [
       "CSS",
       "TypeScript",
       "Python"
     ],
     "files_by_type": {
-      ".py": 5,
+      ".py": 4,
       ".ts": 4,
-      ".css": 2,
-      ".tsx": 54
+      ".tsx": 54,
+      ".css": 2
     }
   },
   "issues_analysis": {
@@ -44,7 +44,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 116,
+          "line_number": 115,
           "is_safe": true
         },
         {
@@ -53,7 +53,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 131,
+          "line_number": 130,
           "is_safe": true
         },
         {
@@ -62,7 +62,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 224,
+          "line_number": 223,
           "is_safe": true
         },
         {
@@ -71,7 +71,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 228,
+          "line_number": 227,
           "is_safe": true
         },
         {
@@ -80,7 +80,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 398,
+          "line_number": 397,
           "is_safe": true
         },
         {
@@ -89,7 +89,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 422,
+          "line_number": 421,
           "is_safe": true
         },
         {
@@ -98,7 +98,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 456,
+          "line_number": 455,
           "is_safe": true
         },
         {
@@ -107,7 +107,7 @@
           "description": "Break long line into multiple lines",
           "confidence": 0.9,
           "file_path": "backend/analysis.py",
-          "line_number": 472,
+          "line_number": 471,
           "is_safe": true
         },
         {
@@ -116,7 +116,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 483,
+          "line_number": 482,
           "is_safe": true
         },
         {
@@ -125,7 +125,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 545,
+          "line_number": 544,
           "is_safe": true
         },
         {
@@ -134,7 +134,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 624,
+          "line_number": 672,
           "is_safe": true
         },
         {
@@ -143,7 +143,7 @@
           "description": "Break long line into multiple lines",
           "confidence": 0.9,
           "file_path": "backend/analysis.py",
-          "line_number": 758,
+          "line_number": 801,
           "is_safe": true
         },
         {
@@ -152,7 +152,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 902,
+          "line_number": 945,
           "is_safe": true
         },
         {
@@ -161,7 +161,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 906,
+          "line_number": 949,
           "is_safe": true
         },
         {
@@ -170,7 +170,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 955,
+          "line_number": 998,
           "is_safe": true
         },
         {
@@ -179,7 +179,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 1022,
+          "line_number": 1065,
           "is_safe": true
         },
         {
@@ -188,7 +188,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 1034,
+          "line_number": 1077,
           "is_safe": true
         },
         {
@@ -197,7 +197,7 @@
           "description": "Break long line into multiple lines",
           "confidence": 0.9,
           "file_path": "backend/analysis.py",
-          "line_number": 1041,
+          "line_number": 1084,
           "is_safe": true
         },
         {
@@ -206,7 +206,7 @@
           "description": "Break long line into multiple lines",
           "confidence": 0.9,
           "file_path": "backend/analysis.py",
-          "line_number": 1042,
+          "line_number": 1085,
           "is_safe": true
         },
         {
@@ -215,7 +215,7 @@
           "description": "Replace magic number with named constant",
           "confidence": 0.8,
           "file_path": "backend/analysis.py",
-          "line_number": 1096,
+          "line_number": 1139,
           "is_safe": true
         }
       ]
@@ -231,6 +231,11 @@
     "most_important_functions": [
       {
         "name": "_add_issue",
+        "complexity": 18,
+        "is_entry_point": false
+      },
+      {
+        "name": "_build_call_chain",
         "complexity": 18,
         "is_entry_point": false
       },
@@ -270,13 +275,8 @@
         "is_entry_point": false
       },
       {
-        "name": "build_call_chain",
+        "name": "_calculate_coupling_cohesion_metrics",
         "complexity": 8,
-        "is_entry_point": false
-      },
-      {
-        "name": "_generate_automated_resolutions",
-        "complexity": 6,
         "is_entry_point": false
       }
     ],
@@ -405,8 +405,8 @@
   },
   "quality_metrics": {
     "halstead_metrics": {
-      "program_length": 8396,
-      "vocabulary": 102,
+      "program_length": 8440,
+      "vocabulary": 103,
       "estimated_difficulty": 2.5
     },
     "complexity_metrics": {
