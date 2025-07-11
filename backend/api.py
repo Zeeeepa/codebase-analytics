@@ -183,6 +183,14 @@ async def analyze_repository(request: CodebaseAnalysisRequest):
             # Test coverage analysis
             test_coverage = analyzer.analyze_test_coverage()
             
+            # Enhanced testing analysis (inspired by vibetest-use)
+            test_patterns = analyzer._analyze_test_patterns(request.repo_url)
+            ui_testing_issues = analyzer._detect_ui_testing_opportunities(request.repo_url)
+            api_testing_coverage = analyzer._analyze_api_testing_coverage(request.repo_url)
+            
+            # Add UI testing issues to results
+            results.issues.extend(ui_testing_issues)
+            
             # Enhanced repository structure analysis
             enhanced_structure = analyzer.enhanced_repository_structure_analysis(results.issues)
             
@@ -195,6 +203,8 @@ async def analyze_repository(request: CodebaseAnalysisRequest):
             print(f"⚠️ Enhanced analysis features failed: {e}")
             test_coverage = {"error": "Enhanced analysis not available"}
             enhanced_structure = {"error": "Enhanced analysis not available"}
+            test_patterns = {"error": "Enhanced testing analysis not available"}
+            api_testing_coverage = {"error": "Enhanced API testing analysis not available"}
         
         # Get repository description
         repo_description = get_repo_description(request.repo_url)
@@ -281,6 +291,8 @@ async def analyze_repository(request: CodebaseAnalysisRequest):
                 "issue_hotspots": []  # Files with most issues
             },
             "test_coverage": test_coverage if 'test_coverage' in locals() else {"error": "Test coverage analysis not available"},
+            "test_patterns": test_patterns if 'test_patterns' in locals() else {"error": "Test patterns analysis not available"},
+            "api_testing_coverage": api_testing_coverage if 'api_testing_coverage' in locals() else {"error": "API testing analysis not available"},
             "security_analysis": {
                 "vulnerabilities_detected": len([i for i in results.issues if i.issue_type.value in ['sql_injection_risk', 'xss_vulnerability', 'hardcoded_config', 'unsafe_assertion', 'insecure_random', 'unsafe_deserialization']]),
                 "security_score": max(0, 100 - len([i for i in results.issues if i.issue_type.value in ['sql_injection_risk', 'xss_vulnerability', 'hardcoded_config', 'unsafe_assertion', 'insecure_random', 'unsafe_deserialization']]) * 10),
@@ -329,7 +341,11 @@ async def analyze_repository(request: CodebaseAnalysisRequest):
             "security_vulnerability_detection",
             "test_coverage_analysis",
             "enhanced_repository_structure_analysis",
-            "enhanced_automated_resolutions"
+            "enhanced_automated_resolutions",
+            "test_patterns_analysis",
+            "ui_testing_opportunities_detection",
+            "api_testing_coverage_analysis",
+            "browser_testing_suggestions"
         ]
         
         return CodebaseAnalysisResponse(

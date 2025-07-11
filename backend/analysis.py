@@ -1921,3 +1921,260 @@ def _fallback_analysis(self, codebase_path: str) -> AnalysisResults:
 
 # Bind fallback analysis method to CodebaseAnalyzer class
 CodebaseAnalyzer._fallback_analysis = _fallback_analysis
+
+def _analyze_test_patterns(self, codebase_path: str) -> Dict[str, Any]:
+    """Analyze testing patterns and quality inspired by vibetest-use"""
+    import os
+    import re
+    
+    test_analysis = {
+        "test_files": [],
+        "test_functions": [],
+        "test_patterns": {
+            "unit_tests": 0,
+            "integration_tests": 0,
+            "ui_tests": 0,
+            "api_tests": 0,
+            "browser_tests": 0
+        },
+        "test_quality": {
+            "has_assertions": 0,
+            "has_mocks": 0,
+            "has_fixtures": 0,
+            "has_parametrized": 0
+        },
+        "missing_tests": [],
+        "test_coverage_estimate": 0.0
+    }
+    
+    # Test file patterns
+    test_file_patterns = [
+        r'test_.*\.py$',
+        r'.*_test\.py$',
+        r'tests?\.py$',
+        r'.*spec\.py$'
+    ]
+    
+    # Test function patterns
+    test_function_patterns = [
+        r'def test_.*\(',
+        r'def .*_test\(',
+        r'async def test_.*\(',
+        r'def it_.*\(',
+        r'def should_.*\('
+    ]
+    
+    # UI/Browser testing patterns (inspired by vibetest-use)
+    ui_test_patterns = [
+        r'selenium|webdriver|playwright|browser_use',
+        r'click|find_element|get_element',
+        r'screenshot|capture|visual',
+        r'accessibility|a11y',
+        r'ui.*test|frontend.*test'
+    ]
+    
+    # API testing patterns
+    api_test_patterns = [
+        r'requests\.|httpx\.|aiohttp',
+        r'api.*test|endpoint.*test',
+        r'status_code|response\.',
+        r'json\(\)|\.json'
+    ]
+    
+    total_python_files = 0
+    
+    for root, dirs, files in os.walk(codebase_path):
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['__pycache__', 'node_modules']]
+        
+        for file in files:
+            if file.endswith('.py'):
+                filepath = os.path.join(root, file)
+                total_python_files += 1
+                
+                # Check if it's a test file
+                is_test_file = any(re.search(pattern, file) for pattern in test_file_patterns)
+                
+                try:
+                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    
+                    if is_test_file:
+                        test_analysis["test_files"].append(filepath)
+                        
+                        # Count test functions
+                        for pattern in test_function_patterns:
+                            matches = re.findall(pattern, content)
+                            test_analysis["test_functions"].extend(matches)
+                        
+                        # Analyze test patterns
+                        if re.search(r'unittest|pytest|nose', content):
+                            test_analysis["test_patterns"]["unit_tests"] += 1
+                        
+                        if any(re.search(pattern, content, re.IGNORECASE) for pattern in ui_test_patterns):
+                            test_analysis["test_patterns"]["ui_tests"] += 1
+                            test_analysis["test_patterns"]["browser_tests"] += 1
+                        
+                        if any(re.search(pattern, content, re.IGNORECASE) for pattern in api_test_patterns):
+                            test_analysis["test_patterns"]["api_tests"] += 1
+                        
+                        if re.search(r'integration|e2e|end.*to.*end', content, re.IGNORECASE):
+                            test_analysis["test_patterns"]["integration_tests"] += 1
+                        
+                        # Analyze test quality
+                        if re.search(r'assert|expect\(|should\(', content):
+                            test_analysis["test_quality"]["has_assertions"] += 1
+                        
+                        if re.search(r'mock|patch|stub|fake', content, re.IGNORECASE):
+                            test_analysis["test_quality"]["has_mocks"] += 1
+                        
+                        if re.search(r'@pytest\.fixture|@fixture|setUp|tearDown', content):
+                            test_analysis["test_quality"]["has_fixtures"] += 1
+                        
+                        if re.search(r'@pytest\.mark\.parametrize|@parametrize', content):
+                            test_analysis["test_quality"]["has_parametrized"] += 1
+                    
+                    else:
+                        # Check for functions that might need tests
+                        functions = re.findall(r'def (\w+)\(', content)
+                        classes = re.findall(r'class (\w+)', content)
+                        
+                        for func in functions:
+                            if not func.startswith('_') and func not in ['main', '__init__']:
+                                # Simple check for missing tests
+                                test_analysis["missing_tests"].append({
+                                    "function": func,
+                                    "file": filepath,
+                                    "type": "function"
+                                })
+                        
+                        for cls in classes:
+                            if not cls.startswith('_'):
+                                test_analysis["missing_tests"].append({
+                                    "function": cls,
+                                    "file": filepath,
+                                    "type": "class"
+                                })
+                
+                except Exception:
+                    continue
+    
+    # Calculate test coverage estimate
+    if total_python_files > 0:
+        test_coverage = len(test_analysis["test_files"]) / total_python_files
+        test_analysis["test_coverage_estimate"] = min(test_coverage * 100, 100.0)
+    
+    return test_analysis
+
+def _detect_ui_testing_opportunities(self, codebase_path: str) -> List[CodeIssue]:
+    """Detect opportunities for UI testing inspired by vibetest-use browser agents"""
+    import os
+    import re
+    
+    issues = []
+    
+    # Patterns that suggest UI components that should be tested
+    ui_patterns = [
+        (r'class.*Component|def.*component', "React/UI component detected"),
+        (r'@app\.route|@router\.|@get|@post', "Web endpoint detected"),
+        (r'render|template|html', "Template/rendering code detected"),
+        (r'form|input|button|click', "Interactive UI element detected"),
+        (r'javascript|js|frontend|client', "Frontend code detected")
+    ]
+    
+    for root, dirs, files in os.walk(codebase_path):
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['__pycache__', 'node_modules']]
+        
+        for file in files:
+            if file.endswith(('.py', '.js', '.jsx', '.ts', '.tsx', '.html')):
+                filepath = os.path.join(root, file)
+                
+                try:
+                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    
+                    for pattern, description in ui_patterns:
+                        matches = re.finditer(pattern, content, re.IGNORECASE)
+                        for match in matches:
+                            line_num = content[:match.start()].count('\n') + 1
+                            issues.append(CodeIssue(
+                                issue_type=IssueType.MISSING_TESTS,
+                                severity=IssueSeverity.MEDIUM,
+                                message=f"{description} - consider adding UI/browser tests",
+                                filepath=filepath,
+                                line_number=line_num,
+                                suggested_fix="Add automated UI tests using tools like Selenium, Playwright, or browser-use agents"
+                            ))
+                
+                except Exception:
+                    continue
+    
+    return issues
+
+def _analyze_api_testing_coverage(self, codebase_path: str) -> Dict[str, Any]:
+    """Analyze API testing coverage and suggest improvements"""
+    import os
+    import re
+    
+    api_analysis = {
+        "endpoints": [],
+        "tested_endpoints": [],
+        "untested_endpoints": [],
+        "api_test_quality": {
+            "status_code_tests": 0,
+            "response_validation": 0,
+            "error_handling_tests": 0,
+            "authentication_tests": 0
+        }
+    }
+    
+    # API endpoint patterns
+    endpoint_patterns = [
+        r'@app\.route\(["\']([^"\']+)["\']',
+        r'@router\.\w+\(["\']([^"\']+)["\']',
+        r'@\w+\(["\']([^"\']+)["\'].*method',
+        r'app\.\w+\(["\']([^"\']+)["\']'
+    ]
+    
+    for root, dirs, files in os.walk(codebase_path):
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['__pycache__', 'node_modules']]
+        
+        for file in files:
+            if file.endswith('.py'):
+                filepath = os.path.join(root, file)
+                
+                try:
+                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                    
+                    # Find API endpoints
+                    for pattern in endpoint_patterns:
+                        matches = re.findall(pattern, content)
+                        for endpoint in matches:
+                            api_analysis["endpoints"].append({
+                                "endpoint": endpoint,
+                                "file": filepath
+                            })
+                    
+                    # Check for API tests
+                    if 'test' in file.lower():
+                        if re.search(r'status_code|response\.status', content):
+                            api_analysis["api_test_quality"]["status_code_tests"] += 1
+                        
+                        if re.search(r'json\(\)|\.json|response\.data', content):
+                            api_analysis["api_test_quality"]["response_validation"] += 1
+                        
+                        if re.search(r'404|500|error|exception', content):
+                            api_analysis["api_test_quality"]["error_handling_tests"] += 1
+                        
+                        if re.search(r'auth|token|login|permission', content, re.IGNORECASE):
+                            api_analysis["api_test_quality"]["authentication_tests"] += 1
+                
+                except Exception:
+                    continue
+    
+    return api_analysis
+
+# Bind enhanced testing analysis methods to CodebaseAnalyzer class
+CodebaseAnalyzer._analyze_test_patterns = _analyze_test_patterns
+CodebaseAnalyzer._detect_ui_testing_opportunities = _detect_ui_testing_opportunities
+CodebaseAnalyzer._analyze_api_testing_coverage = _analyze_api_testing_coverage

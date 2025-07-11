@@ -88,6 +88,9 @@ class IssueType(Enum):
     XSS_VULNERABILITY = "xss_vulnerability"
     INSECURE_RANDOM = "insecure_random"
     UNSAFE_DESERIALIZATION = "unsafe_deserialization"
+    
+    # Testing Issue Types
+    MISSING_TESTS = "missing_tests"
 
 
 # ============================================================================
