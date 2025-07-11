@@ -402,3 +402,239 @@ class ComprehensiveAnalysisResponse(BaseModel):
     processing_time: float
     cache_hit: bool = False
     analysis_id: Optional[str] = None
+
+
+# ============================================================================
+# ADDITIONAL MODELS FROM BACKEND BRANCHES
+# ============================================================================
+
+class FunctionMetrics(BaseModel):
+    """Comprehensive function metrics"""
+    function_name: str
+    file_path: str
+    line_number: Optional[int] = None
+    cyclomatic_complexity: int
+    maintainability_index: float
+    lines_of_code: int
+    halstead_volume: float
+    halstead_difficulty: float
+    halstead_effort: float
+    parameters_count: int
+    return_statements_count: int = 0
+    importance_score: float
+    usage_frequency: int = 0
+
+
+class ClassMetrics(BaseModel):
+    """Comprehensive class metrics"""
+    class_name: str
+    file_path: str
+    line_number: Optional[int] = None
+    methods_count: int
+    attributes_count: int
+    depth_of_inheritance: int
+    coupling_between_objects: int
+    lack_of_cohesion: float
+    lines_of_code: int
+    importance_score: float
+
+
+class FileMetrics(BaseModel):
+    """Comprehensive file metrics"""
+    file_path: str
+    lines_of_code: int
+    functions_count: int
+    classes_count: int
+    imports_count: int
+    complexity_score: float
+    maintainability_index: float
+    importance_score: float
+
+
+class AnalysisConfig(BaseModel):
+    """Configuration for analysis parameters"""
+    # Entry point patterns
+    ENTRY_POINT_PATTERNS: List[str] = Field(default_factory=lambda: [
+        'main', 'run', 'start', 'init', 'setup', 'launch', 'execute',
+        'app', 'server', 'cli', 'command', 'handler', 'endpoint'
+    ])
+    
+    # Issue detection thresholds
+    LONG_FUNCTION_THRESHOLD: int = 50
+    HIGH_COMPLEXITY_THRESHOLD: int = 10
+    MAGIC_NUMBER_EXCLUSIONS: List[int] = Field(default_factory=lambda: [0, 1, -1, 2, 10, 100])
+    
+    # Health scoring weights
+    CRITICAL_ISSUE_WEIGHT: int = 10
+    MAJOR_ISSUE_WEIGHT: int = 5
+    MINOR_ISSUE_WEIGHT: int = 2
+    INFO_ISSUE_WEIGHT: int = 1
+    
+    # Technical debt estimation (hours)
+    CRITICAL_ISSUE_HOURS: float = 8.0
+    MAJOR_ISSUE_HOURS: float = 4.0
+    MINOR_ISSUE_HOURS: float = 1.0
+    INFO_ISSUE_HOURS: float = 0.25
+    
+    # Health grades
+    HEALTH_GRADES: Dict[int, str] = Field(default_factory=lambda: {
+        90: "A+",
+        80: "A",
+        70: "B",
+        60: "C",
+        50: "D",
+        0: "F"
+    })
+
+
+class RepoRequest(BaseModel):
+    """Simple repository request model"""
+    repo_url: str
+    branch: Optional[str] = "main"
+
+
+class CodebaseAnalysisRequest(BaseModel):
+    """Request model for codebase analysis"""
+    repo_url: str
+    analysis_type: str = "comprehensive"
+    include_metrics: bool = True
+    include_issues: bool = True
+    include_health: bool = True
+    max_issues: int = 100
+
+
+class CodebaseAnalysisResponse(BaseModel):
+    """Response model for codebase analysis"""
+    success: bool
+    data: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    processing_time: float
+    timestamp: datetime
+
+
+class HealthCheckResponse(BaseModel):
+    """Health check response model"""
+    status: str
+    timestamp: datetime
+    version: str = "2.0.0"
+    features: List[str] = Field(default_factory=lambda: [
+        "comprehensive_analysis",
+        "issue_detection", 
+        "health_metrics",
+        "automated_resolutions",
+        "graph_analysis"
+    ])
+
+
+class RootResponse(BaseModel):
+    """Root endpoint response model"""
+    message: str
+    version: str
+    documentation: str = "/docs"
+    health: str = "/health"
+    endpoints: Dict[str, str]
+
+
+# Enhanced issue types from backend analysis
+class IssueTypeExtended(str, Enum):
+    """Extended issue types from backend analysis"""
+    SYNTAX_ERROR = "syntax_error"
+    TYPE_ERROR = "type_error"
+    SECURITY_VULNERABILITY = "security_vulnerability"
+    CODE_SMELL = "code_smell"
+    PERFORMANCE_ISSUE = "performance_issue"
+    MAINTAINABILITY_ISSUE = "maintainability_issue"
+    COMPLEXITY_ISSUE = "complexity_issue"
+    DEPENDENCY_ISSUE = "dependency_issue"
+    LONG_FUNCTION = "long_function"
+    MISSING_DOCUMENTATION = "missing_documentation"
+    INEFFICIENT_PATTERN = "inefficient_pattern"
+    MAGIC_NUMBER = "magic_number"
+    LINE_LENGTH_VIOLATION = "line_length_violation"
+    DEAD_CODE = "dead_code"
+    UNUSED_IMPORT = "unused_import"
+    DUPLICATE_CODE = "duplicate_code"
+
+
+class ResolutionType(str, Enum):
+    """Types of automated resolutions"""
+    EXTRACT_CONSTANT = "extract_constant"
+    ADD_DOCSTRING = "add_docstring"
+    BREAK_FUNCTION = "break_function"
+    REMOVE_DEAD_CODE = "remove_dead_code"
+    OPTIMIZE_IMPORT = "optimize_import"
+    REFACTOR_COMPLEXITY = "refactor_complexity"
+    FIX_FORMATTING = "fix_formatting"
+
+
+class AnalysisMode(str, Enum):
+    """Analysis modes"""
+    QUICK = "quick"
+    STANDARD = "standard"
+    COMPREHENSIVE = "comprehensive"
+    DEEP = "deep"
+
+
+class RepositoryType(str, Enum):
+    """Repository types"""
+    PYTHON = "python"
+    JAVASCRIPT = "javascript"
+    TYPESCRIPT = "typescript"
+    MIXED = "mixed"
+    UNKNOWN = "unknown"
+
+
+# Dataclass models for internal use
+@dataclass
+class AnalysisContext:
+    """Context for analysis operations"""
+    repo_url: str
+    branch: str = "main"
+    analysis_mode: AnalysisMode = AnalysisMode.STANDARD
+    start_time: datetime = None
+    cache_enabled: bool = True
+    
+    def __post_init__(self):
+        if self.start_time is None:
+            self.start_time = datetime.now()
+
+
+@dataclass
+class ProcessingStats:
+    """Statistics for processing operations"""
+    files_processed: int = 0
+    functions_analyzed: int = 0
+    classes_analyzed: int = 0
+    issues_detected: int = 0
+    resolutions_generated: int = 0
+    processing_time: float = 0.0
+    cache_hits: int = 0
+    cache_misses: int = 0
+
+
+# Export all models for easy importing
+__all__ = [
+    # Enums
+    "IssueSeverity", "IssueType", "IssueTypeExtended", "ResolutionType", 
+    "AnalysisMode", "RepositoryType",
+    
+    # Core Models
+    "CodeIssue", "EntryPoint", "CriticalFile", "DependencyNode", 
+    "AutomatedResolution", "FunctionContext", "HalsteadMetrics",
+    "GraphMetrics", "DeadCodeAnalysis", "HealthMetrics", 
+    "RepositoryStructure", "AnalysisResults",
+    
+    # Metrics Models
+    "FunctionMetrics", "ClassMetrics", "FileMetrics",
+    
+    # Request/Response Models
+    "ComprehensiveAnalysisRequest", "ComprehensiveAnalysisResponse",
+    "RepoRequest", "CodebaseAnalysisRequest", "CodebaseAnalysisResponse",
+    "HealthCheckResponse", "RootResponse",
+    
+    # Configuration
+    "AnalysisConfig",
+    
+    # Dataclasses
+    "AnalysisContext", "ProcessingStats"
+]

@@ -1,13 +1,16 @@
 """
 Comprehensive FastAPI Backend for Codebase Analysis
 Consolidated from all analysis systems with single comprehensive endpoint
+Includes Modal deployment support and all functionality from backend branches
 """
 
 import os
 import time
 import asyncio
+import modal
+import requests
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -23,7 +26,29 @@ from .models import (
     ComprehensiveAnalysisResponse,
     AnalysisResults
 )
+<<<<<<< HEAD
 from .analysis import ComprehensiveCodebaseAnalyzer
+=======
+from .analysis import (
+    analyze_codebase_comprehensive, 
+    get_codebase_summary, 
+    create_health_dashboard,
+    generate_repository_analysis_report,
+    calculate_comprehensive_metrics
+)
+
+# Modal configuration for deployment
+image = (
+    modal.Image.debian_slim()
+    .apt_install("git")
+    .pip_install(
+        "codegen", "fastapi", "uvicorn", "gitpython", "requests", 
+        "pydantic", "datetime", "networkx"
+    )
+)
+
+modal_app = modal.App(name="comprehensive-analytics-app", image=image)
+>>>>>>> e76cfb7 (Consolidate comprehensive functionality from all backend branches)
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -230,12 +255,184 @@ async def cache_stats():
     }
 
 
-# Background task to clean expired cache entries
-async def cleanup_expired_cache():
-    """Remove expired cache entries"""
+# ============================================================================
+# ADDITIONAL ANALYSIS ENDPOINTS (from backend branches)
+# ============================================================================
+
+@app.post("/analyze/summary")
+async def get_repository_summary(request: ComprehensiveAnalysisRequest):
+    """Get a quick summary of the repository"""
+    try:
+        print(f"📊 Getting summary for: {request.repo_url}")
+        
+        # Load codebase
+        codebase = Codebase.from_repo_url(request.repo_url)
+        
+        # Generate summary
+        summary = get_codebase_summary(codebase)
+        
+        return {
+            "success": True,
+            "summary": summary,
+            "repo_url": request.repo_url,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to generate summary: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+@app.post("/analyze/report")
+async def generate_analysis_report(request: ComprehensiveAnalysisRequest):
+    """Generate a comprehensive analysis report"""
+    try:
+        print(f"📋 Generating report for: {request.repo_url}")
+        
+        # Load codebase
+        codebase = Codebase.from_repo_url(request.repo_url)
+        
+        # Generate comprehensive report
+        report = generate_repository_analysis_report(codebase, request.repo_url)
+        
+        return {
+            "success": True,
+            "report": report,
+            "repo_url": request.repo_url,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to generate report: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+@app.post("/analyze/metrics")
+async def get_comprehensive_metrics(request: ComprehensiveAnalysisRequest):
+    """Get comprehensive metrics for functions, classes, and files"""
+    try:
+        print(f"📈 Calculating metrics for: {request.repo_url}")
+        
+        # Load codebase
+        codebase = Codebase.from_repo_url(request.repo_url)
+        
+        # Calculate comprehensive metrics
+        metrics = calculate_comprehensive_metrics(codebase)
+        
+        return {
+            "success": True,
+            "metrics": metrics,
+            "repo_url": request.repo_url,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to calculate metrics: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+@app.post("/analyze/health")
+async def get_health_dashboard(request: ComprehensiveAnalysisRequest):
+    """Get health dashboard data"""
+    try:
+        print(f"🏥 Generating health dashboard for: {request.repo_url}")
+        
+        # Load codebase and perform analysis
+        codebase = Codebase.from_repo_url(request.repo_url)
+        results = analyze_codebase_comprehensive(codebase, {})
+        
+        # Create health dashboard
+        dashboard = create_health_dashboard(results)
+        
+        return {
+            "success": True,
+            "dashboard": dashboard,
+            "repo_url": request.repo_url,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Failed to generate health dashboard: {str(e)}",
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+# ============================================================================
+# MODAL DEPLOYMENT CONFIGURATION
+# ============================================================================
+
+@modal_app.function(image=image)
+@modal.web_endpoint(method="POST")
+def modal_analyze_endpoint(item: Dict[str, Any]):
+    """Modal deployment endpoint for comprehensive analysis"""
+    try:
+        # Extract request data
+        repo_url = item.get("repo_url")
+        if not repo_url:
+            return {"success": False, "error": "repo_url is required"}
+        
+        # Load codebase
+        codebase = Codebase.from_repo_url(repo_url)
+        
+        # Perform analysis
+        config = item.get("config", {})
+        results = analyze_codebase_comprehensive(codebase, config)
+        
+        return {
+            "success": True,
+            "results": results.dict() if hasattr(results, 'dict') else str(results),
+            "repo_url": repo_url
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Modal analysis failed: {str(e)}"
+        }
+
+
+@modal_app.function(image=image)
+@modal.web_endpoint(method="GET")
+def modal_health_check():
+    """Modal health check endpoint"""
+    return {
+        "status": "healthy",
+        "service": "Comprehensive Codebase Analytics",
+        "version": "2.0.0",
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
+
+def validate_repo_url(repo_url: str) -> bool:
+    """Validate if the repository URL is accessible"""
+    try:
+        # Simple validation - check if URL is reachable
+        response = requests.head(repo_url, timeout=10)
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+def cleanup_expired_cache():
+    """Remove expired entries from cache"""
     global analysis_cache
-    
     expired_keys = []
+    
     for key, cache_entry in analysis_cache.items():
         if not is_cache_valid(cache_entry):
             expired_keys.append(key)
@@ -243,34 +440,27 @@ async def cleanup_expired_cache():
     for key in expired_keys:
         del analysis_cache[key]
     
-    if expired_keys:
-        print(f"🧹 Cleaned up {len(expired_keys)} expired cache entries")
+    return len(expired_keys)
 
 
+# Background task to clean up cache periodically
 @app.on_event("startup")
 async def startup_event():
     """Startup event handler"""
     print("🚀 Comprehensive Codebase Analytics API starting up...")
-    print("📊 Features enabled:")
-    print("   • Comprehensive issue detection")
-    print("   • Entry point identification")
-    print("   • Critical file analysis")
-    print("   • Function context analysis")
-    print("   • Halstead complexity metrics")
-    print("   • Graph analysis (NetworkX)")
-    print("   • Dead code detection")
-    print("   • Health assessment")
-    print("   • Automated resolution suggestions")
-    print("   • Repository structure analysis")
-    print("✅ API ready to serve requests!")
+    print("✅ All analysis modules loaded successfully")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Shutdown event handler"""
     print("🛑 Comprehensive Codebase Analytics API shutting down...")
-    print(f"📊 Final stats: {len(analysis_cache)} cache entries")
+    cleanup_expired_cache()
+    print("✅ Cleanup completed")
 
+
+# Export the FastAPI app for Modal and other deployments
+fastapi_app = app
 
 # Exception handlers
 @app.exception_handler(HTTPException)

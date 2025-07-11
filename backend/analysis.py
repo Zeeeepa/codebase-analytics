@@ -1,6 +1,7 @@
 """
 Comprehensive Codebase Analysis Engine
 Consolidated from all analysis systems with enhanced functionality
+Includes: Backend Branch + Merge-Comprehensive-Analysis + Enhanced Analysis + Metrics
 """
 
 import re
@@ -22,6 +23,7 @@ from graph_sitter.core.file import SourceFile
 from graph_sitter.core.expressions.binary_expression import BinaryExpression
 from graph_sitter.core.expressions.unary_expression import UnaryExpression
 from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
+from graph_sitter.enums import EdgeType, SymbolType
 
 # Import enhanced data models
 from .models import (
@@ -36,12 +38,16 @@ try:
     from graph_sitter.core.export import Export
     from graph_sitter.core.directory import Directory
     from graph_sitter.core.interface import Interface
+    from graph_sitter.statements.for_loop_statement import ForLoopStatement
+    from graph_sitter.core.statements.if_block_statement import IfBlockStatement
+    from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
+    from graph_sitter.core.statements.while_statement import WhileStatement
     import graph_sitter.python as python_analyzer
     import graph_sitter.typescript as typescript_analyzer
 except ImportError:
     Assignment = Export = Directory = Interface = python_analyzer = (
         typescript_analyzer
-    ) = None
+    ) = ForLoopStatement = IfBlockStatement = TryCatchStatement = WhileStatement = None
 
 
 class CodeAnalysisError(Exception):
@@ -49,6 +55,7 @@ class CodeAnalysisError(Exception):
     pass
 
 
+<<<<<<< HEAD
 class ImportResolver:
     """Automated import resolution system"""
     
@@ -453,6 +460,43 @@ class AdvancedIssueDetector:
         for issue in self.issues:
             if hasattr(issue, 'automated_resolution') and issue.automated_resolution:
                 self.automated_resolutions.append(issue.automated_resolution)
+=======
+class CodebaseCache:
+    """Cache for AST and metrics to improve performance"""
+
+    def __init__(self):
+        self.ast_cache = {}
+        self.metric_cache = {}
+        self.call_graph_cache = {}
+
+    def get_or_compute_ast(self, file: SourceFile) -> Dict:
+        if file.filepath not in self.ast_cache:
+            self.ast_cache[file.filepath] = self.parse_file_ast(file)
+        return self.ast_cache[file.filepath]
+
+    def parse_file_ast(self, file: SourceFile) -> Dict:
+        try:
+            return {
+                "file_path": file.filepath,
+                "functions": [
+                    {"name": f.name, "line": getattr(f, "line_number", None)}
+                    for f in file.functions
+                ],
+                "classes": [
+                    {"name": c.name, "line": getattr(c, "line_number", None)}
+                    for c in file.classes
+                ],
+                "imports": [{"name": i.name} for i in file.imports],
+            }
+        except Exception as e:
+            raise CodeAnalysisError(
+                f"Failed to parse AST for {file.filepath}: {str(e)}"
+            )
+
+
+# Global cache instance
+codebase_cache = CodebaseCache()
+>>>>>>> e76cfb7 (Consolidate comprehensive functionality from all backend branches)
 
 
 class ComprehensiveCodebaseAnalyzer:
@@ -1391,3 +1435,469 @@ def identify_critical_files(codebase: Codebase) -> List[CriticalFile]:
             ))
     
     return sorted(critical_files, key=lambda x: x.importance_score, reverse=True)
+
+
+# ============================================================================
+# COMPREHENSIVE METRICS AND ANALYSIS FUNCTIONS
+# ============================================================================
+
+def get_codebase_summary(codebase: Codebase) -> str:
+    """Generate comprehensive codebase summary"""
+    try:
+        node_summary = f"""Contains {len(codebase.ctx.get_nodes())} nodes
+- {len(list(codebase.files))} files
+- {len(list(codebase.imports))} imports
+- {len(list(codebase.external_modules))} external_modules
+- {len(list(codebase.symbols))} symbols
+\t- {len(list(codebase.classes))} classes
+\t- {len(list(codebase.functions))} functions
+\t- {len(list(codebase.global_vars))} global_vars
+\t- {len(list(codebase.interfaces))} interfaces
+"""
+        edge_summary = f"""Contains {len(codebase.ctx.edges)} edges
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.SYMBOL_USAGE])} symbol -> used symbol
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.IMPORT_SYMBOL_RESOLUTION])} import -> used symbol
+- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.EXPORT])} export -> exported symbol
+"""
+        return f"{node_summary}\n{edge_summary}"
+    except Exception as e:
+        return f"Error generating codebase summary: {str(e)}"
+
+
+def calculate_cyclomatic_complexity(func: Function) -> int:
+    """Calculate cyclomatic complexity for a function"""
+    try:
+        complexity = 1  # Base complexity
+        
+        if hasattr(func, 'content') and func.content:
+            content = func.content.lower()
+            
+            # Count decision points
+            complexity += content.count('if ')
+            complexity += content.count('elif ')
+            complexity += content.count('while ')
+            complexity += content.count('for ')
+            complexity += content.count('except ')
+            complexity += content.count('case ')
+            complexity += content.count('&&')
+            complexity += content.count('||')
+            complexity += content.count('and ')
+            complexity += content.count('or ')
+        
+        return complexity
+    except Exception:
+        return 1
+
+
+def calculate_halstead_metrics(func: Function) -> Dict[str, float]:
+    """Calculate Halstead complexity metrics"""
+    try:
+        if not hasattr(func, 'content') or not func.content:
+            return {'volume': 0, 'difficulty': 0, 'effort': 0}
+        
+        source = func.content
+        operators = re.findall(r'[+\-*/=<>!&|^%]', source)
+        operands = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', source)
+        
+        n1 = len(set(operators))  # Unique operators
+        n2 = len(set(operands))   # Unique operands
+        N1 = len(operators)       # Total operators
+        N2 = len(operands)        # Total operands
+        
+        if n1 == 0 or n2 == 0:
+            return {'volume': 0, 'difficulty': 0, 'effort': 0}
+        
+        vocabulary = n1 + n2
+        length = N1 + N2
+        volume = length * math.log2(vocabulary) if vocabulary > 0 else 0
+        difficulty = (n1 / 2) * (N2 / n2) if n2 > 0 else 0
+        effort = difficulty * volume
+        
+        return {
+            'volume': volume,
+            'difficulty': difficulty,
+            'effort': effort,
+            'vocabulary': vocabulary,
+            'length': length
+        }
+    except Exception:
+        return {'volume': 0, 'difficulty': 0, 'effort': 0}
+
+
+def calculate_doi(cls: Class) -> int:
+    """Calculate Depth of Inheritance for a class"""
+    try:
+        if not hasattr(cls, 'parent_class_names') or not cls.parent_class_names:
+            return 0
+        return len(cls.parent_class_names)
+    except Exception:
+        return 0
+
+
+def calculate_cbo(cls: Class) -> int:
+    """Calculate Coupling Between Objects for a class"""
+    try:
+        coupling = 0
+        if hasattr(cls, 'dependencies'):
+            coupling += len(cls.dependencies)
+        if hasattr(cls, 'methods'):
+            for method in cls.methods:
+                if hasattr(method, 'dependencies'):
+                    coupling += len(method.dependencies)
+        return coupling
+    except Exception:
+        return 0
+
+
+def calculate_lcom(cls: Class) -> float:
+    """Calculate Lack of Cohesion of Methods for a class"""
+    try:
+        if not hasattr(cls, 'methods') or len(cls.methods) <= 1:
+            return 0.0
+        
+        methods = cls.methods
+        attributes = getattr(cls, 'attributes', [])
+        
+        if not attributes:
+            return 0.0
+        
+        # Simplified LCOM calculation
+        method_attribute_usage = {}
+        for method in methods:
+            used_attributes = []
+            if hasattr(method, 'content'):
+                for attr in attributes:
+                    if attr.name in method.content:
+                        used_attributes.append(attr.name)
+            method_attribute_usage[method.name] = used_attributes
+        
+        # Calculate cohesion
+        total_pairs = len(methods) * (len(methods) - 1) / 2
+        cohesive_pairs = 0
+        
+        for i, method1 in enumerate(methods):
+            for method2 in methods[i+1:]:
+                attrs1 = set(method_attribute_usage.get(method1.name, []))
+                attrs2 = set(method_attribute_usage.get(method2.name, []))
+                if attrs1.intersection(attrs2):
+                    cohesive_pairs += 1
+        
+        return 1 - (cohesive_pairs / total_pairs) if total_pairs > 0 else 0.0
+    except Exception:
+        return 0.0
+
+
+def generate_repository_analysis_report(codebase: Codebase, repo_url: str = "") -> str:
+    """Generate comprehensive repository analysis report"""
+    try:
+        repo_name = repo_url.split('/')[-1] if repo_url else "Unknown Repository"
+        
+        # Calculate basic statistics
+        files = list(codebase.files)
+        functions = list(codebase.functions)
+        classes = list(codebase.classes)
+        
+        total_files = len(files)
+        total_functions = len(functions)
+        total_classes = len(classes)
+        
+        # Analyze issues (simplified)
+        issues = []
+        for file in files:
+            for func in file.functions:
+                complexity = calculate_cyclomatic_complexity(func)
+                if complexity > 10:
+                    issues.append({
+                        'type': 'high_complexity',
+                        'severity': 'medium',
+                        'file_path': file.filepath,
+                        'function': func.name,
+                        'complexity': complexity
+                    })
+        
+        critical_issues = [issue for issue in issues if issue.get('severity') == 'critical']
+        
+        # Build the report
+        report = f"""📊 Repository Analysis Report 📊
+==================================================
+📁 Repository: {repo_name}
+📝 Description: Advanced codebase analysis with graph-sitter integration
+
+📁 Files: {total_files}
+🔄 Functions: {total_functions}
+📏 Classes: {total_classes}
+
+🔍 **ISSUES DETECTED** ({len(issues)} issues found)
+- Critical: {len(critical_issues)}
+- High Complexity Functions: {len([i for i in issues if i['type'] == 'high_complexity'])}
+
+📈 **GRAPH-SITTER INTEGRATION INSIGHTS**
+- Pre-computed dependency graph with {len(list(codebase.ctx.edges))} edges
+- Symbol usage analysis across {total_files} files
+- Multi-language support: Python, TypeScript, React & JSX
+- Advanced static analysis for code manipulation operations
+
+🔧 **RECOMMENDED ACTIONS**
+- Review high complexity functions for refactoring opportunities
+- Consider breaking down large functions into smaller, more manageable pieces
+- Implement comprehensive testing for critical components
+"""
+        
+        return report
+        
+    except Exception as e:
+        return f"Error generating repository analysis report: {str(e)}"
+
+
+def calculate_comprehensive_metrics(codebase: Codebase) -> Dict[str, Any]:
+    """Calculate comprehensive metrics for functions, classes, and files"""
+    function_metrics = []
+    class_metrics = []
+    file_metrics = []
+    
+    try:
+        for file in codebase.files:
+            # File metrics
+            file_loc = len(file.content.split('\n')) if hasattr(file, 'content') and file.content else 0
+            file_metrics.append({
+                'file_path': file.filepath,
+                'lines_of_code': file_loc,
+                'functions_count': len(file.functions),
+                'classes_count': len(file.classes),
+                'imports_count': len(file.imports),
+                'complexity_score': sum(calculate_cyclomatic_complexity(f) for f in file.functions) / max(len(file.functions), 1),
+                'maintainability_index': calculate_maintainability_index(file),
+                'importance_score': calculate_file_importance(file, codebase)
+            })
+            
+            # Function metrics
+            for func in file.functions:
+                try:
+                    complexity = calculate_cyclomatic_complexity(func)
+                    halstead_metrics = calculate_halstead_metrics(func)
+                    
+                    function_metrics.append({
+                        'function_name': func.name,
+                        'file_path': file.filepath,
+                        'line_number': getattr(func, 'line_number', None),
+                        'cyclomatic_complexity': complexity,
+                        'maintainability_index': calculate_function_maintainability(func),
+                        'lines_of_code': len(func.content.split('\n')) if hasattr(func, 'content') and func.content else 0,
+                        'halstead_volume': halstead_metrics.get('volume', 0.0),
+                        'halstead_difficulty': halstead_metrics.get('difficulty', 0.0),
+                        'halstead_effort': halstead_metrics.get('effort', 0.0),
+                        'parameters_count': len(func.parameters) if hasattr(func, 'parameters') else 0,
+                        'importance_score': calculate_function_importance(func, codebase)
+                    })
+                except Exception as e:
+                    print(f"Error calculating metrics for function {func.name}: {e}")
+                    continue
+            
+            # Class metrics
+            for cls in file.classes:
+                try:
+                    class_metrics.append({
+                        'class_name': cls.name,
+                        'file_path': file.filepath,
+                        'line_number': getattr(cls, 'line_number', None),
+                        'methods_count': len(cls.methods) if hasattr(cls, 'methods') else 0,
+                        'attributes_count': len(cls.attributes) if hasattr(cls, 'attributes') else 0,
+                        'depth_of_inheritance': calculate_doi(cls),
+                        'coupling_between_objects': calculate_cbo(cls),
+                        'lack_of_cohesion': calculate_lcom(cls),
+                        'lines_of_code': len(cls.content.split('\n')) if hasattr(cls, 'content') and cls.content else 0,
+                        'importance_score': calculate_class_importance(cls, codebase)
+                    })
+                except Exception as e:
+                    print(f"Error calculating metrics for class {cls.name}: {e}")
+                    continue
+                    
+    except Exception as e:
+        print(f"Error in comprehensive metrics calculation: {e}")
+    
+    return {
+        'function_metrics': function_metrics,
+        'class_metrics': class_metrics,
+        'file_metrics': file_metrics
+    }
+
+
+def calculate_maintainability_index(file: SourceFile) -> float:
+    """Calculate maintainability index for a file"""
+    try:
+        if not hasattr(file, 'content') or not file.content:
+            return 0.0
+        
+        lines = file.content.split('\n')
+        loc = len(lines)
+        complexity = sum(calculate_cyclomatic_complexity(f) for f in file.functions)
+        
+        # Simplified maintainability index
+        if loc == 0:
+            return 100.0
+        
+        mi = 171 - 5.2 * math.log(max(1, complexity)) - 0.23 * loc
+        return max(0, min(100, mi))
+    except Exception:
+        return 0.0
+
+
+def calculate_file_importance(file: SourceFile, codebase: Codebase) -> float:
+    """Calculate importance score for a file"""
+    try:
+        score = 0.0
+        
+        # Number of functions and classes
+        score += len(file.functions) * 2
+        score += len(file.classes) * 3
+        
+        # Number of imports (indicates dependencies)
+        score += len(file.imports) * 0.5
+        
+        # File size factor
+        if hasattr(file, 'content') and file.content:
+            score += len(file.content.split('\n')) * 0.01
+        
+        return score
+    except Exception:
+        return 0.0
+
+
+def calculate_function_maintainability(func: Function) -> float:
+    """Calculate maintainability index for a function"""
+    try:
+        if not hasattr(func, 'content') or not func.content:
+            return 100.0
+        
+        lines = func.content.split('\n')
+        loc = len(lines)
+        complexity = calculate_cyclomatic_complexity(func)
+        
+        # Simplified maintainability index
+        if loc == 0:
+            return 100.0
+        
+        mi = 171 - 5.2 * math.log(max(1, complexity)) - 0.23 * loc
+        return max(0, min(100, mi))
+    except Exception:
+        return 100.0
+
+
+def calculate_function_importance(func: Function, codebase: Codebase) -> float:
+    """Calculate importance score for a function"""
+    try:
+        score = 0.0
+        
+        # Complexity factor
+        complexity = calculate_cyclomatic_complexity(func)
+        score += complexity * 2
+        
+        # Parameter count
+        if hasattr(func, 'parameters'):
+            score += len(func.parameters) * 0.5
+        
+        # Entry point bonus
+        if is_entry_point_function(func):
+            score += 10
+        
+        # Function size
+        if hasattr(func, 'content') and func.content:
+            score += len(func.content.split('\n')) * 0.1
+        
+        return score
+    except Exception:
+        return 0.0
+
+
+def calculate_class_importance(cls: Class, codebase: Codebase) -> float:
+    """Calculate importance score for a class"""
+    try:
+        score = 0.0
+        
+        # Methods and attributes count
+        if hasattr(cls, 'methods'):
+            score += len(cls.methods) * 2
+        if hasattr(cls, 'attributes'):
+            score += len(cls.attributes) * 1
+        
+        # Inheritance depth
+        score += calculate_doi(cls) * 3
+        
+        # Coupling
+        score += calculate_cbo(cls) * 1.5
+        
+        return score
+    except Exception:
+        return 0.0
+
+
+def is_entry_point_function(func: Function) -> bool:
+    """Check if a function is likely an entry point"""
+    entry_point_patterns = [
+        'main', 'run', 'start', 'init', 'setup', 'launch', 'execute',
+        'app', 'server', 'cli', 'command', 'handler', 'endpoint'
+    ]
+    
+    return any(pattern in func.name.lower() for pattern in entry_point_patterns)
+
+
+def create_health_dashboard(results: AnalysisResults) -> Dict[str, Any]:
+    """Create a comprehensive health dashboard"""
+    try:
+        return {
+            "overview": {
+                "health_score": getattr(results, 'health_score', 0),
+                "health_grade": getattr(results, 'health_grade', 'N/A'),
+                "risk_level": getattr(results, 'risk_level', 'unknown'),
+                "technical_debt_hours": getattr(results, 'technical_debt_hours', 0)
+            },
+            "metrics": {
+                "total_issues": len(getattr(results, 'issues', [])),
+                "critical_issues": results.issues_by_severity.get("critical", 0) if hasattr(results, 'issues_by_severity') else 0,
+                "major_issues": results.issues_by_severity.get("major", 0) if hasattr(results, 'issues_by_severity') else 0,
+                "minor_issues": results.issues_by_severity.get("minor", 0) if hasattr(results, 'issues_by_severity') else 0
+            },
+            "quality": {
+                "average_complexity": results.complexity_metrics.get("average_cyclomatic_complexity", 0) if hasattr(results, 'complexity_metrics') else 0,
+                "documentation_coverage": results.maintainability_metrics.get("documentation_coverage", 0) if hasattr(results, 'maintainability_metrics') else 0,
+                "dead_functions": len(getattr(results, 'dead_functions', []))
+            },
+            "recommendations": generate_dashboard_recommendations(results)
+        }
+    except Exception as e:
+        return {"error": f"Failed to create health dashboard: {str(e)}"}
+
+
+def generate_dashboard_recommendations(results: AnalysisResults) -> List[str]:
+    """Generate actionable recommendations for the dashboard"""
+    recommendations = []
+    
+    try:
+        if hasattr(results, 'issues_by_severity') and results.issues_by_severity.get("critical", 0) > 0:
+            recommendations.append("🚨 Address critical issues immediately")
+        
+        if hasattr(results, 'dead_functions') and len(results.dead_functions) > 5:
+            recommendations.append("🧹 Remove dead code to improve maintainability")
+        
+        if hasattr(results, 'complexity_metrics') and results.complexity_metrics.get("average_cyclomatic_complexity", 0) > 10:
+            recommendations.append("🔄 Refactor complex functions to improve readability")
+        
+        if hasattr(results, 'maintainability_metrics') and results.maintainability_metrics.get("documentation_coverage", 0) < 50:
+            recommendations.append("📝 Improve documentation coverage")
+        
+        if hasattr(results, 'technical_debt_hours') and results.technical_debt_hours > 40:
+            recommendations.append("⏰ Significant technical debt detected - plan refactoring sprint")
+    except Exception:
+        recommendations.append("📊 Run comprehensive analysis for detailed recommendations")
+    
+    return recommendations
+
+
+# Main analysis function for API compatibility
+def analyze_codebase_comprehensive(codebase: Codebase, config: Dict[str, Any] = None) -> AnalysisResults:
+    """Main entry point for comprehensive codebase analysis"""
+    if config is None:
+        config = {}
+    
+    analyzer = ComprehensiveCodebaseAnalyzer(codebase)
+    return analyzer.analyze_comprehensive(config)
