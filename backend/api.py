@@ -24,6 +24,9 @@ from .metrics import (
     calculate_comprehensive_metrics,
     get_most_important_functions
 )
+from .enhanced_analysis import (
+    generate_repository_analysis_report
+)
 from .models import (
     CodebaseAnalysisRequest,
     CodebaseAnalysisResponse,
@@ -306,6 +309,61 @@ async def health_check():
     }
 
 
+@fastapi_app.post("/generate_report")
+async def generate_enhanced_report(request: CodebaseAnalysisRequest) -> Dict[str, Any]:
+    """
+    🎯 **ENHANCED REPOSITORY ANALYSIS REPORT GENERATOR**
+    
+    Generate a comprehensive, human-readable repository analysis report with:
+    
+    ✅ **Directory Tree Visualization** - Complete project structure with issue indicators
+    ✅ **Critical Issues Detection** - All critical issues with context and suggestions
+    ✅ **Inheritance Analysis** - Classes with deep inheritance hierarchies
+    ✅ **Automatic Resolution Suggestions** - AI-powered fix recommendations
+    ✅ **Graph-Sitter Integration** - Leverages pre-computed dependency graphs
+    ✅ **Actionable Insights** - Prioritized recommendations for improvement
+    
+    Perfect for:
+    - Code review reports
+    - Technical debt assessment
+    - Architecture documentation
+    - CI/CD integration
+    """
+    
+    start_time = time.time()
+    
+    try:
+        # Load codebase using graph-sitter
+        codebase = Codebase.from_repo(request.repo_url)
+        
+        # Generate the enhanced report
+        report_content = generate_repository_analysis_report(codebase, request.repo_url)
+        
+        processing_time = time.time() - start_time
+        
+        return {
+            "success": True,
+            "report": report_content,
+            "processing_time": processing_time,
+            "repo_url": request.repo_url,
+            "generated_at": datetime.now().isoformat(),
+            "features_used": [
+                "Directory tree visualization",
+                "Critical issues detection", 
+                "Inheritance analysis",
+                "Automatic resolution suggestions",
+                "Graph-sitter integration"
+            ]
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error_message": f"Report generation failed: {str(e)}",
+            "processing_time": time.time() - start_time
+        }
+
+
 @fastapi_app.get("/")
 async def root():
     """Root endpoint with API information."""
@@ -315,6 +373,7 @@ async def root():
         "description": "Advanced codebase analysis with comprehensive issue detection",
         "endpoints": {
             "main": "/codebase_analysis",
+            "enhanced_report": "/generate_report",
             "health": "/health",
             "docs": "/docs"
         },
@@ -324,7 +383,8 @@ async def root():
             "🎯 Entry Point Detection - All entry points with confidence scoring",
             "📈 Advanced Function Analysis - Halstead metrics and complexity",
             "🕸️ Dependency Graph Analysis - Complete architectural insights",
-            "🏗️ Structured Storage Format - Ready for CI/CD integration"
+            "🏗️ Structured Storage Format - Ready for CI/CD integration",
+            "📋 Enhanced Report Generation - Human-readable analysis reports"
         ]
     }
 
