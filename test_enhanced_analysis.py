@@ -124,8 +124,8 @@ def analyze_codebase_structure():
                     with open(file_path, 'r', encoding='utf-8') as f:
                         content = f.read()
                         repo_stats['total_lines_of_code'] += len(content.split('\n'))
-                except:
-                    pass
+                except Exception as e:
+                    print(f"Warning: Could not read {file_path}: {e}")
     
     return repo_stats
 
