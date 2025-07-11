@@ -31,6 +31,294 @@ from .models import (
 
 
 # ============================================================================
+# ADVANCED ANALYSIS COMPONENTS
+# ============================================================================
+
+class ImportResolver:
+    """Advanced import resolution and automated import fixing"""
+    
+    def __init__(self):
+        self.import_map = {}
+        self.symbol_map = {}
+        self.unused_imports = []
+        self.missing_imports = []
+    
+    def analyze_imports(self, codebase: Codebase):
+        """Analyze imports across the codebase"""
+        self._build_import_map(codebase)
+        self._build_symbol_map(codebase)
+        self._detect_unused_imports(codebase)
+        self._detect_missing_imports(codebase)
+    
+    def _build_import_map(self, codebase: Codebase):
+        """Build map of available imports"""
+        for source_file in codebase.source_files:
+            if hasattr(source_file, 'imports'):
+                for imp in source_file.imports:
+                    if hasattr(imp, 'module_name'):
+                        self.import_map[imp.module_name] = source_file.file_path
+    
+    def _build_symbol_map(self, codebase: Codebase):
+        """Build map of available symbols"""
+        for source_file in codebase.source_files:
+            for symbol in source_file.symbols:
+                if isinstance(symbol, Function):
+                    self.symbol_map[symbol.name] = source_file.file_path
+                elif isinstance(symbol, Class):
+                    self.symbol_map[symbol.name] = source_file.file_path
+    
+    def _detect_unused_imports(self, codebase: Codebase):
+        """Detect unused imports"""
+        for source_file in codebase.source_files:
+            if hasattr(source_file, 'imports') and source_file.source:
+                for imp in source_file.imports:
+                    if hasattr(imp, 'module_name'):
+                        if imp.module_name not in source_file.source:
+                            self.unused_imports.append({
+                                'name': imp.module_name,
+                                'file': source_file.file_path,
+                                'line': getattr(imp, 'line_number', 1)
+                            })
+    
+    def _detect_missing_imports(self, codebase: Codebase):
+        """Detect missing imports"""
+        for source_file in codebase.source_files:
+            if source_file.source:
+                for symbol, filepath in self.symbol_map.items():
+                    if symbol in source_file.source and filepath != source_file.file_path:
+                        if not self._is_imported(source_file, symbol):
+                            self.missing_imports.append({
+                                'symbol': symbol,
+                                'file': source_file.file_path,
+                                'source_file': filepath
+                            })
+    
+    def _is_imported(self, source_file: SourceFile, symbol: str) -> bool:
+        """Check if symbol is already imported"""
+        if hasattr(source_file, 'imports'):
+            for imp in source_file.imports:
+                if hasattr(imp, 'module_name') and symbol in str(imp):
+                    return True
+        return False
+    
+    def generate_import_fixes(self) -> List[AutomatedResolution]:
+        """Generate automated import fixes"""
+        fixes = []
+        
+        # Remove unused imports
+        for unused in self.unused_imports:
+            fixes.append(AutomatedResolution(
+                resolution_type="remove_unused_import",
+                description=f"Remove unused import: {unused['name']}",
+                original_code=f"import {unused['name']}",
+                fixed_code="",
+                confidence=0.95,
+                file_path=unused['file'],
+                line_number=unused['line'],
+                is_safe=True,
+                requires_validation=False
+            ))
+        
+        # Add missing imports
+        for missing in self.missing_imports:
+            import_path = missing['source_file'].replace('/', '.').replace('.py', '')
+            fixes.append(AutomatedResolution(
+                resolution_type="add_missing_import",
+                description=f"Add missing import: {missing['symbol']}",
+                original_code="",
+                fixed_code=f"from {import_path} import {missing['symbol']}",
+                confidence=0.90,
+                file_path=missing['file'],
+                line_number=1,
+                is_safe=True,
+                requires_validation=False
+            ))
+        
+        return fixes
+
+
+class DeadCodeAnalyzer:
+    """Advanced dead code detection with blast radius analysis"""
+    
+    def __init__(self):
+        self.dead_functions = []
+        self.dead_classes = []
+        self.dead_variables = []
+        self.blast_radius = {}
+    
+    def analyze_dead_code(self, codebase: Codebase, call_graph: Dict[str, List[str]]) -> Dict[str, Any]:
+        """Perform comprehensive dead code analysis"""
+        
+        # Find unused functions
+        self._find_dead_functions(codebase, call_graph)
+        
+        # Find unused classes
+        self._find_dead_classes(codebase)
+        
+        # Calculate blast radius for removals
+        self._calculate_blast_radius(codebase, call_graph)
+        
+        return {
+            "dead_functions": self.dead_functions,
+            "dead_classes": self.dead_classes,
+            "dead_variables": self.dead_variables,
+            "blast_radius": self.blast_radius,
+            "safe_removals": len([f for f in self.dead_functions if self.blast_radius.get(f, {}).get('safe', False)]),
+            "total_dead_code_lines": sum(self.blast_radius.get(f, {}).get('lines', 0) for f in self.dead_functions)
+        }
+    
+    def _find_dead_functions(self, codebase: Codebase, call_graph: Dict[str, List[str]]):
+        """Find functions that are never called"""
+        all_functions = set()
+        called_functions = set()
+        
+        # Collect all functions and called functions
+        for source_file in codebase.source_files:
+            for symbol in source_file.symbols:
+                if isinstance(symbol, Function):
+                    func_name = f"{source_file.file_path}::{symbol.name}"
+                    all_functions.add(func_name)
+                    
+                    # Add called functions
+                    if func_name in call_graph:
+                        called_functions.update(call_graph[func_name])
+        
+        # Find entry points (functions that should not be considered dead)
+        entry_points = set()
+        for func_name in all_functions:
+            simple_name = func_name.split("::")[-1].lower()
+            if any(pattern in simple_name for pattern in ['main', 'init', 'setup', 'run', 'start', 'app', 'server']):
+                entry_points.add(func_name)
+        
+        # Dead functions are those not called and not entry points
+        self.dead_functions = list(all_functions - called_functions - entry_points)
+    
+    def _find_dead_classes(self, codebase: Codebase):
+        """Find classes that are never instantiated"""
+        all_classes = set()
+        used_classes = set()
+        
+        for source_file in codebase.source_files:
+            for symbol in source_file.symbols:
+                if isinstance(symbol, Class):
+                    class_name = f"{source_file.file_path}::{symbol.name}"
+                    all_classes.add(class_name)
+                    
+                    # Simple heuristic: if class name appears in source, it's used
+                    if source_file.source and symbol.name in source_file.source:
+                        used_classes.add(class_name)
+        
+        self.dead_classes = list(all_classes - used_classes)
+    
+    def _calculate_blast_radius(self, codebase: Codebase, call_graph: Dict[str, List[str]]):
+        """Calculate the impact of removing dead code"""
+        for dead_func in self.dead_functions:
+            # Find the function in codebase
+            file_path, func_name = dead_func.split("::", 1)
+            
+            for source_file in codebase.source_files:
+                if source_file.file_path == file_path:
+                    for symbol in source_file.symbols:
+                        if isinstance(symbol, Function) and symbol.name == func_name:
+                            lines = symbol.line_end - symbol.line_start if hasattr(symbol, 'line_end') else 10
+                            
+                            self.blast_radius[dead_func] = {
+                                'lines': lines,
+                                'safe': lines < 50,  # Functions under 50 lines are safer to remove
+                                'dependencies': call_graph.get(dead_func, []),
+                                'dependents': []  # Functions that call this one
+                            }
+                            break
+
+
+class RepositoryStructureAnalyzer:
+    """Advanced repository structure analysis"""
+    
+    def __init__(self):
+        self.structure = {}
+        self.hotspots = []
+        self.complexity_map = {}
+    
+    def analyze_structure(self, codebase: Codebase, issues: List[CodeIssue]) -> Dict[str, Any]:
+        """Analyze repository structure with issue mapping"""
+        
+        # Build directory structure
+        self._build_directory_structure(codebase)
+        
+        # Map issues to files
+        self._map_issues_to_structure(issues)
+        
+        # Calculate complexity hotspots
+        self._calculate_complexity_hotspots(codebase)
+        
+        return {
+            "directory_structure": self.structure,
+            "issue_hotspots": self.hotspots,
+            "complexity_map": self.complexity_map,
+            "total_directories": len(set(f.file_path.split('/')[:-1] for f in codebase.source_files)),
+            "files_by_extension": self._get_files_by_extension(codebase)
+        }
+    
+    def _build_directory_structure(self, codebase: Codebase):
+        """Build hierarchical directory structure"""
+        for source_file in codebase.source_files:
+            path_parts = source_file.file_path.split('/')
+            current = self.structure
+            
+            for part in path_parts[:-1]:  # Directories
+                if part not in current:
+                    current[part] = {"type": "directory", "children": {}, "files": []}
+                current = current[part]["children"]
+            
+            # Add file
+            filename = path_parts[-1]
+            current[filename] = {
+                "type": "file",
+                "path": source_file.file_path,
+                "language": getattr(source_file, 'language', 'unknown'),
+                "size": len(source_file.source.split('\n')) if source_file.source else 0,
+                "issues": []
+            }
+    
+    def _map_issues_to_structure(self, issues: List[CodeIssue]):
+        """Map issues to files in structure"""
+        issue_counts = {}
+        
+        for issue in issues:
+            filepath = issue.filepath
+            issue_counts[filepath] = issue_counts.get(filepath, 0) + 1
+        
+        # Sort by issue count to find hotspots
+        self.hotspots = [
+            {"filepath": filepath, "issue_count": count}
+            for filepath, count in sorted(issue_counts.items(), key=lambda x: x[1], reverse=True)
+        ]
+    
+    def _calculate_complexity_hotspots(self, codebase: Codebase):
+        """Calculate complexity hotspots"""
+        for source_file in codebase.source_files:
+            complexity_score = 0
+            
+            # Simple complexity calculation
+            if source_file.source:
+                lines = len(source_file.source.split('\n'))
+                functions = len([s for s in source_file.symbols if isinstance(s, Function)])
+                classes = len([s for s in source_file.symbols if isinstance(s, Class)])
+                
+                complexity_score = lines * 0.1 + functions * 2 + classes * 3
+            
+            self.complexity_map[source_file.file_path] = complexity_score
+    
+    def _get_files_by_extension(self, codebase: Codebase) -> Dict[str, int]:
+        """Get file count by extension"""
+        extensions = {}
+        for source_file in codebase.source_files:
+            ext = source_file.file_path.split('.')[-1] if '.' in source_file.file_path else 'no_extension'
+            extensions[ext] = extensions.get(ext, 0) + 1
+        return extensions
+
+
+# ============================================================================
 # CORE ANALYSIS ENGINE
 # ============================================================================
 
@@ -43,6 +331,10 @@ class CodebaseAnalyzer:
         self.function_contexts: Dict[str, FunctionContext] = {}
         self.call_graph: Dict[str, List[str]] = {}
         self.reverse_call_graph: Dict[str, List[str]] = {}
+        self.import_resolver = ImportResolver()
+        self.dead_code_analyzer = DeadCodeAnalyzer()
+        self.repository_analyzer = RepositoryStructureAnalyzer()
+        self.blast_radius_cache = {}
         
     def analyze_codebase(self, codebase: Codebase) -> AnalysisResults:
         """Perform comprehensive codebase analysis"""
@@ -73,8 +365,17 @@ class CodebaseAnalyzer:
         # Phase 6: Health assessment
         self._assess_health(results)
         
-        # Phase 7: Generate automated resolutions
-        self._generate_automated_resolutions(results)
+        # Phase 7: Advanced import analysis
+        self._analyze_imports(codebase, results)
+        
+        # Phase 8: Dead code analysis with blast radius
+        self._analyze_dead_code_advanced(codebase, results)
+        
+        # Phase 9: Repository structure analysis
+        self._analyze_repository_structure(codebase, results)
+        
+        # Phase 10: Generate comprehensive automated resolutions
+        self._generate_automated_resolutions_advanced(results)
         
         return results
     
@@ -513,6 +814,166 @@ class CodebaseAnalyzer:
                 technical_debt += self.config.INFO_ISSUE_HOURS
         
         results.technical_debt_hours = technical_debt
+    
+    def _analyze_imports(self, codebase: Codebase, results: AnalysisResults):
+        """Perform advanced import analysis"""
+        print("🔍 Analyzing imports and dependencies...")
+        
+        self.import_resolver.analyze_imports(codebase)
+        
+        # Add import-related issues
+        for unused in self.import_resolver.unused_imports:
+            self._add_issue(
+                IssueType.DEAD_IMPORT,
+                IssueSeverity.MINOR,
+                f"Unused import: {unused['name']}",
+                unused['file'],
+                unused['line'],
+                0
+            )
+        
+        for missing in self.import_resolver.missing_imports:
+            self._add_issue(
+                IssueType.UNDEFINED_VARIABLE,
+                IssueSeverity.MAJOR,
+                f"Missing import for symbol: {missing['symbol']}",
+                missing['file'],
+                1,
+                0
+            )
+    
+    def _analyze_dead_code_advanced(self, codebase: Codebase, results: AnalysisResults):
+        """Perform advanced dead code analysis with blast radius"""
+        print("💀 Analyzing dead code with blast radius...")
+        
+        dead_code_analysis = self.dead_code_analyzer.analyze_dead_code(codebase, self.call_graph)
+        
+        # Update results with dead code analysis
+        results.dead_functions = dead_code_analysis["dead_functions"]
+        
+        # Add dead code issues
+        for dead_func in dead_code_analysis["dead_functions"]:
+            file_path, func_name = dead_func.split("::", 1)
+            blast_info = dead_code_analysis["blast_radius"].get(dead_func, {})
+            
+            self._add_issue(
+                IssueType.DEAD_FUNCTION,
+                IssueSeverity.MINOR if blast_info.get('safe', False) else IssueSeverity.INFO,
+                f"Dead function: {func_name} ({blast_info.get('lines', 0)} lines)",
+                file_path,
+                0,
+                0,
+                function_name=func_name
+            )
+        
+        # Store blast radius information
+        self.blast_radius_cache = dead_code_analysis["blast_radius"]
+    
+    def _analyze_repository_structure(self, codebase: Codebase, results: AnalysisResults):
+        """Perform repository structure analysis"""
+        print("🌳 Analyzing repository structure...")
+        
+        structure_analysis = self.repository_analyzer.analyze_structure(codebase, self.issues)
+        
+        # Store structure information for API response
+        results.repository_structure = structure_analysis
+    
+    def _generate_automated_resolutions_advanced(self, results: AnalysisResults):
+        """Generate comprehensive automated resolutions"""
+        print("🤖 Generating automated resolutions...")
+        
+        resolutions = []
+        
+        # Import-based resolutions
+        import_fixes = self.import_resolver.generate_import_fixes()
+        resolutions.extend(import_fixes)
+        
+        # Issue-based resolutions
+        for issue in self.issues:
+            resolution = self._create_automated_resolution_advanced(issue)
+            if resolution:
+                resolutions.append(resolution)
+                issue.automated_resolution = resolution
+        
+        # Dead code removal resolutions
+        for dead_func in self.dead_code_analyzer.dead_functions:
+            blast_info = self.blast_radius_cache.get(dead_func, {})
+            if blast_info.get('safe', False):
+                file_path, func_name = dead_func.split("::", 1)
+                resolutions.append(AutomatedResolution(
+                    resolution_type="remove_dead_function",
+                    description=f"Safely remove unused function: {func_name}",
+                    original_code="",  # Would need actual function source
+                    fixed_code="",
+                    confidence=0.85,
+                    file_path=file_path,
+                    line_number=0,
+                    is_safe=True,
+                    requires_validation=True
+                ))
+        
+        results.automated_resolutions = resolutions
+    
+    def _create_automated_resolution_advanced(self, issue: CodeIssue) -> Optional[AutomatedResolution]:
+        """Create advanced automated resolution for a specific issue"""
+        
+        if issue.issue_type == IssueType.MAGIC_NUMBER:
+            return AutomatedResolution(
+                resolution_type="extract_constant",
+                description="Extract magic number to a named constant",
+                original_code="",
+                fixed_code="",
+                confidence=0.8,
+                file_path=issue.filepath,
+                line_number=issue.line_number,
+                is_safe=True,
+                requires_validation=False
+            )
+        
+        elif issue.issue_type == IssueType.MISSING_DOCUMENTATION:
+            return AutomatedResolution(
+                resolution_type="add_docstring",
+                description=f"Add docstring to function '{issue.function_name}'",
+                original_code="",
+                fixed_code=self._generate_docstring_template(issue.function_name or "function"),
+                confidence=0.9,
+                file_path=issue.filepath,
+                line_number=issue.line_number,
+                is_safe=True,
+                requires_validation=False
+            )
+        
+        elif issue.issue_type == IssueType.LINE_LENGTH_VIOLATION:
+            return AutomatedResolution(
+                resolution_type="break_long_line",
+                description="Break long line into multiple lines",
+                original_code="",
+                fixed_code="",
+                confidence=0.7,
+                file_path=issue.filepath,
+                line_number=issue.line_number,
+                is_safe=True,
+                requires_validation=True
+            )
+        
+        elif issue.issue_type == IssueType.INEFFICIENT_PATTERN:
+            return AutomatedResolution(
+                resolution_type="refactor_complex_function",
+                description=f"Refactor complex function '{issue.function_name}' to reduce complexity",
+                original_code="",
+                fixed_code="",
+                confidence=0.6,
+                file_path=issue.filepath,
+                line_number=issue.line_number,
+                is_safe=False,
+                requires_validation=True
+            )
+        
+        return None
+    
+    def _generate_docstring_template(self, function_name: str) -> str:
+        """Generate a basic docstring template"""
+        return f'    """{function_name} function.\n    \n    Brief description of what this function does.\n    \n    Returns:\n        Description of return value\n    """'
     
     def _generate_automated_resolutions(self, results: AnalysisResults):
         """Generate automated resolutions for detected issues"""
