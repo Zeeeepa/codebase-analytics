@@ -605,7 +605,7 @@ class AdvancedIssueDetector:
                             suggested_fix="Define variable before use or check spelling"
                         )
                         self.issues.append(issue)
-        # Enhanced implementation added
+        # Enhanced undefined variable detection implemented
     
     def _detect_missing_returns(self):
         """Detect functions missing return statements"""
@@ -628,7 +628,7 @@ class AdvancedIssueDetector:
                                     suggested_fix="Add explicit return statement"
                                 )
                                 self.issues.append(issue)
-        # Enhanced implementation added
+        # Enhanced missing returns detection implemented
     
     def _detect_unreachable_code(self):
         """Detect unreachable code"""
@@ -819,19 +819,7 @@ class CodebaseAnalyzer:
             return self.analyze_codebase(gs_codebase)
         else:
             # Fallback to basic analysis without Graph-sitter
-            print("Falling back to basic analysis without Graph-sitter")
-            # Create a minimal results object
-            return AnalysisResults(
-                issues=[],
-                total_files=0,
-                total_functions=0,
-                total_classes=0,
-                total_lines_of_code=0,
-                most_important_functions=[],
-                entry_points=[],
-                complexity_metrics={},
-                automated_resolutions=[]
-            )
+            return self._fallback_analysis(codebase_path)
 
     def _get_graph_sitter_codebase(self, codebase_path: str):
         """Get Graph-sitter codebase instance with error handling"""
@@ -1763,10 +1751,173 @@ CodebaseAnalyzer._build_call_chains = _build_call_chains
 CodebaseAnalyzer._build_call_chain = _build_call_chain
 
 # Import and apply enhancements
-try:
-    from .analysis_enhancements import enhance_codebase_analyzer
-    CodebaseAnalyzer = enhance_codebase_analyzer(CodebaseAnalyzer)
-    print('✅ Enhanced analysis capabilities loaded successfully')
-except ImportError as e:
-    print(f'⚠️ Could not load enhanced analysis capabilities: {e}')
-    print('📝 Basic analysis functionality will still work')
+# Enhanced analysis capabilities integrated directly
+
+
+def _fallback_analysis(self, codebase_path: str) -> AnalysisResults:
+    """Fallback analysis when Graph-sitter is not available"""
+    import os
+    import ast
+    import re
+    
+    issues = []
+    total_files = 0
+    total_functions = 0
+    total_classes = 0
+    total_lines_of_code = 0
+    
+    # Walk through Python files
+    for root, dirs, files in os.walk(codebase_path):
+        # Skip hidden directories and common ignore patterns
+        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['__pycache__', 'node_modules']]
+        
+        for file in files:
+            if file.endswith('.py'):
+                filepath = os.path.join(root, file)
+                total_files += 1
+                
+                try:
+                    with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
+                        content = f.read()
+                        
+                    # Count lines of code
+                    lines = content.split('\n')
+                    total_lines_of_code += len([line for line in lines if line.strip() and not line.strip().startswith('#')])
+                    
+                    # Parse AST for basic analysis
+                    try:
+                        tree = ast.parse(content)
+                        
+                        # Count functions and classes
+                        for node in ast.walk(tree):
+                            if isinstance(node, ast.FunctionDef):
+                                total_functions += 1
+                                # Check for missing docstrings
+                                if not ast.get_docstring(node):
+                                    issues.append(CodeIssue(
+                                        issue_type=IssueType.MISSING_DOCSTRING,
+                                        severity=IssueSeverity.LOW,
+                                        message=f"Function '{node.name}' is missing a docstring",
+                                        filepath=filepath,
+                                        line_number=node.lineno,
+                                        suggested_fix=f"Add a docstring to function '{node.name}'"
+                                    ))
+                                
+                                # Check for functions without return statements
+                                has_return = any(isinstance(n, ast.Return) for n in ast.walk(node))
+                                if not has_return and node.name != '__init__':
+                                    issues.append(CodeIssue(
+                                        issue_type=IssueType.MISSING_RETURN,
+                                        severity=IssueSeverity.MEDIUM,
+                                        message=f"Function '{node.name}' may be missing a return statement",
+                                        filepath=filepath,
+                                        line_number=node.lineno,
+                                        suggested_fix=f"Add appropriate return statement to function '{node.name}'"
+                                    ))
+                            
+                            elif isinstance(node, ast.ClassDef):
+                                total_classes += 1
+                                # Check for missing class docstrings
+                                if not ast.get_docstring(node):
+                                    issues.append(CodeIssue(
+                                        issue_type=IssueType.MISSING_DOCSTRING,
+                                        severity=IssueSeverity.LOW,
+                                        message=f"Class '{node.name}' is missing a docstring",
+                                        filepath=filepath,
+                                        line_number=node.lineno,
+                                        suggested_fix=f"Add a docstring to class '{node.name}'"
+                                    ))
+                    
+                    except SyntaxError:
+                        issues.append(CodeIssue(
+                            issue_type=IssueType.SYNTAX_ERROR,
+                            severity=IssueSeverity.HIGH,
+                            message=f"Syntax error in file",
+                            filepath=filepath,
+                            line_number=1,
+                            suggested_fix="Fix syntax errors in the file"
+                        ))
+                    
+                    # Basic security checks
+                    if 'eval(' in content:
+                        line_num = next((i+1 for i, line in enumerate(lines) if 'eval(' in line), 1)
+                        issues.append(CodeIssue(
+                            issue_type=IssueType.SECURITY_VULNERABILITY,
+                            severity=IssueSeverity.HIGH,
+                            message="Use of eval() function detected - potential security risk",
+                            filepath=filepath,
+                            line_number=line_num,
+                            suggested_fix="Replace eval() with safer alternatives like ast.literal_eval()"
+                        ))
+                    
+                    if 'exec(' in content:
+                        line_num = next((i+1 for i, line in enumerate(lines) if 'exec(' in line), 1)
+                        issues.append(CodeIssue(
+                            issue_type=IssueType.SECURITY_VULNERABILITY,
+                            severity=IssueSeverity.HIGH,
+                            message="Use of exec() function detected - potential security risk",
+                            filepath=filepath,
+                            line_number=line_num,
+                            suggested_fix="Avoid using exec() or implement proper input validation"
+                        ))
+                    
+                    # Check for hardcoded secrets patterns
+                    secret_patterns = [
+                        (r'password\s*=\s*["\'][^"\']+["\']', "Hardcoded password detected"),
+                        (r'api_key\s*=\s*["\'][^"\']+["\']', "Hardcoded API key detected"),
+                        (r'secret\s*=\s*["\'][^"\']+["\']', "Hardcoded secret detected"),
+                    ]
+                    
+                    for pattern, message in secret_patterns:
+                        matches = re.finditer(pattern, content, re.IGNORECASE)
+                        for match in matches:
+                            line_num = content[:match.start()].count('\n') + 1
+                            issues.append(CodeIssue(
+                                issue_type=IssueType.SECURITY_VULNERABILITY,
+                                severity=IssueSeverity.HIGH,
+                                message=message,
+                                filepath=filepath,
+                                line_number=line_num,
+                                suggested_fix="Move sensitive data to environment variables or secure configuration"
+                            ))
+                    
+                except Exception as e:
+                    # Skip files that can't be read
+                    continue
+    
+    # Calculate health score based on issues
+    if total_files == 0:
+        health_score = 0.0
+    else:
+        # Simple health score calculation
+        high_severity_issues = len([i for i in issues if i.severity == IssueSeverity.HIGH])
+        medium_severity_issues = len([i for i in issues if i.severity == IssueSeverity.MEDIUM])
+        low_severity_issues = len([i for i in issues if i.severity == IssueSeverity.LOW])
+        
+        # Weight issues by severity
+        weighted_issues = high_severity_issues * 3 + medium_severity_issues * 2 + low_severity_issues * 1
+        max_possible_issues = total_files * 10  # Assume max 10 issues per file
+        
+        health_score = max(0.0, 1.0 - (weighted_issues / max_possible_issues)) * 100
+    
+    return AnalysisResults(
+        issues=issues,
+        total_files=total_files,
+        total_functions=total_functions,
+        total_classes=total_classes,
+        total_lines_of_code=total_lines_of_code,
+        most_important_functions=[],
+        entry_points=[],
+        complexity_metrics={
+            "total_files": total_files,
+            "total_functions": total_functions,
+            "total_classes": total_classes,
+            "average_functions_per_file": total_functions / max(total_files, 1),
+            "average_lines_per_file": total_lines_of_code / max(total_files, 1)
+        },
+        automated_resolutions=[],
+        health_score=health_score
+    )
+
+# Bind fallback analysis method to CodebaseAnalyzer class
+CodebaseAnalyzer._fallback_analysis = _fallback_analysis
