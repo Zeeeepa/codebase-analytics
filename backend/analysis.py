@@ -28,6 +28,7 @@ from .models import (
     CodeIssue, IssueType, IssueSeverity, FunctionContext, 
     AnalysisResults, AutomatedResolution, AnalysisConfig
 )
+from .enhanced_analysis import create_health_dashboard, get_codebase_summary
 
 
 # ============================================================================
@@ -322,6 +323,312 @@ class RepositoryStructureAnalyzer:
 # CORE ANALYSIS ENGINE
 # ============================================================================
 
+class AdvancedIssueDetector:
+    """Advanced issue detection with automated resolution capabilities"""
+    
+    def __init__(self, codebase: Codebase):
+        self.codebase = codebase
+        self.issues: List[CodeIssue] = []
+        self.automated_resolutions: List[AutomatedResolution] = []
+        self.import_resolver = ImportResolver()
+        
+    def detect_all_issues(self) -> List[CodeIssue]:
+        """Detect all types of issues with automated resolutions"""
+        print("🔍 Starting comprehensive issue detection...")
+        
+        # Implementation errors
+        self._detect_null_references()
+        self._detect_type_mismatches()
+        self._detect_undefined_variables()
+        self._detect_missing_returns()
+        self._detect_unreachable_code()
+        
+        # Function issues
+        self._detect_function_issues()
+        self._detect_parameter_issues()
+        
+        # Exception handling
+        self._detect_exception_handling_issues()
+        self._detect_resource_leaks()
+        
+        # Code quality
+        self._detect_code_quality_issues()
+        self._detect_magic_numbers()
+        
+        # Formatting & style
+        self._detect_style_issues()
+        self._detect_import_issues()
+        
+        # Runtime risks
+        self._detect_runtime_risks()
+        
+        # Dead code
+        self._detect_dead_code()
+        
+        print(f"✅ Detected {len(self.issues)} issues with {len(self.automated_resolutions)} automated resolutions")
+        return self.issues
+    
+    def _detect_null_references(self):
+        """Detect potential null reference issues"""
+        for source_file in self.codebase.source_files:
+            if source_file.source:
+                lines = source_file.source.split('\n')
+                for i, line in enumerate(lines):
+                    # Check for .get() without null checks
+                    if '.get(' in line and 'if' not in line and 'or' not in line:
+                        issue = CodeIssue(
+                            issue_type=IssueType.NULL_REFERENCE,
+                            severity=IssueSeverity.MAJOR,
+                            message="Potential null reference: .get() without null check",
+                            filepath=source_file.file_path,
+                            line_number=i + 1,
+                            column_number=line.find('.get('),
+                            context={"line": line.strip()},
+                            suggested_fix="Add null check or provide default value"
+                        )
+                        
+                        # Automated resolution
+                        if '.get(' in line:
+                            fixed_line = self._fix_null_reference(line)
+                            issue.automated_resolution = AutomatedResolution(
+                                resolution_type="null_check_addition",
+                                description="Add null check with default value",
+                                original_code=line.strip(),
+                                fixed_code=fixed_line,
+                                confidence=0.85,
+                                file_path=source_file.file_path,
+                                line_number=i + 1
+                            )
+                        
+                        self.issues.append(issue)
+    
+    def _fix_null_reference(self, line: str) -> str:
+        """Automatically fix null reference issues"""
+        # Simple pattern: obj.get('key') -> obj.get('key', None)
+        pattern = r'(\w+)\.get\([\'"]([^\'"]+)[\'"]\)'
+        match = re.search(pattern, line)
+        if match:
+            obj, key = match.groups()
+            return line.replace(f"{obj}.get('{key}')", f"{obj}.get('{key}', None)")
+        return line
+    
+    def _detect_function_issues(self):
+        """Detect function-related issues"""
+        for source_file in self.codebase.source_files:
+            for symbol in source_file.symbols:
+                if isinstance(symbol, Function):
+                    # Long function detection
+                    line_count = symbol.line_end - symbol.line_start
+                    if line_count > 50:
+                        issue = CodeIssue(
+                            issue_type=IssueType.LONG_FUNCTION,
+                            severity=IssueSeverity.MAJOR,
+                            message=f"Function '{symbol.name}' is too long ({line_count} lines)",
+                            filepath=source_file.file_path,
+                            line_number=symbol.line_start,
+                            column_number=0,
+                            function_name=symbol.name,
+                            context={"line_count": line_count},
+                            suggested_fix="Break down into smaller functions"
+                        )
+                        self.issues.append(issue)
+                    
+                    # Missing documentation
+                    if not symbol.docstring:
+                        issue = CodeIssue(
+                            issue_type=IssueType.MISSING_DOCUMENTATION,
+                            severity=IssueSeverity.MINOR,
+                            message=f"Function '{symbol.name}' lacks documentation",
+                            filepath=source_file.file_path,
+                            line_number=symbol.line_start,
+                            column_number=0,
+                            function_name=symbol.name,
+                            suggested_fix="Add docstring explaining function purpose"
+                        )
+                        
+                        # Automated resolution - add basic docstring
+                        docstring = self._generate_docstring(symbol)
+                        issue.automated_resolution = AutomatedResolution(
+                            resolution_type="add_docstring",
+                            description=f"Add docstring to function '{symbol.name}'",
+                            original_code="",
+                            fixed_code=docstring,
+                            confidence=0.80,
+                            file_path=source_file.file_path,
+                            line_number=symbol.line_start + 1
+                        )
+                        
+                        self.issues.append(issue)
+    
+    def _generate_docstring(self, function: Function) -> str:
+        """Generate basic docstring for a function"""
+        params = ""
+        if hasattr(function, 'parameters') and function.parameters:
+            param_list = [f"        {param.name}: Description of {param.name}" 
+                         for param in function.parameters if hasattr(param, 'name')]
+            if param_list:
+                params = f"\n    Args:\n" + "\n".join(param_list)
+        
+        return f'    """{function.name} function.\n    \n    Brief description of what this function does.{params}\n    \n    Returns:\n        Description of return value\n    """'
+    
+    def _detect_magic_numbers(self):
+        """Detect magic numbers in code"""
+        for source_file in self.codebase.source_files:
+            if source_file.source:
+                lines = source_file.source.split('\n')
+                for i, line in enumerate(lines):
+                    # Find numeric literals (excluding 0, 1, -1)
+                    numbers = re.findall(r'\b(?<![.\w])\d{2,}\b(?![.\w])', line)
+                    for number in numbers:
+                        if int(number) not in [0, 1, -1, 100]:  # Common acceptable numbers
+                            issue = CodeIssue(
+                                issue_type=IssueType.MAGIC_NUMBER,
+                                severity=IssueSeverity.MINOR,
+                                message=f"Magic number detected: {number}",
+                                filepath=source_file.file_path,
+                                line_number=i + 1,
+                                column_number=line.find(number),
+                                context={"number": number, "line": line.strip()},
+                                suggested_fix=f"Replace {number} with named constant"
+                            )
+                            self.issues.append(issue)
+    
+    def _detect_runtime_risks(self):
+        """Detect potential runtime risks"""
+        for source_file in self.codebase.source_files:
+            if source_file.source:
+                lines = source_file.source.split('\n')
+                for i, line in enumerate(lines):
+                    # Division by zero risk
+                    if '/' in line and 'if' not in line:
+                        # Simple heuristic for potential division by zero
+                        if re.search(r'/\s*\w+(?!\w)', line):
+                            issue = CodeIssue(
+                                issue_type=IssueType.DIVISION_BY_ZERO,
+                                severity=IssueSeverity.MAJOR,
+                                message="Potential division by zero",
+                                filepath=source_file.file_path,
+                                line_number=i + 1,
+                                column_number=line.find('/'),
+                                context={"line": line.strip()},
+                                suggested_fix="Add zero check before division"
+                            )
+                            self.issues.append(issue)
+    
+    def _detect_dead_code(self):
+        """Detect dead code with automated removal suggestions"""
+        # Find unused functions
+        for source_file in self.codebase.source_files:
+            for symbol in source_file.symbols:
+                if isinstance(symbol, Function):
+                    if hasattr(symbol, 'usages') and len(symbol.usages) == 0:
+                        # Check if it's not an entry point
+                        if not self._is_entry_point(symbol):
+                            issue = CodeIssue(
+                                issue_type=IssueType.DEAD_FUNCTION,
+                                severity=IssueSeverity.MINOR,
+                                message=f"Unused function: {symbol.name}",
+                                filepath=source_file.file_path,
+                                line_number=symbol.line_start,
+                                column_number=0,
+                                function_name=symbol.name,
+                                context={"reason": "No usages found"},
+                                suggested_fix="Remove unused function or verify if function is needed"
+                            )
+                            
+                            # Automated resolution - mark for removal
+                            issue.automated_resolution = AutomatedResolution(
+                                resolution_type="remove_dead_function",
+                                description=f"Remove unused function '{symbol.name}'",
+                                original_code="",  # Will be filled with function source
+                                fixed_code="",  # Empty means remove
+                                confidence=0.75,
+                                file_path=source_file.file_path,
+                                line_number=symbol.line_start
+                            )
+                            
+                            self.issues.append(issue)
+    
+    def _is_entry_point(self, function: Function) -> bool:
+        """Check if function is an entry point"""
+        entry_patterns = ['main', '__main__', 'run', 'start', 'execute', 'init', 'setup']
+        return any(pattern in function.name.lower() for pattern in entry_patterns)
+    
+    def _detect_type_mismatches(self):
+        """Detect type mismatch issues"""
+        # Placeholder for advanced type analysis
+        pass
+    
+    def _detect_undefined_variables(self):
+        """Detect undefined variable usage"""
+        # Placeholder for advanced variable analysis
+        pass
+    
+    def _detect_missing_returns(self):
+        """Detect functions missing return statements"""
+        # Placeholder for return statement analysis
+        pass
+    
+    def _detect_unreachable_code(self):
+        """Detect unreachable code"""
+        # Placeholder for unreachable code analysis
+        pass
+    
+    def _detect_parameter_issues(self):
+        """Detect parameter-related issues"""
+        # Placeholder for parameter analysis
+        pass
+    
+    def _detect_exception_handling_issues(self):
+        """Detect exception handling issues"""
+        # Placeholder for exception handling analysis
+        pass
+    
+    def _detect_resource_leaks(self):
+        """Detect resource leak issues"""
+        # Placeholder for resource leak analysis
+        pass
+    
+    def _detect_code_quality_issues(self):
+        """Detect code quality issues"""
+        # Placeholder for code quality analysis
+        pass
+    
+    def _detect_style_issues(self):
+        """Detect style issues"""
+        # Placeholder for style analysis
+        pass
+    
+    def _detect_import_issues(self):
+        """Detect import-related issues"""
+        self.import_resolver.analyze_imports(self.codebase)
+        
+        # Add unused import issues
+        for unused in self.import_resolver.unused_imports:
+            issue = CodeIssue(
+                issue_type=IssueType.DEAD_IMPORT,
+                severity=IssueSeverity.MINOR,
+                message=f"Unused import: {unused['name']}",
+                filepath=unused['file'],
+                line_number=unused['line'],
+                column_number=0,
+                suggested_fix="Remove unused import"
+            )
+            
+            # Automated resolution
+            issue.automated_resolution = AutomatedResolution(
+                resolution_type="remove_unused_import",
+                description=f"Remove unused import '{unused['name']}'",
+                original_code=f"import {unused['name']}",
+                fixed_code="",
+                confidence=0.90,
+                file_path=unused['file'],
+                line_number=unused['line']
+            )
+            
+            self.issues.append(issue)
+
+
 class CodebaseAnalyzer:
     """Main analysis engine for comprehensive codebase analysis"""
     
@@ -335,6 +642,7 @@ class CodebaseAnalyzer:
         self.dead_code_analyzer = DeadCodeAnalyzer()
         self.repository_analyzer = RepositoryStructureAnalyzer()
         self.blast_radius_cache = {}
+        self.advanced_issue_detector = None
         
     def analyze_codebase(self, codebase: Codebase) -> AnalysisResults:
         """Perform comprehensive codebase analysis"""
@@ -353,29 +661,40 @@ class CodebaseAnalyzer:
         # Phase 2: Function analysis and context building
         self._analyze_functions(codebase, results)
         
-        # Phase 3: Issue detection
+        # Phase 3: Advanced issue detection with automated resolutions
+        self.advanced_issue_detector = AdvancedIssueDetector(codebase)
+        advanced_issues = self.advanced_issue_detector.detect_all_issues()
+        
+        # Phase 4: Traditional issue detection (for compatibility)
         self._detect_issues(codebase, results)
         
-        # Phase 4: Call graph analysis
+        # Merge advanced issues with traditional issues
+        results.issues.extend(advanced_issues)
+        
+        # Phase 5: Call graph analysis
         self._analyze_call_graph(codebase, results)
         
-        # Phase 5: Quality metrics calculation
+        # Phase 6: Quality metrics calculation
         self._calculate_quality_metrics(codebase, results)
         
-        # Phase 6: Health assessment
+        # Phase 7: Health assessment
         self._assess_health(results)
         
-        # Phase 7: Advanced import analysis
+        # Phase 8: Advanced import analysis
         self._analyze_imports(codebase, results)
         
-        # Phase 8: Dead code analysis with blast radius
+        # Phase 9: Dead code analysis with blast radius
         self._analyze_dead_code_advanced(codebase, results)
         
-        # Phase 9: Repository structure analysis
+        # Phase 10: Repository structure analysis
         self._analyze_repository_structure(codebase, results)
         
-        # Phase 10: Generate comprehensive automated resolutions
+        # Phase 11: Generate comprehensive automated resolutions
         self._generate_automated_resolutions_advanced(results)
+        
+        # Phase 12: Collect automated resolutions from advanced detector
+        if self.advanced_issue_detector:
+            results.automated_resolutions.extend(self.advanced_issue_detector.automated_resolutions)
         
         return results
     
@@ -423,6 +742,16 @@ class CodebaseAnalyzer:
             context.called_by = self.reverse_call_graph.get(func_name, [])
             context.fan_in = len(context.called_by)
             context.fan_out = len(context.function_calls)
+        
+        # Enhanced analysis: coupling, cohesion, and importance
+        from .enhanced_analysis import (
+            calculate_coupling_cohesion_metrics, 
+            detect_function_importance, 
+            build_call_chains
+        )
+        calculate_coupling_cohesion_metrics(self)
+        detect_function_importance(self, results)
+        build_call_chains(self)
         
         results.function_contexts = self.function_contexts
     
