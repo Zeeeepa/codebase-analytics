@@ -1760,3 +1760,402 @@ CodebaseAnalyzer._calculate_coupling_cohesion_metrics = _calculate_coupling_cohe
 CodebaseAnalyzer._detect_function_importance = _detect_function_importance
 CodebaseAnalyzer._build_call_chains = _build_call_chains
 CodebaseAnalyzer._build_call_chain = _build_call_chain
+
+
+# ============================================================================
+# ENHANCED FUNCTION CONTEXT ANALYSIS - CODEBASE UNDERSTANDING FOCUS
+# ============================================================================
+
+def get_function_context_enhanced(function) -> dict:
+    """Get complete implementation, dependencies, and usage context."""
+    return {
+        "implementation": {
+            "source": getattr(function, 'source', ''),
+            "filepath": getattr(function, 'filepath', ''),
+            "line_start": getattr(function, 'line_start', 0),
+            "line_end": getattr(function, 'line_end', 0)
+        },
+        "dependencies": [hop_through_imports(dep) for dep in getattr(function, 'dependencies', [])],
+        "usages": [
+            {
+                "source": getattr(usage.usage_symbol, 'source', '') if hasattr(usage, 'usage_symbol') else '',
+                "filepath": getattr(usage.usage_symbol, 'filepath', '') if hasattr(usage, 'usage_symbol') else '',
+                "line": getattr(usage.usage_symbol, 'start_point', [0])[0] if hasattr(usage, 'usage_symbol') and hasattr(usage.usage_symbol, 'start_point') else 0
+            }
+            for usage in getattr(function, 'usages', [])
+        ],
+        "call_chain": get_max_call_chain_enhanced(function),
+        "issues": get_function_issues_with_context(function),
+        "parameters": analyze_parameters_with_types(function),
+        "importance_score": calculate_function_importance(function),
+        "is_entry_point": is_critical_entry_point(function),
+        "halstead_metrics": calculate_halstead_metrics_for_function(function)
+    }
+
+def hop_through_imports(dependency) -> dict:
+    """Hop through imports to find root symbol source."""
+    if not dependency:
+        return {"name": "unknown", "source": "", "filepath": ""}
+    
+    # Follow import chain to find original source
+    current = dependency
+    visited = set()
+    
+    while hasattr(current, 'source') and current not in visited:
+        visited.add(current)
+        if hasattr(current, 'imported_symbol'):
+            current = current.imported_symbol
+        else:
+            break
+    
+    return {
+        "name": getattr(current, 'name', str(dependency)),
+        "source": getattr(current, 'source', ''),
+        "filepath": getattr(current, 'filepath', ''),
+        "type": getattr(current, 'type', 'unknown')
+    }
+
+def get_max_call_chain_enhanced(function) -> List[str]:
+    """Calculate the maximum call chain for a function."""
+    if not function or not hasattr(function, 'function_calls'):
+        return [getattr(function, 'name', 'unknown')]
+    
+    visited = set()
+    
+    def build_chain(func, depth=0):
+        if depth > 10 or not func or getattr(func, 'name', None) in visited:
+            return [getattr(func, 'name', 'unknown')]
+        
+        visited.add(getattr(func, 'name', 'unknown'))
+        max_chain = [getattr(func, 'name', 'unknown')]
+        
+        for call in getattr(func, 'function_calls', []):
+            if hasattr(call, 'function_definition'):
+                chain = build_chain(call.function_definition, depth + 1)
+                if len(chain) > len(max_chain) - 1:
+                    max_chain = [getattr(func, 'name', 'unknown')] + chain
+        
+        return max_chain
+    
+    return build_chain(function)
+
+def get_function_issues_with_context(function) -> List[dict]:
+    """Get all issues for a function with detailed context."""
+    issues = []
+    
+    if not function:
+        return issues
+    
+    # Check for critical implementation issues
+    source = getattr(function, 'source', '')
+    name = getattr(function, 'name', 'unknown')
+    filepath = getattr(function, 'filepath', '')
+    
+    # Null reference detection
+    if '.get(' in source and 'if' not in source:
+        issues.append({
+            "type": "null_reference",
+            "severity": "critical",
+            "message": f"Potential null reference in '{name}'",
+            "context": {"pattern": ".get() without null check"},
+            "line": _find_line_number(source, '.get('),
+            "fix_suggestion": "Add null check before using .get() result"
+        })
+    
+    # Missing return statement
+    if 'def ' in source and 'return' not in source and 'yield' not in source:
+        issues.append({
+            "type": "missing_return",
+            "severity": "major",
+            "message": f"Function '{name}' may be missing return statement",
+            "context": {"has_def": True, "has_return": False},
+            "line": 1,
+            "fix_suggestion": "Add explicit return statement"
+        })
+    
+    # Unused parameters
+    parameters = getattr(function, 'parameters', [])
+    for param in parameters:
+        param_name = getattr(param, 'name', str(param))
+        if param_name not in source.replace(f'def {name}(', ''):
+            issues.append({
+                "type": "unused_parameter",
+                "severity": "minor",
+                "message": f"Unused parameter '{param_name}' in function '{name}'",
+                "context": {"parameter": param_name},
+                "line": 1,
+                "fix_suggestion": f"Remove unused parameter '{param_name}' or use it in function body"
+            })
+    
+    # Long function detection
+    if hasattr(function, 'start_point') and hasattr(function, 'end_point'):
+        line_count = function.end_point[0] - function.start_point[0]
+        if line_count > 50:
+            issues.append({
+                "type": "long_function",
+                "severity": "major",
+                "message": f"Function '{name}' is too long ({line_count} lines)",
+                "context": {"line_count": line_count},
+                "line": function.start_point[0],
+                "fix_suggestion": "Break down into smaller functions"
+            })
+    
+    # Missing documentation
+    if '"""' not in source and "'''" not in source:
+        issues.append({
+            "type": "missing_documentation",
+            "severity": "minor",
+            "message": f"Function '{name}' lacks documentation",
+            "context": {"has_docstring": False},
+            "line": 1,
+            "fix_suggestion": "Add docstring explaining function purpose"
+        })
+    
+    return issues
+
+def _find_line_number(source: str, pattern: str) -> int:
+    """Find line number of pattern in source code."""
+    lines = source.split('\n')
+    for i, line in enumerate(lines):
+        if pattern in line:
+            return i + 1
+    return 1
+
+def analyze_parameters_with_types(function) -> List[dict]:
+    """Analyze function parameters with type information."""
+    if not function or not hasattr(function, 'parameters'):
+        return []
+    
+    parameters = []
+    for param in function.parameters:
+        param_info = {
+            "name": getattr(param, 'name', str(param)),
+            "type": getattr(param, 'type', None),
+            "default": getattr(param, 'default', None),
+            "is_used": False,
+            "usage_count": 0
+        }
+        
+        # Check if parameter is used in function body
+        source = getattr(function, 'source', '')
+        param_name = param_info["name"]
+        if param_name in source:
+            param_info["is_used"] = True
+            param_info["usage_count"] = source.count(param_name)
+        
+        parameters.append(param_info)
+    
+    return parameters
+
+def calculate_function_importance(function) -> int:
+    """Calculate importance score for a function (0-100)."""
+    if not function:
+        return 0
+    
+    score = 0
+    
+    # Entry point bonus
+    if is_critical_entry_point(function):
+        score += 30
+    
+    # Usage frequency
+    usages = getattr(function, 'usages', [])
+    score += min(len(usages) * 5, 25)
+    
+    # Function calls (fan-out)
+    calls = getattr(function, 'function_calls', [])
+    score += min(len(calls) * 2, 20)
+    
+    # Dependencies
+    deps = getattr(function, 'dependencies', [])
+    score += min(len(deps) * 1, 15)
+    
+    # Call chain length
+    chain = get_max_call_chain_enhanced(function)
+    score += min(len(chain) * 2, 10)
+    
+    return min(score, 100)
+
+def is_critical_entry_point(function) -> bool:
+    """Check if function is a critical entry point."""
+    if not function:
+        return False
+    
+    name = getattr(function, 'name', '').lower()
+    
+    # Main entry patterns
+    main_patterns = ['main', '__main__', 'run', 'start', 'execute', 'init', 'setup']
+    if any(pattern in name for pattern in main_patterns):
+        return True
+    
+    # API endpoint patterns
+    api_patterns = ['get_', 'post_', 'put_', 'delete_', 'patch_', 'api_', 'endpoint_']
+    if any(pattern in name for pattern in api_patterns):
+        return True
+    
+    # CLI patterns
+    cli_patterns = ['cli', 'command', 'cmd', 'parse_args']
+    if any(pattern in name for pattern in cli_patterns):
+        return True
+    
+    # High usage indicates importance
+    usages = getattr(function, 'usages', [])
+    if len(usages) > 10:
+        return True
+    
+    return False
+
+def calculate_halstead_metrics_for_function(function) -> dict:
+    """Calculate Halstead metrics for a specific function."""
+    if not function:
+        return {}
+    
+    source = getattr(function, 'source', '')
+    if not source:
+        return {}
+    
+    # Operators
+    operators = {}
+    operator_patterns = [
+        '+', '-', '*', '/', '//', '%', '**',
+        '=', '+=', '-=', '*=', '/=',
+        '==', '!=', '<', '>', '<=', '>=',
+        'and', 'or', 'not', 'in', 'is',
+        'if', 'else', 'elif', 'for', 'while',
+        'def', 'class', 'return', 'yield',
+        'import', 'from', 'as', 'try', 'except'
+    ]
+    
+    for op in operator_patterns:
+        count = source.count(op)
+        if count > 0:
+            operators[op] = count
+    
+    # Operands (simplified - variables, numbers, strings)
+    operands = {}
+    
+    # Variables
+    import re
+    var_pattern = r'\b[a-zA-Z_][a-zA-Z0-9_]*\b'
+    variables = re.findall(var_pattern, source)
+    for var in variables:
+        if var not in operator_patterns:
+            operands[var] = operands.get(var, 0) + 1
+    
+    # Numbers
+    num_pattern = r'\b\d+\.?\d*\b'
+    numbers = re.findall(num_pattern, source)
+    for num in numbers:
+        operands[f"NUM_{num}"] = operands.get(f"NUM_{num}", 0) + 1
+    
+    # Calculate metrics
+    n1 = len(operators)  # Unique operators
+    n2 = len(operands)   # Unique operands
+    N1 = sum(operators.values())  # Total operators
+    N2 = sum(operands.values())   # Total operands
+    
+    if n1 == 0 or n2 == 0:
+        return {}
+    
+    vocabulary = n1 + n2
+    length = N1 + N2
+    volume = length * math.log2(vocabulary) if vocabulary > 0 else 0
+    difficulty = (n1 / 2) * (N2 / n2) if n2 > 0 else 0
+    effort = difficulty * volume
+    
+    return {
+        "vocabulary": vocabulary,
+        "length": length,
+        "volume": volume,
+        "difficulty": difficulty,
+        "effort": effort,
+        "time_seconds": effort / 18 if effort > 0 else 0,
+        "estimated_bugs": volume / 3000 if volume > 0 else 0
+    }
+
+def find_most_important_functions_enhanced(codebase) -> List[dict]:
+    """Find the most important functions with comprehensive analysis."""
+    if not codebase or not hasattr(codebase, 'functions'):
+        return []
+    
+    function_scores = []
+    
+    for function in codebase.functions:
+        context = get_function_context_enhanced(function)
+        
+        function_info = {
+            "name": getattr(function, 'name', 'unknown'),
+            "filepath": getattr(function, 'filepath', ''),
+            "importance_score": context["importance_score"],
+            "is_entry_point": context["is_entry_point"],
+            "usage_count": len(context["usages"]),
+            "call_count": len(getattr(function, 'function_calls', [])),
+            "dependency_count": len(context["dependencies"]),
+            "call_chain_length": len(context["call_chain"]),
+            "issues_count": len(context["issues"]),
+            "halstead_volume": context["halstead_metrics"].get("volume", 0),
+            "halstead_difficulty": context["halstead_metrics"].get("difficulty", 0)
+        }
+        
+        function_scores.append(function_info)
+    
+    # Sort by importance score
+    function_scores.sort(key=lambda x: x["importance_score"], reverse=True)
+    
+    return function_scores[:20]  # Top 20 most important
+
+def get_comprehensive_analysis_report(codebase) -> dict:
+    """Generate comprehensive analysis report focused on codebase understanding."""
+    if not codebase:
+        return {}
+    
+    # Get all functions with enhanced context
+    all_functions = []
+    total_issues = {"critical": 0, "major": 0, "minor": 0, "info": 0}
+    
+    for file in getattr(codebase, 'files', []):
+        for symbol in getattr(file, 'symbols', []):
+            if hasattr(symbol, 'name') and 'Function' in str(type(symbol)):
+                context = get_function_context_enhanced(symbol)
+                all_functions.append({
+                    "function": symbol,
+                    "context": context
+                })
+                
+                # Count issues
+                for issue in context["issues"]:
+                    severity = issue.get("severity", "info")
+                    total_issues[severity] += 1
+    
+    # Find most important functions
+    important_functions = find_most_important_functions_enhanced(codebase)
+    
+    # Find entry points
+    entry_points = [
+        func for func in important_functions 
+        if func["is_entry_point"]
+    ]
+    
+    # Calculate summary statistics
+    total_files = len(getattr(codebase, 'files', []))
+    total_functions_count = len(all_functions)
+    total_issues_count = sum(total_issues.values())
+    
+    return {
+        "summary": {
+            "total_files": total_files,
+            "total_functions": total_functions_count,
+            "total_issues": total_issues_count,
+            "critical_issues": total_issues["critical"],
+            "major_issues": total_issues["major"],
+            "minor_issues": total_issues["minor"],
+            "entry_points_count": len(entry_points)
+        },
+        "most_important_functions": important_functions,
+        "entry_points": entry_points,
+        "issues_by_severity": total_issues,
+        "function_contexts": {
+            getattr(item["function"], 'name', 'unknown'): item["context"] 
+            for item in all_functions
+        }
+    }
