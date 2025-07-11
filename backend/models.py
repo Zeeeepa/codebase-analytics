@@ -71,6 +71,17 @@ class IssueType(Enum):
     DEAD_VARIABLE = "dead_variable"
     DEAD_CLASS = "dead_class"
     DEAD_IMPORT = "dead_import"
+    
+    # Additional Issue Types
+    LONG_PARAMETER_LIST = "long_parameter_list"
+    BARE_EXCEPT = "bare_except"
+    EMPTY_EXCEPT = "empty_except"
+    TODO_COMMENT = "todo_comment"
+    PRINT_STATEMENT = "print_statement"
+    HARDCODED_CONFIG = "hardcoded_config"
+    TRAILING_WHITESPACE = "trailing_whitespace"
+    MIXED_INDENTATION = "mixed_indentation"
+    EXCESSIVE_BLANK_LINES = "excessive_blank_lines"
 
 
 # ============================================================================

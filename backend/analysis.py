@@ -3,10 +3,10 @@ Codebase Analytics - Core Analysis Engine
 Comprehensive analysis engine for code quality, issue detection, and metrics calculation
 """
 
-import math
 import re
 from typing import Dict, List, Any, Optional, Tuple, Set
 from datetime import datetime
+import math
 # Graph-sitter integration with graceful fallback
 try:
     import graph_sitter
@@ -632,33 +632,133 @@ class AdvancedIssueDetector:
     
     def _detect_unreachable_code(self):
         """Detect unreachable code"""
-        # Placeholder for unreachable code analysis
-        pass
+        for source_file in self.codebase.files:
+            if source_file.source:
+                lines = source_file.source.split("\n")
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    # Check for code after return statements
+                    if "return" in stripped and i + 1 < len(lines):
+                        next_line = lines[i + 1].strip()
+                        if next_line and not next_line.startswith("#") and not next_line.startswith("}"):
+                            # Check if it's not another function or class definition
+                            if not any(keyword in next_line for keyword in ["def ", "class ", "if ", "else:", "elif ", "except:", "finally:"]):
+                                issue = CodeIssue(
+                                    issue_type=IssueType.UNREACHABLE_CODE,
+                                    severity=IssueSeverity.MAJOR,
+                                    message="Unreachable code after return statement",
+                                    filepath=source_file.file_path,
+                                    line_number=i + 2,
+                                    column_number=0,
+                                    context={"line": next_line},
+                                    suggested_fix="Remove unreachable code or restructure logic"
+                                )
+                                self.issues.append(issue)
     
     def _detect_parameter_issues(self):
         """Detect parameter-related issues"""
-        # Placeholder for parameter analysis
-        pass
+        for source_file in self.codebase.files:
+            for symbol in source_file.symbols:
+                if isinstance(symbol, Function):
+                    # Check for too many parameters
+                    if hasattr(symbol, "parameters") and symbol.parameters:
+                        param_count = len(symbol.parameters)
+                        if param_count > 7:  # Generally considered too many
+                            issue = CodeIssue(
+                                issue_type=IssueType.LONG_PARAMETER_LIST,
+                                severity=IssueSeverity.MAJOR,
+                                message=f"Function '{symbol.name}' has too many parameters ({param_count})",
+                                filepath=source_file.file_path,
+                                line_number=symbol.line_start,
+                                column_number=0,
+                                function_name=symbol.name,
+                                context={"parameter_count": param_count},
+                                suggested_fix="Consider using a parameter object or breaking down the function"
+                            )
+                            self.issues.append(issue)
     
     def _detect_exception_handling_issues(self):
         """Detect exception handling issues"""
-        # Placeholder for exception handling analysis
-        pass
+        for source_file in self.codebase.files:
+            if source_file.source:
+                lines = source_file.source.split("\n")
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    # Check for bare except clauses
+                    if stripped == "except:" or stripped.startswith("except:"):
+                        issue = CodeIssue(
+                            issue_type=IssueType.BARE_EXCEPT,
+                            severity=IssueSeverity.MAJOR,
+                            message="Bare except clause catches all exceptions",
+                            filepath=source_file.file_path,
+                            line_number=i + 1,
+                            column_number=0,
+                            context={"line": stripped},
+                            suggested_fix="Specify exception types or use 'except Exception:'"
+                        )
+                        self.issues.append(issue)
     
     def _detect_resource_leaks(self):
         """Detect resource leak issues"""
-        # Placeholder for resource leak analysis
-        pass
+        for source_file in self.codebase.files:
+            if source_file.source:
+                lines = source_file.source.split("\n")
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    # Check for file operations without context managers
+                    if "open(" in stripped and "with" not in stripped:
+                        issue = CodeIssue(
+                            issue_type=IssueType.RESOURCE_LEAK,
+                            severity=IssueSeverity.MAJOR,
+                            message="File opened without context manager (potential resource leak)",
+                            filepath=source_file.file_path,
+                            line_number=i + 1,
+                            column_number=line.find("open("),
+                            context={"line": stripped},
+                            suggested_fix="Use 'with open(...) as f:' to ensure proper file closure"
+                        )
+                        self.issues.append(issue)
     
     def _detect_code_quality_issues(self):
         """Detect code quality issues"""
-        # Placeholder for code quality analysis
-        pass
+        for source_file in self.codebase.files:
+            if source_file.source:
+                lines = source_file.source.split("\n")
+                for i, line in enumerate(lines):
+                    stripped = line.strip()
+                    # Check for TODO/FIXME comments
+                    if any(keyword in stripped.upper() for keyword in ["TODO", "FIXME", "HACK", "XXX"]):
+                        issue = CodeIssue(
+                            issue_type=IssueType.TODO_COMMENT,
+                            severity=IssueSeverity.INFO,
+                            message="TODO/FIXME comment found",
+                            filepath=source_file.file_path,
+                            line_number=i + 1,
+                            column_number=0,
+                            context={"line": stripped},
+                            suggested_fix="Address the TODO/FIXME or create a proper issue"
+                        )
+                        self.issues.append(issue)
     
     def _detect_style_issues(self):
         """Detect style issues"""
-        # Placeholder for style analysis
-        pass
+        for source_file in self.codebase.files:
+            if source_file.source:
+                lines = source_file.source.split("\n")
+                for i, line in enumerate(lines):
+                    # Check for trailing whitespace
+                    if line.endswith(" ") or line.endswith("\t"):
+                        issue = CodeIssue(
+                            issue_type=IssueType.TRAILING_WHITESPACE,
+                            severity=IssueSeverity.INFO,
+                            message="Trailing whitespace found",
+                            filepath=source_file.file_path,
+                            line_number=i + 1,
+                            column_number=len(line.rstrip()),
+                            context={"line": repr(line)},
+                            suggested_fix="Remove trailing whitespace"
+                        )
+                        self.issues.append(issue)
     
     def _detect_import_issues(self):
         """Detect import-related issues"""
@@ -1627,6 +1727,7 @@ def _build_call_chain(self, function_name, visited):
     return max_chain
 
 
+def generate_codebase_summary(codebase: Codebase) -> str:
     """Generate a brief summary of the codebase"""
     
     file_count = len(codebase.files)
