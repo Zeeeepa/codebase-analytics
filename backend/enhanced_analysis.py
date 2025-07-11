@@ -290,7 +290,7 @@ def generate_complexity_resolutions(codebase: Codebase, issues: List[Any]) -> Li
     return resolutions
 
 
-def analyze_function_for_refactoring(func, codebase) -> List[str]:
+def analyze_function_for_refactoring(func: Any, codebase: Codebase) -> List[str]:
     """Analyze a function and suggest specific refactoring actions."""
     suggestions = []
     
