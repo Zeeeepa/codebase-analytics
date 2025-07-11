@@ -1,6 +1,14 @@
-# Codebase Analytics
+# Comprehensive Codebase Analytics API
 
-A web application that provides comprehensive analytics for GitHub repositories.  The project combines a Modal-based FastAPI backend with a Next.js frontend to provide efficient and beautiful codebase metrics.
+A powerful, consolidated codebase analysis system that combines advanced static analysis, health metrics, and automated resolution suggestions into a single comprehensive API.
+
+## 🚀 Consolidated Backend System
+
+This implementation consolidates functionality from 4 different analysis systems:
+1. **Backend Branch** - Core analysis engine and basic issue detection
+2. **Merge Comprehensive Analysis Branch** - Enhanced API structure and performance optimizations  
+3. **PR #97** - Comprehensive analysis system with structured output
+4. **PR #96** - Automated resolutions, health metrics, and advanced features
 
 Users submit a GitHub repository through the frontend. The Modal API processes the request using custom implementations of the metric calculations using the `codegen` library. Results are returned to the frontend for display.
 
