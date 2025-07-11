@@ -24,6 +24,10 @@ from .metrics import (
     calculate_comprehensive_metrics,
     get_most_important_functions
 )
+from .comprehensive_analyzer import (
+    ComprehensiveCodebaseAnalyzer,
+    analyze_codebase
+)
 from .models import (
     CodebaseAnalysisRequest,
     CodebaseAnalysisResponse,
@@ -38,7 +42,7 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime"
+        "codegen", "fastapi", "uvicorn", "gitpython", "requests", "pydantic", "datetime", "networkx"
     )
 )
 
@@ -287,6 +291,75 @@ async def comprehensive_codebase_analysis(request: CodebaseAnalysisRequest) -> C
         )
 
 
+@fastapi_app.post("/comprehensive_analysis")
+async def comprehensive_codebase_analysis(request: CodebaseAnalysisRequest) -> Dict[str, Any]:
+    """
+    🎯 **COMPREHENSIVE CODEBASE ANALYSIS**
+    
+    Perform complete codebase analysis with structured data output:
+    
+    ✅ **Advanced Issue Detection** - 30+ issue types with automated resolutions
+    ✅ **Function Context Analysis** - Dependencies, call chains, importance scoring
+    ✅ **Halstead Complexity Metrics** - Quantitative complexity measurements
+    ✅ **Graph Analysis** - Call graphs and dependency analysis
+    ✅ **Dead Code Detection** - With blast radius calculation
+    ✅ **Health Assessment** - Overall health scoring and risk assessment
+    ✅ **Repository Structure** - Interactive tree with issue indicators
+    ✅ **Automated Resolutions** - Import fixes, dead code removal, refactoring suggestions
+    
+    Perfect for:
+    - CI/CD integration
+    - Health dashboards
+    - Technical debt assessment
+    - Automated code quality monitoring
+    """
+    
+    start_time = time.time()
+    
+    try:
+        # Load codebase using graph-sitter
+        codebase = Codebase.from_repo(request.repo_url)
+        
+        # Perform comprehensive analysis
+        analyzer = ComprehensiveCodebaseAnalyzer(codebase)
+        results = analyzer.analyze()
+        
+        # Get structured data for API consumption
+        structured_data = analyzer.get_structured_data()
+        
+        # Get health dashboard data
+        health_dashboard = analyzer.get_health_dashboard_data()
+        
+        processing_time = time.time() - start_time
+        
+        return {
+            "success": True,
+            "analysis_results": structured_data,
+            "health_dashboard": health_dashboard,
+            "processing_time": processing_time,
+            "repo_url": request.repo_url,
+            "analysis_timestamp": datetime.now().isoformat(),
+            "features_analyzed": [
+                "Advanced issue detection (30+ types)",
+                "Function context analysis",
+                "Halstead complexity metrics",
+                "Call graph analysis",
+                "Dependency graph analysis", 
+                "Dead code detection with blast radius",
+                "Repository structure visualization",
+                "Health assessment and risk analysis",
+                "Automated resolution suggestions"
+            ]
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error_message": f"Comprehensive analysis failed: {str(e)}",
+            "processing_time": time.time() - start_time
+        }
+
+
 @fastapi_app.get("/health")
 async def health_check():
     """Health check endpoint to verify API status."""
@@ -315,6 +388,7 @@ async def root():
         "description": "Advanced codebase analysis with comprehensive issue detection",
         "endpoints": {
             "main": "/codebase_analysis",
+            "comprehensive": "/comprehensive_analysis",
             "health": "/health",
             "docs": "/docs"
         },
