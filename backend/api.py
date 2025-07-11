@@ -1,31 +1,30 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from typing import Dict, List, Tuple, Any
-import graph_sitter
-from graph_sitter.core.class_definition import Class
-from graph_sitter.core.codebase import Codebase
-from graph_sitter.core.external_module import ExternalModule
-from graph_sitter.core.file import SourceFile
-from graph_sitter.core.function import Function
-from graph_sitter.core.import_resolution import Import
-from graph_sitter.core.symbol import Symbol
-from graph_sitter.enums import EdgeType, SymbolType
-from graph_sitter.statements.for_loop_statement import ForLoopStatement
-from graph_sitter.core.statements.if_block_statement import IfBlockStatement
-from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
-from graph_sitter.core.statements.while_statement import WhileStatement
-from graph_sitter.core.expressions.binary_expression import BinaryExpression
-from graph_sitter.core.expressions.unary_expression import UnaryExpression
-from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
-import math
-import re
+"""
+Codebase Analytics - FastAPI Interface Layer
+Clean API interface for comprehensive codebase analysis
+"""
+
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from typing import Dict, List, Any
 import requests
-from datetime import datetime, timedelta
 import subprocess
 import os
 import tempfile
-from fastapi.middleware.cors import CORSMiddleware
+from datetime import datetime
 import modal
+import graph_sitter
+from graph_sitter.core.codebase import Codebase
+
+from .models import (
+    RepoRequest, CodebaseAnalysisRequest, CodebaseAnalysisResponse,
+    HealthCheckResponse, RootResponse
+)
+from .analysis import CodebaseAnalyzer, get_codebase_summary, create_health_dashboard
+
+
+# ============================================================================
+# MODAL SETUP AND CONFIGURATION
+# ============================================================================
 
 image = (
     modal.Image.debian_slim()
@@ -37,7 +36,11 @@ image = (
 
 app = modal.App(name="analytics-app", image=image)
 
-fastapi_app = FastAPI()
+fastapi_app = FastAPI(
+    title="Codebase Analytics API",
+    description="Comprehensive codebase analysis with issue detection and automated resolutions",
+    version="2.0.0"
+)
 
 fastapi_app.add_middleware(
     CORSMiddleware,
@@ -47,501 +50,257 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_codebase_summary(codebase: Codebase) -> str:
-    node_summary = f"""Contains {len(codebase.ctx.get_nodes())} nodes
-- {len(list(codebase.files))} files
-- {len(list(codebase.imports))} imports
-- {len(list(codebase.external_modules))} external_modules
-- {len(list(codebase.symbols))} symbols
-\t- {len(list(codebase.classes))} classes
-\t- {len(list(codebase.functions))} functions
-\t- {len(list(codebase.global_vars))} global_vars
-\t- {len(list(codebase.interfaces))} interfaces
-"""
-    edge_summary = f"""Contains {len(codebase.ctx.edges)} edges
-- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.SYMBOL_USAGE])} symbol -> used symbol
-- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.IMPORT_SYMBOL_RESOLUTION])} import -> used symbol
-- {len([x for x in codebase.ctx.edges if x[2].type == EdgeType.EXPORT])} export -> exported symbol
-    """
 
-    return f"{node_summary}\n{edge_summary}"
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
-
-def get_file_summary(file: SourceFile) -> str:
-    return f"""==== [ `{file.name}` (SourceFile) Dependency Summary ] ====
-- {len(file.imports)} imports
-- {len(file.symbols)} symbol references
-\t- {len(file.classes)} classes
-\t- {len(file.functions)} functions
-\t- {len(file.global_vars)} global variables
-\t- {len(file.interfaces)} interfaces
-
-==== [ `{file.name}` Usage Summary ] ====
-- {len(file.imports)} importers
-"""
-
-
-def get_class_summary(cls: Class) -> str:
-    return f"""==== [ `{cls.name}` (Class) Dependency Summary ] ====
-- parent classes: {cls.parent_class_names}
-- {len(cls.methods)} methods
-- {len(cls.attributes)} attributes
-- {len(cls.decorators)} decorators
-- {len(cls.dependencies)} dependencies
-
-{get_symbol_summary(cls)}
-    """
-
-
-def get_function_summary(func: Function) -> str:
-    return f"""==== [ `{func.name}` (Function) Dependency Summary ] ====
-- {len(func.return_statements)} return statements
-- {len(func.parameters)} parameters
-- {len(func.function_calls)} function calls
-- {len(func.call_sites)} call sites
-- {len(func.decorators)} decorators
-- {len(func.dependencies)} dependencies
-
-{get_symbol_summary(func)}
-        """
-
-
-def get_symbol_summary(symbol: Symbol) -> str:
-    usages = symbol.symbol_usages
-    imported_symbols = [x.imported_symbol for x in usages if isinstance(x, Import)]
-
-    return f"""==== [ `{symbol.name}` ({type(symbol).__name__}) Usage Summary ] ====
-- {len(usages)} usages
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function])} functions
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class])} classes
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar])} global variables
-\t- {len([x for x in usages if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])} interfaces
-\t- {len(imported_symbols)} imports
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Function])} functions
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Class])} classes
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.GlobalVar])} global variables
-\t\t- {len([x for x in imported_symbols if isinstance(x, Symbol) and x.symbol_type == SymbolType.Interface])} interfaces
-\t\t- {len([x for x in imported_symbols if isinstance(x, ExternalModule)])} external modules
-\t\t- {len([x for x in imported_symbols if isinstance(x, SourceFile)])} files
-    """
-
-def get_function_context(function) -> dict:
-    """Get the implementation, dependencies, and usages of a function."""
-    context = {
-        "implementation": {"source": function.source, "filepath": function.filepath},
-        "dependencies": [],
-        "usages": [],
-    }
-
-    # Add dependencies
-    for dep in function.dependencies:
-        # Hop through imports to find the root symbol source
-        if isinstance(dep, Import):
-            dep = hop_through_imports(dep)
-
-        context["dependencies"].append({"source": dep.source, "filepath": dep.filepath})
-
-    # Add usages
-    for usage in function.usages:
-        context["usages"].append({
-            "source": usage.usage_symbol.source,
-            "filepath": usage.usage_symbol.filepath,
-        })
-
-    return context
-
-def hop_through_imports(imp: Import) -> Symbol | ExternalModule:
-    """Finds the root symbol for an import."""
-    if isinstance(imp.imported_symbol, Import):
-        return hop_through_imports(imp.imported_symbol)
-    return imp.imported_symbol
-    
-def get_monthly_commits(repo_path: str) -> Dict[str, int]:
-    """
-    Get the number of commits per month for the last 12 months.
-
-    Args:
-        repo_path: Path to the git repository
-
-    Returns:
-        Dictionary with month-year as key and number of commits as value
-    """
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=365)
-
-    date_format = "%Y-%m-%d"
-    since_date = start_date.strftime(date_format)
-    until_date = end_date.strftime(date_format)
-    repo_path = "https://github.com/" + repo_path
-
+def clone_repo(repo_url: str) -> str:
+    """Clone repository to temporary directory"""
+    temp_dir = tempfile.mkdtemp()
     try:
-        original_dir = os.getcwd()
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            subprocess.run(["git", "clone", repo_path, temp_dir], check=True)
-            os.chdir(temp_dir)
-
-            cmd = [
-                "git",
-                "log",
-                f"--since={since_date}",
-                f"--until={until_date}",
-                "--format=%aI",
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            commit_dates = result.stdout.strip().split("\n")
-
-            monthly_counts = {}
-            current_date = start_date
-            while current_date <= end_date:
-                month_key = current_date.strftime("%Y-%m")
-                monthly_counts[month_key] = 0
-                current_date = (
-                    current_date.replace(day=1) + timedelta(days=32)
-                ).replace(day=1)
-
-            for date_str in commit_dates:
-                if date_str:  # Skip empty lines
-                    commit_date = datetime.fromisoformat(date_str.strip())
-                    month_key = commit_date.strftime("%Y-%m")
-                    if month_key in monthly_counts:
-                        monthly_counts[month_key] += 1
-
-            os.chdir(original_dir)
-            return dict(sorted(monthly_counts.items()))
-
+        subprocess.run(
+            ["git", "clone", repo_url, temp_dir],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        return temp_dir
     except subprocess.CalledProcessError as e:
-        print(f"Error executing git command: {e}")
-        return {}
-    except Exception as e:
-        print(f"Error processing git commits: {e}")
-        return {}
-    finally:
-        try:
-            os.chdir(original_dir)
-        except:
-            pass
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to clone repository: {e.stderr}"
+        )
 
 
-def calculate_cyclomatic_complexity(function):
-    def analyze_statement(statement):
-        complexity = 0
+def get_repo_description(repo_url: str) -> str:
+    """Get repository description from GitHub API"""
+    try:
+        if "github.com" in repo_url:
+            # Extract owner/repo from URL
+            parts = repo_url.rstrip('/').split('/')
+            if len(parts) >= 2:
+                owner, repo = parts[-2], parts[-1]
+                if repo.endswith('.git'):
+                    repo = repo[:-4]
+                
+                api_url = f"https://api.github.com/repos/{owner}/{repo}"
+                response = requests.get(api_url, timeout=10)
+                
+                if response.status_code == 200:
+                    repo_data = response.json()
+                    return repo_data.get("description", "No description available")
+        
+        return "Repository description not available"
+    except Exception:
+        return "Repository description not available"
 
-        if isinstance(statement, IfBlockStatement):
-            complexity += 1
-            if hasattr(statement, "elif_statements"):
-                complexity += len(statement.elif_statements)
 
-        elif isinstance(statement, (ForLoopStatement, WhileStatement)):
-            complexity += 1
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
 
-        elif isinstance(statement, TryCatchStatement):
-            complexity += len(getattr(statement, "except_blocks", []))
-
-        if hasattr(statement, "condition") and isinstance(statement.condition, str):
-            complexity += statement.condition.count(
-                " and "
-            ) + statement.condition.count(" or ")
-
-        if hasattr(statement, "nested_code_blocks"):
-            for block in statement.nested_code_blocks:
-                complexity += analyze_block(block)
-
-        return complexity
-
-    def analyze_block(block):
-        if not block or not hasattr(block, "statements"):
-            return 0
-        return sum(analyze_statement(stmt) for stmt in block.statements)
-
-    return (
-        1 + analyze_block(function.code_block) if hasattr(function, "code_block") else 1
+@fastapi_app.get("/", response_model=RootResponse)
+async def root():
+    """Root endpoint with API information"""
+    return RootResponse(
+        message="🔍 Codebase Analytics API",
+        description="Comprehensive codebase analysis with issue detection and automated resolutions",
+        endpoints={
+            "/": "API information",
+            "/health": "Health check",
+            "/analyze": "Analyze repository",
+            "/analyze-comprehensive": "Comprehensive analysis with health metrics"
+        },
+        features=[
+            "🔍 Comprehensive Issue Detection (30+ types)",
+            "🤖 Automated Resolution Generation",
+            "📊 Quality Metrics & Health Scoring",
+            "🕸️ Call Graph Analysis",
+            "📈 Technical Debt Calculation",
+            "🎯 Entry Point Detection",
+            "💀 Dead Code Identification",
+            "📋 Health Dashboard"
+        ]
     )
 
 
-def cc_rank(complexity):
-    if complexity < 0:
-        raise ValueError("Complexity must be a non-negative value")
-
-    ranks = [
-        (1, 5, "A"),
-        (6, 10, "B"),
-        (11, 20, "C"),
-        (21, 30, "D"),
-        (31, 40, "E"),
-        (41, float("inf"), "F"),
-    ]
-    for low, high, rank in ranks:
-        if low <= complexity <= high:
-            return rank
-    return "F"
+@fastapi_app.get("/health", response_model=HealthCheckResponse)
+async def health_check():
+    """Health check endpoint"""
+    return HealthCheckResponse(
+        status="healthy",
+        timestamp=datetime.now().isoformat()
+    )
 
 
-def calculate_doi(cls):
-    """Calculate the depth of inheritance for a given class."""
-    return len(cls.superclasses)
-
-
-def get_operators_and_operands(function):
-    operators = []
-    operands = []
-
-    for statement in function.code_block.statements:
-        for call in statement.function_calls:
-            operators.append(call.name)
-            for arg in call.args:
-                operands.append(arg.source)
-
-        if hasattr(statement, "expressions"):
-            for expr in statement.expressions:
-                if isinstance(expr, BinaryExpression):
-                    operators.extend([op.source for op in expr.operators])
-                    operands.extend([elem.source for elem in expr.elements])
-                elif isinstance(expr, UnaryExpression):
-                    operators.append(expr.ts_node.type)
-                    operands.append(expr.argument.source)
-                elif isinstance(expr, ComparisonExpression):
-                    operators.extend([op.source for op in expr.operators])
-                    operands.extend([elem.source for elem in expr.elements])
-
-        if hasattr(statement, "expression"):
-            expr = statement.expression
-            if isinstance(expr, BinaryExpression):
-                operators.extend([op.source for op in expr.operators])
-                operands.extend([elem.source for elem in expr.elements])
-            elif isinstance(expr, UnaryExpression):
-                operators.append(expr.ts_node.type)
-                operands.append(expr.argument.source)
-            elif isinstance(expr, ComparisonExpression):
-                operators.extend([op.source for op in expr.operators])
-                operands.extend([elem.source for elem in expr.elements])
-
-    return operators, operands
-
-
-def calculate_halstead_volume(operators, operands):
-    n1 = len(set(operators))
-    n2 = len(set(operands))
-
-    N1 = len(operators)
-    N2 = len(operands)
-
-    N = N1 + N2
-    n = n1 + n2
-
-    if n > 0:
-        volume = N * math.log2(n)
-        return volume, N1, N2, n1, n2
-    return 0, N1, N2, n1, n2
-
-
-def count_lines(source: str):
-    """Count different types of lines in source code."""
-    if not source.strip():
-        return 0, 0, 0, 0
-
-    lines = [line.strip() for line in source.splitlines()]
-    loc = len(lines)
-    sloc = len([line for line in lines if line])
-
-    in_multiline = False
-    comments = 0
-    code_lines = []
-
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        code_part = line
-        if not in_multiline and "#" in line:
-            comment_start = line.find("#")
-            if not re.search(r'["\'].*#.*["\']', line[:comment_start]):
-                code_part = line[:comment_start].strip()
-                if line[comment_start:].strip():
-                    comments += 1
-
-        if ('"""' in line or "'''" in line) and not (
-            line.count('"""') % 2 == 0 or line.count("'''") % 2 == 0
-        ):
-            if in_multiline:
-                in_multiline = False
-                comments += 1
-            else:
-                in_multiline = True
-                comments += 1
-                if line.strip().startswith('"""') or line.strip().startswith("'''"):
-                    code_part = ""
-        elif in_multiline:
-            comments += 1
-            code_part = ""
-        elif line.strip().startswith("#"):
-            comments += 1
-            code_part = ""
-
-        if code_part.strip():
-            code_lines.append(code_part)
-
-        i += 1
-
-    lloc = 0
-    continued_line = False
-    for line in code_lines:
-        if continued_line:
-            if not any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
-                continued_line = False
-            continue
-
-        lloc += len([stmt for stmt in line.split(";") if stmt.strip()])
-
-        if any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
-            continued_line = True
-
-    return loc, lloc, sloc, comments
-
-
-def calculate_maintainability_index(
-    halstead_volume: float, cyclomatic_complexity: float, loc: int
-) -> int:
-    """Calculate the normalized maintainability index for a given function."""
-    if loc <= 0:
-        return 100
-
+@fastapi_app.post("/analyze", response_model=CodebaseAnalysisResponse)
+async def analyze_repository(request: RepoRequest):
+    """Basic repository analysis"""
+    start_time = datetime.now()
+    
     try:
-        raw_mi = (
-            171
-            - 5.2 * math.log(max(1, halstead_volume))
-            - 0.23 * cyclomatic_complexity
-            - 16.2 * math.log(max(1, loc))
+        # Clone repository
+        repo_path = clone_repo(request.repo_url)
+        
+        # Initialize graph-sitter codebase
+        codebase = Codebase.from_directory(repo_path)
+        
+        # Get basic summary
+        summary = get_codebase_summary(codebase)
+        description = get_repo_description(request.repo_url)
+        
+        # Basic analysis results
+        analysis_results = {
+            "summary": summary,
+            "description": description,
+            "total_files": len(codebase.source_files),
+            "total_functions": len(list(codebase.functions)),
+            "total_classes": len(list(codebase.classes)),
+            "repository_structure": {
+                "files": [f.file_path for f in codebase.source_files[:10]],  # First 10 files
+                "languages": list(set(f.language for f in codebase.source_files if f.language))
+            }
+        }
+        
+        processing_time = (datetime.now() - start_time).total_seconds()
+        
+        return CodebaseAnalysisResponse(
+            success=True,
+            analysis_results=analysis_results,
+            processing_time=processing_time,
+            repo_url=request.repo_url,
+            analysis_timestamp=datetime.now().isoformat(),
+            features_analyzed=["basic_metrics", "repository_structure"]
         )
-        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
-        return int(normalized_mi)
-    except (ValueError, TypeError):
-        return 0
+        
+    except Exception as e:
+        return CodebaseAnalysisResponse(
+            success=False,
+            analysis_results={},
+            processing_time=(datetime.now() - start_time).total_seconds(),
+            repo_url=request.repo_url,
+            analysis_timestamp=datetime.now().isoformat(),
+            features_analyzed=[],
+            error_message=str(e)
+        )
+    
+    finally:
+        # Cleanup temporary directory
+        if 'repo_path' in locals():
+            subprocess.run(["rm", "-rf", repo_path], check=False)
 
 
-def get_maintainability_rank(mi_score: float) -> str:
-    """Convert maintainability index score to a letter grade."""
-    if mi_score >= 85:
-        return "A"
-    elif mi_score >= 65:
-        return "B"
-    elif mi_score >= 45:
-        return "C"
-    elif mi_score >= 25:
-        return "D"
-    else:
-        return "F"
-
-
-def get_github_repo_description(repo_url):
-    api_url = f"https://api.github.com/repos/{repo_url}"
-
-    response = requests.get(api_url)
-
-    if response.status_code == 200:
-        repo_data = response.json()
-        return repo_data.get("description", "No description available")
-    else:
-        return ""
-
-
-class RepoRequest(BaseModel):
-    repo_url: str
-
-
-@fastapi_app.post("/analyze_repo")
-async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
-    repo_url = request.repo_url
-    codebase = Codebase.from_repo(repo_url)
-
-    num_files = len(codebase.files(extensions="*"))
-    num_functions = len(codebase.functions)
-    num_classes = len(codebase.classes)
-
-    total_loc = total_lloc = total_sloc = total_comments = 0
-    total_complexity = 0
-    total_volume = 0
-    total_mi = 0
-    total_doi = 0
-
-    monthly_commits = get_monthly_commits(repo_url)
-    print(monthly_commits)
-
-    for file in codebase.files:
-        loc, lloc, sloc, comments = count_lines(file.source)
-        total_loc += loc
-        total_lloc += lloc
-        total_sloc += sloc
-        total_comments += comments
-
-    callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-
-    num_callables = 0
-    for func in callables:
-        if not hasattr(func, "code_block"):
-            continue
-
-        complexity = calculate_cyclomatic_complexity(func)
-        operators, operands = get_operators_and_operands(func)
-        volume, _, _, _, _ = calculate_halstead_volume(operators, operands)
-        loc = len(func.code_block.source.splitlines())
-        mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-        total_complexity += complexity
-        total_volume += volume
-        total_mi += mi_score
-        num_callables += 1
-
-    for cls in codebase.classes:
-        doi = calculate_doi(cls)
-        total_doi += doi
-
-    desc = get_github_repo_description(repo_url)
-
-    results = {
-        "repo_url": repo_url,
-        "line_metrics": {
-            "total": {
-                "loc": total_loc,
-                "lloc": total_lloc,
-                "sloc": total_sloc,
-                "comments": total_comments,
-                "comment_density": (total_comments / total_loc * 100)
-                if total_loc > 0
-                else 0,
+@fastapi_app.post("/analyze-comprehensive", response_model=CodebaseAnalysisResponse)
+async def analyze_comprehensive(request: CodebaseAnalysisRequest):
+    """Comprehensive codebase analysis with all features"""
+    start_time = datetime.now()
+    
+    try:
+        # Clone repository
+        repo_path = clone_repo(request.repo_url)
+        
+        # Initialize graph-sitter codebase
+        codebase = Codebase.from_directory(repo_path)
+        
+        # Initialize analyzer
+        analyzer = CodebaseAnalyzer()
+        
+        # Perform comprehensive analysis
+        results = analyzer.analyze_codebase(codebase)
+        
+        # Convert results to dictionary for JSON serialization
+        analysis_results = {
+            "basic_metrics": {
+                "total_files": results.total_files,
+                "total_functions": results.total_functions,
+                "total_classes": results.total_classes,
+                "total_lines_of_code": results.total_lines_of_code
             },
-        },
-        "cyclomatic_complexity": {
-            "average": total_complexity if num_callables > 0 else 0,
-        },
-        "depth_of_inheritance": {
-            "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-        },
-        "halstead_metrics": {
-            "total_volume": int(total_volume),
-            "average_volume": int(total_volume / num_callables)
-            if num_callables > 0
-            else 0,
-        },
-        "maintainability_index": {
-            "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-        },
-        "description": desc,
-        "num_files": num_files,
-        "num_functions": num_functions,
-        "num_classes": num_classes,
-        "monthly_commits": monthly_commits,
-    }
+            "issues_analysis": {
+                "total_issues": len(results.issues),
+                "issues_by_severity": results.issues_by_severity,
+                "issues_by_type": results.issues_by_type,
+                "automated_resolutions_count": len(results.automated_resolutions)
+            },
+            "function_analysis": {
+                "total_functions": len(results.function_contexts),
+                "entry_points": results.entry_points,
+                "dead_functions": results.dead_functions,
+                "most_important_functions": results.most_important_functions[:5]  # Top 5
+            },
+            "quality_metrics": {
+                "halstead_metrics": results.halstead_metrics,
+                "complexity_metrics": results.complexity_metrics,
+                "maintainability_metrics": results.maintainability_metrics
+            },
+            "call_graph_metrics": results.call_graph_metrics,
+            "health_assessment": {
+                "health_score": results.health_score,
+                "health_grade": results.health_grade,
+                "risk_level": results.risk_level,
+                "technical_debt_hours": results.technical_debt_hours
+            },
+            "repository_description": get_repo_description(request.repo_url)
+        }
+        
+        # Create health dashboard if requested
+        health_dashboard = None
+        if request.include_health_metrics:
+            health_dashboard = create_health_dashboard(results)
+        
+        processing_time = (datetime.now() - start_time).total_seconds()
+        
+        features_analyzed = [
+            "comprehensive_analysis",
+            "issue_detection",
+            "automated_resolutions",
+            "quality_metrics",
+            "call_graph_analysis",
+            "health_assessment"
+        ]
+        
+        if request.include_health_metrics:
+            features_analyzed.append("health_dashboard")
+        
+        return CodebaseAnalysisResponse(
+            success=True,
+            analysis_results=analysis_results,
+            health_dashboard=health_dashboard,
+            processing_time=processing_time,
+            repo_url=request.repo_url,
+            analysis_timestamp=datetime.now().isoformat(),
+            features_analyzed=features_analyzed
+        )
+        
+    except Exception as e:
+        return CodebaseAnalysisResponse(
+            success=False,
+            analysis_results={},
+            processing_time=(datetime.now() - start_time).total_seconds(),
+            repo_url=request.repo_url,
+            analysis_timestamp=datetime.now().isoformat(),
+            features_analyzed=[],
+            error_message=str(e)
+        )
+    
+    finally:
+        # Cleanup temporary directory
+        if 'repo_path' in locals():
+            subprocess.run(["rm", "-rf", repo_path], check=False)
 
-    return results
 
+# ============================================================================
+# MODAL DEPLOYMENT
+# ============================================================================
 
 @app.function(image=image)
 @modal.asgi_app()
-def fastapi_modal_app():
+def fastapi_app_modal():
+    """Modal deployment function"""
     return fastapi_app
 
 
 if __name__ == "__main__":
-    app.deploy("analytics-app")
+    import uvicorn
+    uvicorn.run(fastapi_app, host="0.0.0.0", port=8000)
