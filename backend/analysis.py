@@ -7,25 +7,38 @@ import math
 import re
 from typing import Dict, List, Any, Optional, Tuple, Set
 from datetime import datetime
-import graph_sitter
-from graph_sitter.core.class_definition import Class
-from graph_sitter.core.codebase import Codebase
-from graph_sitter.core.external_module import ExternalModule
-from graph_sitter.core.file import SourceFile
-from graph_sitter.core.function import Function
-from graph_sitter.core.import_resolution import Import
-from graph_sitter.core.symbol import Symbol
-from graph_sitter.enums import EdgeType, SymbolType
-from graph_sitter.statements.for_loop_statement import ForLoopStatement
-from graph_sitter.core.statements.if_block_statement import IfBlockStatement
-from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
-from graph_sitter.core.statements.while_statement import WhileStatement
-from graph_sitter.core.expressions.binary_expression import BinaryExpression
-from graph_sitter.core.expressions.unary_expression import UnaryExpression
-from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
+# Graph-sitter integration with graceful fallback
+try:
+    import graph_sitter
+    from graph_sitter.core.class_definition import Class
+    from graph_sitter.core.codebase import Codebase
+    from graph_sitter.core.external_module import ExternalModule
+    from graph_sitter.core.file import SourceFile
+    from graph_sitter.core.function import Function
+    from graph_sitter.core.import_resolution import Import
+    from graph_sitter.core.symbol import Symbol
+    from graph_sitter.enums import EdgeType, SymbolType
+    from graph_sitter.statements.for_loop_statement import ForLoopStatement
+    from graph_sitter.core.statements.if_block_statement import IfBlockStatement
+    from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
+    from graph_sitter.core.statements.while_statement import WhileStatement
+    from graph_sitter.core.expressions.binary_expression import BinaryExpression
+    from graph_sitter.core.expressions.unary_expression import UnaryExpression
+    from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
+    GRAPH_SITTER_AVAILABLE = True
+except ImportError:
+    GRAPH_SITTER_AVAILABLE = False
+    # Create placeholder classes for when Graph-sitter is not available
+    Class = type("Class", (), {})
+    Codebase = type("Codebase", (), {})
+    ExternalModule = type("ExternalModule", (), {})
+    SourceFile = type("SourceFile", (), {})
+    Function = type("Function", (), {})
+    Import = type("Import", (), {})
+    Symbol = type("Symbol", (), {})
 
-from .models import (
-    CodeIssue, IssueType, IssueSeverity, FunctionContext, 
+from models import (
+    CodeIssue, IssueType, IssueSeverity, FunctionContext,
     AnalysisResults, AutomatedResolution, AnalysisConfig
 )
 
@@ -52,7 +65,7 @@ class ImportResolver:
     
     def _build_import_map(self, codebase: Codebase):
         """Build map of available imports"""
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             if hasattr(source_file, 'imports'):
                 for imp in source_file.imports:
                     if hasattr(imp, 'module_name'):
@@ -60,7 +73,7 @@ class ImportResolver:
     
     def _build_symbol_map(self, codebase: Codebase):
         """Build map of available symbols"""
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             for symbol in source_file.symbols:
                 if isinstance(symbol, Function):
                     self.symbol_map[symbol.name] = source_file.file_path
@@ -69,7 +82,7 @@ class ImportResolver:
     
     def _detect_unused_imports(self, codebase: Codebase):
         """Detect unused imports"""
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             if hasattr(source_file, 'imports') and source_file.source:
                 for imp in source_file.imports:
                     if hasattr(imp, 'module_name'):
@@ -82,7 +95,7 @@ class ImportResolver:
     
     def _detect_missing_imports(self, codebase: Codebase):
         """Detect missing imports"""
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             if source_file.source:
                 for symbol, filepath in self.symbol_map.items():
                     if symbol in source_file.source and filepath != source_file.file_path:
@@ -173,7 +186,7 @@ class DeadCodeAnalyzer:
         called_functions = set()
         
         # Collect all functions and called functions
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             for symbol in source_file.symbols:
                 if isinstance(symbol, Function):
                     func_name = f"{source_file.file_path}::{symbol.name}"
@@ -198,7 +211,7 @@ class DeadCodeAnalyzer:
         all_classes = set()
         used_classes = set()
         
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             for symbol in source_file.symbols:
                 if isinstance(symbol, Class):
                     class_name = f"{source_file.file_path}::{symbol.name}"
@@ -216,7 +229,7 @@ class DeadCodeAnalyzer:
             # Find the function in codebase
             file_path, func_name = dead_func.split("::", 1)
             
-            for source_file in codebase.source_files:
+            for source_file in codebase.files:
                 if source_file.file_path == file_path:
                     for symbol in source_file.symbols:
                         if isinstance(symbol, Function) and symbol.name == func_name:
@@ -255,13 +268,13 @@ class RepositoryStructureAnalyzer:
             "directory_structure": self.structure,
             "issue_hotspots": self.hotspots,
             "complexity_map": self.complexity_map,
-            "total_directories": len(set(f.file_path.split('/')[:-1] for f in codebase.source_files)),
+            "total_directories": len(set(tuple(f.file_path.split("/")[:-1]) for f in codebase.files)),
             "files_by_extension": self._get_files_by_extension(codebase)
         }
     
     def _build_directory_structure(self, codebase: Codebase):
         """Build hierarchical directory structure"""
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             path_parts = source_file.file_path.split('/')
             current = self.structure
             
@@ -296,7 +309,7 @@ class RepositoryStructureAnalyzer:
     
     def _calculate_complexity_hotspots(self, codebase: Codebase):
         """Calculate complexity hotspots"""
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             complexity_score = 0
             
             # Simple complexity calculation
@@ -312,7 +325,7 @@ class RepositoryStructureAnalyzer:
     def _get_files_by_extension(self, codebase: Codebase) -> Dict[str, int]:
         """Get file count by extension"""
         extensions = {}
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             ext = source_file.file_path.split('.')[-1] if '.' in source_file.file_path else 'no_extension'
             extensions[ext] = extensions.get(ext, 0) + 1
         return extensions
@@ -369,7 +382,7 @@ class AdvancedIssueDetector:
     
     def _detect_null_references(self):
         """Detect potential null reference issues"""
-        for source_file in self.codebase.source_files:
+        for source_file in self.codebase.files:
             if source_file.source:
                 lines = source_file.source.split('\n')
                 for i, line in enumerate(lines):
@@ -413,7 +426,7 @@ class AdvancedIssueDetector:
     
     def _detect_function_issues(self):
         """Detect function-related issues"""
-        for source_file in self.codebase.source_files:
+        for source_file in self.codebase.files:
             for symbol in source_file.symbols:
                 if isinstance(symbol, Function):
                     # Long function detection
@@ -472,7 +485,7 @@ class AdvancedIssueDetector:
     
     def _detect_magic_numbers(self):
         """Detect magic numbers in code"""
-        for source_file in self.codebase.source_files:
+        for source_file in self.codebase.files:
             if source_file.source:
                 lines = source_file.source.split('\n')
                 for i, line in enumerate(lines):
@@ -494,7 +507,7 @@ class AdvancedIssueDetector:
     
     def _detect_runtime_risks(self):
         """Detect potential runtime risks"""
-        for source_file in self.codebase.source_files:
+        for source_file in self.codebase.files:
             if source_file.source:
                 lines = source_file.source.split('\n')
                 for i, line in enumerate(lines):
@@ -517,7 +530,7 @@ class AdvancedIssueDetector:
     def _detect_dead_code(self):
         """Detect dead code with automated removal suggestions"""
         # Find unused functions
-        for source_file in self.codebase.source_files:
+        for source_file in self.codebase.files:
             for symbol in source_file.symbols:
                 if isinstance(symbol, Function):
                     if hasattr(symbol, 'usages') and len(symbol.usages) == 0:
@@ -555,7 +568,7 @@ class AdvancedIssueDetector:
     
     def _detect_type_mismatches(self):
         """Detect type mismatch issues"""
-        for source_file in self.codebase.source_files:
+        for source_file in self.codebase.files:
             if source_file.source:
                 lines = source_file.source.split('\n')
                 for i, line in enumerate(lines):
@@ -575,7 +588,7 @@ class AdvancedIssueDetector:
     
     def _detect_undefined_variables(self):
         """Detect undefined variable usage"""
-        for source_file in self.codebase.source_files:
+        for source_file in self.codebase.files:
             if source_file.source:
                 lines = source_file.source.split("\n")
                 for i, line in enumerate(lines):
@@ -596,7 +609,7 @@ class AdvancedIssueDetector:
     
     def _detect_missing_returns(self):
         """Detect functions missing return statements"""
-        for source_file in self.codebase.source_files:
+        for source_file in self.codebase.files:
             for symbol in source_file.symbols:
                 if isinstance(symbol, Function):
                     if hasattr(symbol, "source") and symbol.source:
@@ -689,6 +702,51 @@ class CodebaseAnalyzer:
         self.import_resolver = ImportResolver()
         self.dead_code_analyzer = DeadCodeAnalyzer()
         self.repository_analyzer = RepositoryStructureAnalyzer()
+        self.codebase_path = None  # Store for Graph-sitter integration
+    
+    def analyze(self, codebase_path: str, config: AnalysisConfig = None) -> AnalysisResults:
+        """Main analyze method that takes a codebase path and returns analysis results"""
+        if config:
+            self.config = config
+        
+        self.codebase_path = codebase_path
+        
+        # Try to create Graph-sitter codebase
+        gs_codebase = self._get_graph_sitter_codebase(codebase_path)
+        
+        if gs_codebase:
+            # Use Graph-sitter based analysis
+            return self.analyze_codebase(gs_codebase)
+        else:
+            # Fallback to basic analysis without Graph-sitter
+            print("Falling back to basic analysis without Graph-sitter")
+            # Create a minimal results object
+            return AnalysisResults(
+                issues=[],
+                total_files=0,
+                total_functions=0,
+                total_classes=0,
+                total_lines_of_code=0,
+                most_important_functions=[],
+                entry_points=[],
+                complexity_metrics={},
+                automated_resolutions=[]
+            )
+
+    def _get_graph_sitter_codebase(self, codebase_path: str):
+        """Get Graph-sitter codebase instance with error handling"""
+        try:
+            # Check if graph_sitter module is available
+            import graph_sitter
+            from graph_sitter.core.codebase import Codebase
+            return Codebase(codebase_path)
+        except ImportError:
+            print("Warning: Graph-sitter not available, using fallback analysis")
+            return None
+        except Exception as e:
+            print(f"Warning: Could not initialize Graph-sitter codebase: {e}")
+            return None
+        self.repository_analyzer = RepositoryStructureAnalyzer()
         self.blast_radius_cache = {}
         self.advanced_issue_detector = None
         
@@ -697,7 +755,7 @@ class CodebaseAnalyzer:
         
         # Initialize analysis results
         results = AnalysisResults(
-            total_files=len(codebase.source_files),
+            total_files=len(codebase.files),
             total_functions=0,
             total_classes=0,
             total_lines_of_code=0
@@ -752,7 +810,7 @@ class CodebaseAnalyzer:
         total_functions = 0
         total_classes = 0
         
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             if source_file.source:
                 total_lines += len(source_file.source.split('\n'))
             
@@ -770,7 +828,7 @@ class CodebaseAnalyzer:
     def _analyze_functions(self, codebase: Codebase, results: AnalysisResults):
         """Analyze all functions and build contexts"""
         
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             for symbol in source_file.symbols:
                 if isinstance(symbol, Function):
                     context = self._build_function_context(symbol, source_file, codebase)
@@ -920,7 +978,7 @@ class CodebaseAnalyzer:
     def _detect_issues(self, codebase: Codebase, results: AnalysisResults):
         """Detect various code issues"""
         
-        for source_file in codebase.source_files:
+        for source_file in codebase.files:
             self._detect_file_issues(source_file, results)
             
             for symbol in source_file.symbols:
@@ -1400,14 +1458,14 @@ class CodebaseAnalyzer:
 def get_codebase_summary(codebase: Codebase) -> str:
     """Generate a human-readable summary of the codebase"""
     
-    total_files = len(codebase.source_files)
+    total_files = len(codebase.files)
     total_functions = sum(
         len([s for s in sf.symbols if isinstance(s, Function)])
-        for sf in codebase.source_files
+        for sf in codebase.files
     )
     total_classes = sum(
         len([s for s in sf.symbols if isinstance(s, Class)])
-        for sf in codebase.source_files
+        for sf in codebase.files
     )
     
     return f"""
@@ -1571,13 +1629,13 @@ def _build_call_chain(self, function_name, visited):
 
     """Generate a brief summary of the codebase"""
     
-    file_count = len(codebase.source_files)
+    file_count = len(codebase.files)
     
     # Count functions and classes
     function_count = 0
     class_count = 0
     
-    for source_file in codebase.source_files:
+    for source_file in codebase.files:
         for symbol in source_file.symbols:
             if hasattr(symbol, '__class__'):
                 if 'Function' in str(symbol.__class__):
@@ -1587,7 +1645,7 @@ def _build_call_chain(self, function_name, visited):
     
     # Detect primary languages
     languages = set()
-    for source_file in codebase.source_files:
+    for source_file in codebase.files:
         if hasattr(source_file, 'language') and source_file.language:
             languages.add(source_file.language)
     

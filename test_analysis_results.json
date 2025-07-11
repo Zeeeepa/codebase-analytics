@@ -1,16 +1,16 @@
 {
   "analysis_metadata": {
     "repository": "Zeeeepa/codebase-analytics",
-    "analysis_timestamp": "2025-07-11T08:32:24.439060",
-    "processing_time_seconds": 0.02,
+    "analysis_timestamp": "2025-07-11T08:34:08.931220",
+    "processing_time_seconds": 0.01,
     "analyzer_version": "2.0.0-enhanced"
   },
   "repository_overview": {
-    "summary": "Codebase with 64 files, 84 functions, 19 classes. Languages: CSS, Python, TypeScript.",
+    "summary": "Codebase with 64 files, 81 functions, 19 classes. Languages: CSS, Python, TypeScript.",
     "total_files": 64,
-    "total_functions": 84,
+    "total_functions": 81,
     "total_classes": 19,
-    "total_lines_of_code": 8440,
+    "total_lines_of_code": 8325,
     "languages": [
       "CSS",
       "TypeScript",
@@ -24,19 +24,19 @@
     }
   },
   "issues_analysis": {
-    "total_issues": 63,
+    "total_issues": 61,
     "issues_by_severity": {
-      "minor": 63
+      "minor": 61
     },
     "issues_by_type": {
-      "magic_number": 57,
+      "magic_number": 55,
       "line_length_violation": 6
     },
     "critical_issues": [],
     "automated_resolutions": {
-      "total_available": 63,
+      "total_available": 61,
       "high_confidence": 6,
-      "safe_to_apply": 63,
+      "safe_to_apply": 61,
       "resolutions": [
         {
           "issue_type": "magic_number",
@@ -222,7 +222,7 @@
     }
   },
   "function_analysis": {
-    "total_functions": 76,
+    "total_functions": 75,
     "entry_points": [
       "_detect_runtime_risks",
       "fastapi_app_modal"
@@ -405,8 +405,8 @@
   },
   "quality_metrics": {
     "halstead_metrics": {
-      "program_length": 8440,
-      "vocabulary": 103,
+      "program_length": 8325,
+      "vocabulary": 100,
       "estimated_difficulty": 2.5
     },
     "complexity_metrics": {
@@ -424,26 +424,26 @@
     "health_score": 65.0,
     "health_grade": "B-",
     "risk_level": "medium",
-    "technical_debt_hours": 15.8
+    "technical_debt_hours": 15.2
   },
   "health_dashboard": {
     "health_score": 65.0,
     "health_grade": "B-",
     "risk_level": "medium",
-    "technical_debt_hours": 15.8,
+    "technical_debt_hours": 15.2,
     "issues_summary": {
-      "total_issues": 63,
+      "total_issues": 61,
       "by_severity": {
-        "minor": 63
+        "minor": 61
       },
       "by_type": {
-        "magic_number": 57,
+        "magic_number": 55,
         "line_length_violation": 6
       },
-      "automated_fixes_available": 63
+      "automated_fixes_available": 61
     },
     "function_metrics": {
-      "total_functions": 76,
+      "total_functions": 75,
       "entry_points": 2,
       "dead_functions": 0,
       "most_important": [
@@ -486,7 +486,7 @@
         "priority": "medium",
         "category": "issues",
         "title": "Address Code Issues",
-        "description": "63 issues detected. Review and fix to improve code quality."
+        "description": "61 issues detected. Review and fix to improve code quality."
       },
       {
         "priority": "medium",
