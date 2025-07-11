@@ -711,6 +711,89 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
 # COMPREHENSIVE ANALYSIS SYSTEM - MAIN CLASSES
 # ============================================================================
 
+class ImportResolver:
+    """Automated import resolution system"""
+    
+    def __init__(self, codebase):
+        self.codebase = codebase
+        self.import_map = self._build_import_map()
+        self.symbol_map = self._build_symbol_map()
+    
+    def _build_import_map(self) -> Dict[str, str]:
+        """Build map of available imports"""
+        import_map = {}
+        for file in self.codebase.files:
+            if hasattr(file, 'imports'):
+                for imp in file.imports:
+                    if hasattr(imp, 'module_name'):
+                        import_map[imp.module_name] = file.filepath
+        return import_map
+    
+    def _build_symbol_map(self) -> Dict[str, str]:
+        """Build map of available symbols"""
+        symbol_map = {}
+        for file in self.codebase.files:
+            # Map functions
+            if hasattr(file, 'functions'):
+                for func in file.functions:
+                    symbol_map[func.name] = file.filepath
+            
+            # Map classes
+            if hasattr(file, 'classes'):
+                for cls in file.classes:
+                    symbol_map[cls.name] = file.filepath
+        
+        return symbol_map
+    
+    def find_unused_imports(self, file) -> List[Dict[str, Any]]:
+        """Find unused imports in a file"""
+        unused = []
+        if hasattr(file, 'imports') and hasattr(file, 'source'):
+            for imp in file.imports:
+                if hasattr(imp, 'module_name'):
+                    # Simple check if import is used in source
+                    if imp.module_name not in file.source:
+                        unused.append({
+                            'name': imp.module_name,
+                            'source': str(imp),
+                            'line': getattr(imp, 'line_number', 1)
+                        })
+        return unused
+    
+    def find_missing_imports(self, file) -> List[Dict[str, Any]]:
+        """Find missing imports in a file"""
+        missing = []
+        if hasattr(file, 'source'):
+            # Find undefined symbols that could be imports
+            for symbol, filepath in self.symbol_map.items():
+                if symbol in file.source and filepath != file.filepath:
+                    # Check if already imported
+                    if not self._is_imported(file, symbol):
+                        missing.append({
+                            'symbol': symbol,
+                            'source_file': filepath,
+                            'line': 1  # Will be added at top
+                        })
+        return missing
+    
+    def _is_imported(self, file, symbol: str) -> bool:
+        """Check if symbol is already imported"""
+        if hasattr(file, 'imports'):
+            for imp in file.imports:
+                if hasattr(imp, 'module_name') and symbol in str(imp):
+                    return True
+        return False
+    
+    def resolve_import(self, symbol: str) -> Optional[str]:
+        """Resolve the correct import statement for a symbol"""
+        if symbol in self.symbol_map:
+            source_file = self.symbol_map[symbol]
+            # Convert file path to import statement
+            import_path = source_file.replace('/', '.').replace('.py', '')
+            return f"from {import_path} import {symbol}"
+        return None
+
+
 class AdvancedIssueDetector:
     """Advanced issue detection with automated resolution capabilities"""
     
@@ -718,6 +801,7 @@ class AdvancedIssueDetector:
         self.codebase = codebase
         self.issues = []
         self.automated_resolutions = []
+        self.import_resolver = ImportResolver(codebase)
         
     def detect_all_issues(self) -> List[CodeIssue]:
         """Detect all types of issues with automated resolutions"""
@@ -725,11 +809,32 @@ class AdvancedIssueDetector:
         
         # Implementation errors
         self._detect_null_references()
+        self._detect_type_mismatches()
+        self._detect_undefined_variables()
+        self._detect_missing_returns()
+        self._detect_unreachable_code()
+        
+        # Function issues
         self._detect_function_issues()
+        self._detect_parameter_issues()
+        
+        # Exception handling
+        self._detect_exception_handling_issues()
+        self._detect_resource_leaks()
+        
+        # Code quality
+        self._detect_code_quality_issues()
         self._detect_magic_numbers()
-        self._detect_runtime_risks()
-        self._detect_dead_code()
+        
+        # Formatting & style
+        self._detect_style_issues()
         self._detect_import_issues()
+        
+        # Runtime risks
+        self._detect_runtime_risks()
+        
+        # Dead code
+        self._detect_dead_code()
         
         # Apply automated resolutions
         self._apply_automated_resolutions()
@@ -928,38 +1033,66 @@ class AdvancedIssueDetector:
         return any(pattern in function.name.lower() for pattern in entry_patterns)
     
     def _detect_import_issues(self):
-        """Detect import-related issues"""
+        """Detect and automatically resolve import issues"""
         for file in self.codebase.files:
-            if hasattr(file, 'imports') and hasattr(file, 'source'):
-                # Simple unused import detection
-                for imp in file.imports:
-                    if hasattr(imp, 'module_name'):
-                        # Simple check if import is used in source
-                        if imp.module_name not in file.source:
-                            issue = CodeIssue(
-                                issue_type=IssueType.DEAD_IMPORT,
-                                severity=IssueSeverity.MINOR,
-                                message=f"Unused import: {imp.module_name}",
-                                filepath=file.filepath,
-                                line_number=1,
-                                column_number=0,
-                                context={"import_name": imp.module_name},
-                                impact_score=2.0
-                            )
-                            
-                            # Automated resolution - remove unused import
-                            issue.automated_resolution = AutomatedResolution(
-                                resolution_type="remove_unused_import",
-                                description=f"Remove unused import: {imp.module_name}",
-                                original_code=str(imp),
-                                fixed_code="",  # Remove the line
-                                confidence=0.95,
-                                file_path=file.filepath,
-                                line_number=1,
-                                is_safe=True
-                            )
-                            
-                            self.issues.append(issue)
+            if hasattr(file, 'imports'):
+                # Detect unused imports
+                unused_imports = self.import_resolver.find_unused_imports(file)
+                for unused_import in unused_imports:
+                    issue = CodeIssue(
+                        issue_type=IssueType.DEAD_IMPORT,
+                        severity=IssueSeverity.MINOR,
+                        message=f"Unused import: {unused_import['name']}",
+                        filepath=file.filepath,
+                        line_number=unused_import.get('line', 1),
+                        column_number=0,
+                        context={"import_name": unused_import['name']},
+                        impact_score=2.0
+                    )
+                    
+                    # Automated resolution - remove unused import
+                    issue.automated_resolution = AutomatedResolution(
+                        resolution_type="remove_unused_import",
+                        description=f"Remove unused import: {unused_import['name']}",
+                        original_code=unused_import.get('source', ''),
+                        fixed_code="",  # Remove the line
+                        confidence=0.95,
+                        file_path=file.filepath,
+                        line_number=unused_import.get('line', 1),
+                        is_safe=True
+                    )
+                    
+                    self.issues.append(issue)
+                
+                # Detect missing imports
+                missing_imports = self.import_resolver.find_missing_imports(file)
+                for missing_import in missing_imports:
+                    issue = CodeIssue(
+                        issue_type=IssueType.UNDEFINED_VARIABLE,
+                        severity=IssueSeverity.CRITICAL,
+                        message=f"Missing import for: {missing_import['symbol']}",
+                        filepath=file.filepath,
+                        line_number=missing_import.get('line', 1),
+                        column_number=0,
+                        context={"symbol": missing_import['symbol']},
+                        impact_score=9.0
+                    )
+                    
+                    # Automated resolution - add missing import
+                    resolved_import = self.import_resolver.resolve_import(missing_import['symbol'])
+                    if resolved_import:
+                        issue.automated_resolution = AutomatedResolution(
+                            resolution_type="add_missing_import",
+                            description=f"Add import: {resolved_import}",
+                            original_code="",
+                            fixed_code=resolved_import,
+                            confidence=0.90,
+                            file_path=file.filepath,
+                            line_number=1,  # Add at top of file
+                            is_safe=True
+                        )
+                    
+                    self.issues.append(issue)
     
     def _apply_automated_resolutions(self):
         """Apply automated resolutions where safe"""
