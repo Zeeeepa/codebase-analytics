@@ -1,0 +1,499 @@
+{
+  "analysis_metadata": {
+    "repository": "Zeeeepa/codebase-analytics",
+    "analysis_timestamp": "2025-07-11T08:34:08.931220",
+    "processing_time_seconds": 0.01,
+    "analyzer_version": "2.0.0-enhanced"
+  },
+  "repository_overview": {
+    "summary": "Codebase with 64 files, 81 functions, 19 classes. Languages: CSS, Python, TypeScript.",
+    "total_files": 64,
+    "total_functions": 81,
+    "total_classes": 19,
+    "total_lines_of_code": 8325,
+    "languages": [
+      "CSS",
+      "TypeScript",
+      "Python"
+    ],
+    "files_by_type": {
+      ".py": 4,
+      ".ts": 4,
+      ".tsx": 54,
+      ".css": 2
+    }
+  },
+  "issues_analysis": {
+    "total_issues": 61,
+    "issues_by_severity": {
+      "minor": 61
+    },
+    "issues_by_type": {
+      "magic_number": 55,
+      "line_length_violation": 6
+    },
+    "critical_issues": [],
+    "automated_resolutions": {
+      "total_available": 61,
+      "high_confidence": 6,
+      "safe_to_apply": 61,
+      "resolutions": [
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 115,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 130,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 223,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 227,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 397,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 421,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 455,
+          "is_safe": true
+        },
+        {
+          "issue_type": "line_length_violation",
+          "resolution_type": "line_break",
+          "description": "Break long line into multiple lines",
+          "confidence": 0.9,
+          "file_path": "backend/analysis.py",
+          "line_number": 471,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 482,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 544,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 672,
+          "is_safe": true
+        },
+        {
+          "issue_type": "line_length_violation",
+          "resolution_type": "line_break",
+          "description": "Break long line into multiple lines",
+          "confidence": 0.9,
+          "file_path": "backend/analysis.py",
+          "line_number": 801,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 945,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 949,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 998,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 1065,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 1077,
+          "is_safe": true
+        },
+        {
+          "issue_type": "line_length_violation",
+          "resolution_type": "line_break",
+          "description": "Break long line into multiple lines",
+          "confidence": 0.9,
+          "file_path": "backend/analysis.py",
+          "line_number": 1084,
+          "is_safe": true
+        },
+        {
+          "issue_type": "line_length_violation",
+          "resolution_type": "line_break",
+          "description": "Break long line into multiple lines",
+          "confidence": 0.9,
+          "file_path": "backend/analysis.py",
+          "line_number": 1085,
+          "is_safe": true
+        },
+        {
+          "issue_type": "magic_number",
+          "resolution_type": "replace_with_constant",
+          "description": "Replace magic number with named constant",
+          "confidence": 0.8,
+          "file_path": "backend/analysis.py",
+          "line_number": 1139,
+          "is_safe": true
+        }
+      ]
+    }
+  },
+  "function_analysis": {
+    "total_functions": 75,
+    "entry_points": [
+      "_detect_runtime_risks",
+      "fastapi_app_modal"
+    ],
+    "dead_functions": [],
+    "most_important_functions": [
+      {
+        "name": "_add_issue",
+        "complexity": 18,
+        "is_entry_point": false
+      },
+      {
+        "name": "_build_call_chain",
+        "complexity": 18,
+        "is_entry_point": false
+      },
+      {
+        "name": "__init__",
+        "complexity": 10,
+        "is_entry_point": false
+      },
+      {
+        "name": "analyze_imports",
+        "complexity": 10,
+        "is_entry_point": false
+      },
+      {
+        "name": "analyze_dead_code",
+        "complexity": 8,
+        "is_entry_point": false
+      },
+      {
+        "name": "_detect_function_issues",
+        "complexity": 8,
+        "is_entry_point": false
+      },
+      {
+        "name": "_generate_docstring",
+        "complexity": 8,
+        "is_entry_point": false
+      },
+      {
+        "name": "_is_entry_point",
+        "complexity": 8,
+        "is_entry_point": false
+      },
+      {
+        "name": "_create_automated_resolution",
+        "complexity": 8,
+        "is_entry_point": false
+      },
+      {
+        "name": "_calculate_coupling_cohesion_metrics",
+        "complexity": 8,
+        "is_entry_point": false
+      }
+    ],
+    "function_contexts": {
+      "__init__": {
+        "name": "__init__",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 10
+      },
+      "analyze_imports": {
+        "name": "analyze_imports",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 10
+      },
+      "_build_import_map": {
+        "name": "_build_import_map",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_build_symbol_map": {
+        "name": "_build_symbol_map",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_detect_unused_imports": {
+        "name": "_detect_unused_imports",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_detect_missing_imports": {
+        "name": "_detect_missing_imports",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_is_imported": {
+        "name": "_is_imported",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "generate_import_fixes": {
+        "name": "generate_import_fixes",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "analyze_dead_code": {
+        "name": "analyze_dead_code",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 8
+      },
+      "_find_dead_functions": {
+        "name": "_find_dead_functions",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_find_dead_classes": {
+        "name": "_find_dead_classes",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_calculate_blast_radius": {
+        "name": "_calculate_blast_radius",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "analyze_structure": {
+        "name": "analyze_structure",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_build_directory_structure": {
+        "name": "_build_directory_structure",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_map_issues_to_structure": {
+        "name": "_map_issues_to_structure",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_calculate_complexity_hotspots": {
+        "name": "_calculate_complexity_hotspots",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_get_files_by_extension": {
+        "name": "_get_files_by_extension",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "detect_all_issues": {
+        "name": "detect_all_issues",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_detect_null_references": {
+        "name": "_detect_null_references",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      },
+      "_fix_null_reference": {
+        "name": "_fix_null_reference",
+        "filepath": "backend/analysis.py",
+        "is_entry_point": false,
+        "complexity_estimate": 4
+      }
+    }
+  },
+  "quality_metrics": {
+    "halstead_metrics": {
+      "program_length": 8325,
+      "vocabulary": 100,
+      "estimated_difficulty": 2.5
+    },
+    "complexity_metrics": {
+      "average_cyclomatic_complexity": 3.2,
+      "max_complexity": 8,
+      "functions_over_threshold": 2
+    },
+    "maintainability_metrics": {
+      "maintainability_index": 75,
+      "documentation_coverage": 70,
+      "code_duplication": 5
+    }
+  },
+  "health_assessment": {
+    "health_score": 65.0,
+    "health_grade": "B-",
+    "risk_level": "medium",
+    "technical_debt_hours": 15.2
+  },
+  "health_dashboard": {
+    "health_score": 65.0,
+    "health_grade": "B-",
+    "risk_level": "medium",
+    "technical_debt_hours": 15.2,
+    "issues_summary": {
+      "total_issues": 61,
+      "by_severity": {
+        "minor": 61
+      },
+      "by_type": {
+        "magic_number": 55,
+        "line_length_violation": 6
+      },
+      "automated_fixes_available": 61
+    },
+    "function_metrics": {
+      "total_functions": 75,
+      "entry_points": 2,
+      "dead_functions": 0,
+      "most_important": [
+        {
+          "name": "__init__",
+          "is_entry_point": false
+        },
+        {
+          "name": "analyze_imports",
+          "is_entry_point": false
+        },
+        {
+          "name": "_build_import_map",
+          "is_entry_point": false
+        },
+        {
+          "name": "_build_symbol_map",
+          "is_entry_point": false
+        },
+        {
+          "name": "_detect_unused_imports",
+          "is_entry_point": false
+        }
+      ]
+    },
+    "quality_indicators": {
+      "maintainability_index": 75,
+      "documentation_coverage": 70,
+      "average_complexity": 3.2,
+      "code_duplication": 5
+    },
+    "recommendations": [
+      {
+        "priority": "high",
+        "category": "health",
+        "title": "Improve Overall Codebase Health",
+        "description": "Current health score: 65.0/100. Focus on reducing issues and improving code quality."
+      },
+      {
+        "priority": "medium",
+        "category": "issues",
+        "title": "Address Code Issues",
+        "description": "61 issues detected. Review and fix to improve code quality."
+      },
+      {
+        "priority": "medium",
+        "category": "documentation",
+        "title": "Improve Documentation Coverage",
+        "description": "Add docstrings to functions lacking documentation."
+      }
+    ]
+  }
+}
