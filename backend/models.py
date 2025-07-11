@@ -19,6 +19,55 @@ class IssueSeverity(str, Enum):
 
 
 class IssueType(str, Enum):
+    # Implementation Errors
+    NULL_REFERENCE = "null_reference"
+    TYPE_MISMATCH = "type_mismatch"
+    UNDEFINED_VARIABLE = "undefined_variable"
+    MISSING_RETURN = "missing_return"
+    UNREACHABLE_CODE = "unreachable_code"
+    
+    # Function Issues
+    MISSPELLED_FUNCTION = "misspelled_function"
+    WRONG_PARAMETER_COUNT = "wrong_parameter_count"
+    PARAMETER_TYPE_MISMATCH = "parameter_type_mismatch"
+    MISSING_REQUIRED_PARAMETER = "missing_required_parameter"
+    UNUSED_PARAMETER = "unused_parameter"
+    
+    # Exception Handling
+    IMPROPER_EXCEPTION_HANDLING = "improper_exception_handling"
+    MISSING_ERROR_HANDLING = "missing_error_handling"
+    UNSAFE_ASSERTION = "unsafe_assertion"
+    RESOURCE_LEAK = "resource_leak"
+    MEMORY_MANAGEMENT = "memory_management"
+    
+    # Code Quality
+    CODE_DUPLICATION = "code_duplication"
+    INEFFICIENT_PATTERN = "inefficient_pattern"
+    MAGIC_NUMBER = "magic_number"
+    LONG_FUNCTION = "long_function"
+    DEEP_NESTING = "deep_nesting"
+    
+    # Formatting & Style
+    INCONSISTENT_NAMING = "inconsistent_naming"
+    MISSING_DOCUMENTATION = "missing_documentation"
+    INCONSISTENT_INDENTATION = "inconsistent_indentation"
+    LINE_LENGTH_VIOLATION = "line_length_violation"
+    IMPORT_ORGANIZATION = "import_organization"
+    
+    # Runtime Risks
+    DIVISION_BY_ZERO = "division_by_zero"
+    ARRAY_INDEX_OUT_OF_BOUNDS = "array_index_out_of_bounds"
+    INFINITE_LOOP = "infinite_loop"
+    STACK_OVERFLOW = "stack_overflow"
+    CONCURRENCY_ISSUE = "concurrency_issue"
+    
+    # Dead Code
+    DEAD_FUNCTION = "dead_function"
+    DEAD_VARIABLE = "dead_variable"
+    DEAD_CLASS = "dead_class"
+    DEAD_IMPORT = "dead_import"
+    
+    # Legacy types for compatibility
     SYNTAX_ERROR = "syntax_error"
     TYPE_ERROR = "type_error"
     SECURITY_VULNERABILITY = "security_vulnerability"

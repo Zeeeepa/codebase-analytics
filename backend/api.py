@@ -23,7 +23,7 @@ from .models import (
     ComprehensiveAnalysisResponse,
     AnalysisResults
 )
-from .analysis import analyze_codebase_comprehensive
+from .analysis import ComprehensiveCodebaseAnalyzer
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -162,7 +162,8 @@ async def analyze_codebase(
         
         # Perform comprehensive analysis
         print("🔬 Performing comprehensive analysis...")
-        results = analyze_codebase_comprehensive(codebase, analysis_config)
+        analyzer = ComprehensiveCodebaseAnalyzer(codebase)
+        results = analyzer.analyze_comprehensive(analysis_config)
         
         # Cache results if enabled
         if request.enable_caching:
