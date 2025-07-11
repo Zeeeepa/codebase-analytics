@@ -605,7 +605,7 @@ class AdvancedIssueDetector:
                             suggested_fix="Define variable before use or check spelling"
                         )
                         self.issues.append(issue)
-        # Enhanced implementation added
+        pass
     
     def _detect_missing_returns(self):
         """Detect functions missing return statements"""
@@ -628,7 +628,7 @@ class AdvancedIssueDetector:
                                     suggested_fix="Add explicit return statement"
                                 )
                                 self.issues.append(issue)
-        # Enhanced implementation added
+        pass
     
     def _detect_unreachable_code(self):
         """Detect unreachable code"""
@@ -1067,7 +1067,6 @@ class CodebaseAnalyzer:
                 continue
             else:
                 # Simplified - should properly track indentation
-                # Enhanced nesting depth calculation
                 pass
         
         return max_depth
@@ -1761,12 +1760,3 @@ CodebaseAnalyzer._calculate_coupling_cohesion_metrics = _calculate_coupling_cohe
 CodebaseAnalyzer._detect_function_importance = _detect_function_importance
 CodebaseAnalyzer._build_call_chains = _build_call_chains
 CodebaseAnalyzer._build_call_chain = _build_call_chain
-
-# Import and apply enhancements
-try:
-    from .analysis_enhancements import enhance_codebase_analyzer
-    CodebaseAnalyzer = enhance_codebase_analyzer(CodebaseAnalyzer)
-    print('✅ Enhanced analysis capabilities loaded successfully')
-except ImportError as e:
-    print(f'⚠️ Could not load enhanced analysis capabilities: {e}')
-    print('📝 Basic analysis functionality will still work')
