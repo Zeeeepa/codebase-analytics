@@ -111,6 +111,8 @@ class GraphSitterAnalyzer:
         # Function and class counts
         total_functions = 0
         total_classes = 0
+        total_lines = 0
+        python_files = 0
         
         for file in code_files:
             try:
@@ -118,6 +120,16 @@ class GraphSitterAnalyzer:
                     total_functions += len(file.functions)
                 if hasattr(file, 'classes'):
                     total_classes += len(file.classes)
+                
+                # Count lines if available
+                if hasattr(file, 'content') and file.content:
+                    total_lines += len(file.content.splitlines())
+                elif hasattr(file, 'source') and file.source:
+                    total_lines += len(file.source.splitlines())
+                
+                # Count Python files
+                if self._detect_language(file) == 'python':
+                    python_files += 1
             except:
                 continue
         
@@ -129,6 +141,8 @@ class GraphSitterAnalyzer:
             "total_functions": total_functions,
             "total_classes": total_classes,
             "languages": dict(languages),
+            "python_files": python_files,
+            "total_lines": total_lines,
             "entry_points_detected": 0  # Will be updated later
         }
     
@@ -176,7 +190,8 @@ class GraphSitterAnalyzer:
                 
                 file_importance.append({
                     "rank": 0,  # Will be set after sorting
-                    "filepath": file.filepath,
+                    "file": getattr(file, 'name', getattr(file, 'filepath', str(file))),
+                    "filepath": getattr(file, 'filepath', getattr(file, 'name', str(file))),
                     "importance_score": importance_score,
                     "usage_count": total_usages,
                     "dependency_count": total_dependencies,
@@ -221,7 +236,8 @@ class GraphSitterAnalyzer:
                             
                             entry_points.append({
                                 "function_name": func.name,
-                                "filepath": file.filepath,
+                                "file": getattr(file, 'name', getattr(file, 'filepath', str(file))),
+                    "filepath": getattr(file, 'filepath', getattr(file, 'name', str(file))),
                                 "line_number": getattr(func, 'start_point', [0])[0],
                                 "importance_score": importance_score,
                                 "usage_count": usage_count,
@@ -276,7 +292,8 @@ class GraphSitterAnalyzer:
         """Analyze file using graph-sitter's relationship tracking"""
         file_data = {
             "type": "file",
-            "filepath": file.filepath,
+            "file": getattr(file, 'name', getattr(file, 'filepath', str(file))),
+                    "filepath": getattr(file, 'filepath', getattr(file, 'name', str(file))),
             "language": self._detect_language(file),
             "file_type": "code" if self._is_code_file(file) else "other",
             "functions": [],
@@ -1651,6 +1668,8 @@ class CodebaseAnalyzer:
         total_lines = 0
         total_functions = 0
         total_classes = 0
+        total_lines = 0
+        python_files = 0
         
         for source_file in codebase.files:
             if source_file.source:
