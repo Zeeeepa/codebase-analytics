@@ -82,6 +82,15 @@ class IssueType(Enum):
     TRAILING_WHITESPACE = "trailing_whitespace"
     MIXED_INDENTATION = "mixed_indentation"
     EXCESSIVE_BLANK_LINES = "excessive_blank_lines"
+    
+    # Security Issue Types
+    SQL_INJECTION_RISK = "sql_injection_risk"
+    XSS_VULNERABILITY = "xss_vulnerability"
+    INSECURE_RANDOM = "insecure_random"
+    UNSAFE_DESERIALIZATION = "unsafe_deserialization"
+    
+    # Testing Issue Types
+    MISSING_TESTS = "missing_tests"
 
 
 # ============================================================================
@@ -294,4 +303,3 @@ ClassNameType = str
 MetricsDict = Dict[str, Any]
 IssuesList = List[CodeIssue]
 ResolutionsList = List[AutomatedResolution]
-

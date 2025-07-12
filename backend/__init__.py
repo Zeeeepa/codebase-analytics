@@ -14,6 +14,8 @@ from .analysis import (
     CodebaseAnalyzer, get_codebase_summary, create_health_dashboard
 )
 
+# Enhanced analysis capabilities integrated directly into core modules
+
 from .api import fastapi_app
 
 __version__ = "2.0.0"
