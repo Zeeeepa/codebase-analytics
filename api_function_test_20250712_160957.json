@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "repository_facts": {
+    "total_files": 58,
+    "code_files": 58,
+    "documentation_files": 0,
+    "config_files": 0,
+    "total_functions": 54,
+    "total_classes": 0,
+    "languages": {
+      "typescript": 58
+    },
+    "entry_points_detected": 0,
+    "description": "Analytics for codebase maintainability and complexity"
+  },
+  "important_files_count": 8,
+  "entry_points_count": 1,
+  "errors_count": 103,
+  "processing_time": 1.348816,
+  "features_analyzed": [
+    "graph_sitter_relationship_analysis",
+    "actual_runtime_error_detection",
+    "entry_point_detection",
+    "importance_scoring",
+    "repository_structure_analysis",
+    "function_dependency_analysis",
+    "usage_pattern_analysis",
+    "auto_fix_detection",
+    "call_chain_analysis",
+    "import_resolution_analysis"
+  ]
+}

@@ -7,19 +7,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, List, Any
 import requests
-import subprocess
-import os
-import tempfile
 from datetime import datetime
 import modal
-import graph_sitter
-from graph_sitter.core.codebase import Codebase
 
 from .models import (
     RepoRequest, CodebaseAnalysisRequest, CodebaseAnalysisResponse,
     HealthCheckResponse, RootResponse
 )
-from .analysis import CodebaseAnalyzer, get_codebase_summary, create_health_dashboard
+from .graph_sitter_analyzer import GraphSitterAnalyzer
 
 
 # ============================================================================
@@ -55,22 +50,7 @@ fastapi_app.add_middleware(
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def clone_repo(repo_url: str) -> str:
-    """Clone repository to temporary directory"""
-    temp_dir = tempfile.mkdtemp()
-    try:
-        subprocess.run(
-            ["git", "clone", repo_url, temp_dir],
-            check=True,
-            capture_output=True,
-            text=True
-        )
-        return temp_dir
-    except subprocess.CalledProcessError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Failed to clone repository: {e.stderr}"
-        )
+# Repository cloning is now handled by graph-sitter analyzer
 
 
 def get_repo_description(repo_url: str) -> str:
@@ -139,166 +119,68 @@ async def health_check():
 @fastapi_app.post("/analyze", response_model=CodebaseAnalysisResponse)
 async def analyze_repository(request: CodebaseAnalysisRequest):
     """
-    🎯 **SINGLE COMPREHENSIVE CODEBASE ANALYSIS ENDPOINT**
+    🎯 **COMPREHENSIVE CODEBASE ANALYSIS ENDPOINT**
     
-    Performs complete codebase analysis with all advanced features:
+    Performs complete codebase analysis using graph-sitter's advanced capabilities:
     
-    ✅ **Advanced Issue Detection** - 30+ issue types with automated resolutions
-    ✅ **Intelligent Import Resolution** - Automatic import fixes and optimizations  
-    ✅ **Function Context Analysis** - Dependencies, call chains, importance scoring
-    ✅ **Halstead Complexity Metrics** - Quantitative complexity measurements
-    ✅ **Advanced Graph Analysis** - Call graphs and dependency analysis
-    ✅ **Dead Code Detection** - With blast radius calculation and safe removal
-    ✅ **Health Assessment** - Overall health scoring and risk assessment
-    ✅ **Repository Structure** - Interactive tree with issue indicators
-    ✅ **Technical Debt Analysis** - Quantified debt with resolution estimates
-    ✅ **Automated Resolutions** - High-confidence fixes for detected issues
+    ✅ **Actual Runtime Error Detection** - Null references, undefined variables, type mismatches
+    ✅ **Entry Point Detection** - Critical functions and application entry points
+    ✅ **Most Important Files** - Usage-based importance scoring with relationship analysis
+    ✅ **Repository Structure** - Complete tree with embedded error contexts
+    ✅ **Function Analysis** - Dependencies, usages, call chains using graph-sitter
+    ✅ **Auto-fix Detection** - Identifies which errors can be automatically resolved
     
     Perfect for:
-    - CI/CD integration and quality gates
-    - Health dashboards and monitoring
-    - Technical debt assessment and planning
-    - Automated code quality enforcement
+    - Understanding new codebases quickly
+    - Identifying critical runtime issues
+    - Finding entry points and important functions
+    - Error resolution and code quality improvement
     """
     start_time = datetime.now()
     
     try:
-        # Clone repository
-        repo_path = clone_repo(request.repo_url)
+        # Initialize enhanced analyzer
+        analyzer = GraphSitterAnalyzer()
         
-        # Initialize graph-sitter codebase
-        codebase = Codebase.from_directory(repo_path)
+        # Perform comprehensive analysis
+        analysis_results = analyzer.analyze_repository(request.repo_url)
         
-        # Initialize comprehensive analyzer
-        analyzer = CodebaseAnalyzer()
-        
-        # Perform comprehensive analysis with all features
-        results = analyzer.analyze_codebase(codebase)
+        # Check if analysis was successful
+        if "error" in analysis_results:
+            return CodebaseAnalysisResponse(
+                success=False,
+                analysis_results={},
+                processing_time=(datetime.now() - start_time).total_seconds(),
+                repo_url=request.repo_url,
+                analysis_timestamp=datetime.now().isoformat(),
+                features_analyzed=[],
+                error_message=analysis_results["error"]
+            )
         
         # Get repository description
         repo_description = get_repo_description(request.repo_url)
-        
-        # Build comprehensive analysis results
-        analysis_results = {
-            "repository_overview": {
-                "description": repo_description,
-                "summary": get_codebase_summary(codebase),
-                "total_files": results.total_files,
-                "total_functions": results.total_functions,
-                "total_classes": results.total_classes,
-                "total_lines_of_code": results.total_lines_of_code,
-                "languages": list(set(f.language for f in codebase.source_files if f.language))
-            },
-            "issues_analysis": {
-                "total_issues": len(results.issues),
-                "issues_by_severity": results.issues_by_severity,
-                "issues_by_type": results.issues_by_type,
-                "critical_issues": [
-                    {
-                        "type": issue.issue_type.value,
-                        "message": issue.message,
-                        "filepath": issue.filepath,
-                        "line_number": issue.line_number,
-                        "function_name": issue.function_name,
-                        "has_automated_fix": issue.automated_resolution is not None
-                    }
-                    for issue in results.issues 
-                    if issue.severity.value == "critical"
-                ][:10],  # Top 10 critical issues
-                "automated_resolutions": {
-                    "total_available": len(results.automated_resolutions),
-                    "high_confidence": len([r for r in results.automated_resolutions if r.confidence > 0.8]),
-                    "safe_to_apply": len([r for r in results.automated_resolutions if r.is_safe]),
-                    "resolutions": [
-                        {
-                            "type": res.resolution_type,
-                            "description": res.description,
-                            "confidence": res.confidence,
-                            "file_path": res.file_path,
-                            "line_number": res.line_number,
-                            "is_safe": res.is_safe
-                        }
-                        for res in results.automated_resolutions[:20]  # Top 20 resolutions
-                    ]
-                }
-            },
-            "function_analysis": {
-                "total_functions": len(results.function_contexts),
-                "entry_points": results.entry_points,
-                "dead_functions": results.dead_functions,
-                "most_important_functions": results.most_important_functions[:10],
-                "function_contexts": {
-                    name: {
-                        "filepath": context.filepath,
-                        "line_start": context.line_start,
-                        "line_end": context.line_end,
-                        "complexity_metrics": context.complexity_metrics,
-                        "fan_in": context.fan_in,
-                        "fan_out": context.fan_out,
-                        "is_entry_point": context.is_entry_point,
-                        "function_calls": context.function_calls[:10]  # Limit for response size
-                    }
-                    for name, context in list(results.function_contexts.items())[:50]  # Top 50 functions
-                }
-            },
-            "quality_metrics": {
-                "halstead_metrics": results.halstead_metrics,
-                "complexity_metrics": results.complexity_metrics,
-                "maintainability_metrics": results.maintainability_metrics,
-                "call_graph_metrics": results.call_graph_metrics
-            },
-            "health_assessment": {
-                "health_score": results.health_score,
-                "health_grade": results.health_grade,
-                "risk_level": results.risk_level,
-                "technical_debt_hours": results.technical_debt_hours,
-                "maintainability_index": getattr(results, 'maintainability_index', 0)
-            },
-            "repository_structure": {
-                "files_by_type": {},  # Will be populated by analyzer
-                "directory_structure": [f.file_path for f in codebase.source_files[:100]],  # First 100 files
-                "issue_hotspots": []  # Files with most issues
-            }
-        }
-        
-        # Add issue hotspots
-        file_issue_counts = {}
-        for issue in results.issues:
-            file_issue_counts[issue.filepath] = file_issue_counts.get(issue.filepath, 0) + 1
-        
-        analysis_results["repository_structure"]["issue_hotspots"] = [
-            {"filepath": filepath, "issue_count": count}
-            for filepath, count in sorted(file_issue_counts.items(), key=lambda x: x[1], reverse=True)[:10]
-        ]
-        
-        # Create comprehensive health dashboard
-        health_dashboard = create_health_dashboard(results)
+        analysis_results["repository_facts"]["description"] = repo_description
         
         processing_time = (datetime.now() - start_time).total_seconds()
         
-        # All features are always analyzed in this comprehensive endpoint
+        # Features analyzed by the enhanced system
         features_analyzed = [
-            "advanced_issue_detection",
-            "automated_resolution_generation", 
-            "import_resolution_analysis",
-            "function_context_analysis",
-            "halstead_complexity_metrics",
-            "call_graph_analysis",
-            "dependency_analysis",
-            "dead_code_detection",
-            "health_assessment",
-            "technical_debt_calculation",
-            "repository_structure_analysis",
-            "maintainability_scoring",
+            "graph_sitter_relationship_analysis",
+            "actual_runtime_error_detection",
             "entry_point_detection",
-            "blast_radius_analysis",
-            "health_dashboard_generation"
+            "importance_scoring",
+            "repository_structure_analysis",
+            "function_dependency_analysis",
+            "usage_pattern_analysis",
+            "auto_fix_detection",
+            "call_chain_analysis",
+            "import_resolution_analysis"
         ]
         
         return CodebaseAnalysisResponse(
             success=True,
             analysis_results=analysis_results,
-            health_dashboard=health_dashboard,
+            health_dashboard=None,  # Will be added later if needed
             processing_time=processing_time,
             repo_url=request.repo_url,
             analysis_timestamp=datetime.now().isoformat(),
@@ -315,11 +197,6 @@ async def analyze_repository(request: CodebaseAnalysisRequest):
             features_analyzed=[],
             error_message=str(e)
         )
-    
-    finally:
-        # Cleanup temporary directory
-        if 'repo_path' in locals():
-            subprocess.run(["rm", "-rf", repo_path], check=False)
 
 
 # ============================================================================
