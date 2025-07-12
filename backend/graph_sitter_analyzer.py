@@ -40,21 +40,71 @@ class GraphSitterAnalyzer:
                         repo_name = repo_name[:-4]
                     self.codebase = Codebase.from_repo(repo_name)
                 else:
-                    # Local repository
-                    self.codebase = Codebase(repo_path_or_url)
+                    # Local repository - use from_files for local analysis
+                    import os
+                    from pathlib import Path
+                    
+                    # Get all code files in the directory, grouped by language
+                    code_files_by_lang = {
+                        'typescript': [],
+                        'python': [],
+                        'javascript': []
+                    }
+                    
+                    for root, dirs, files in os.walk(repo_path_or_url):
+                        # Skip hidden directories and common build/cache directories
+                        dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', '__pycache__', 'build', 'dist']]
+                        
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            if file.endswith(('.ts', '.tsx')):
+                                code_files_by_lang['typescript'].append(file_path)
+                            elif file.endswith('.py'):
+                                code_files_by_lang['python'].append(file_path)
+                            elif file.endswith(('.js', '.jsx')):
+                                code_files_by_lang['javascript'].append(file_path)
+                    
+                    # Use the language with the most files
+                    primary_lang = max(code_files_by_lang.keys(), key=lambda k: len(code_files_by_lang[k]))
+                    primary_files = code_files_by_lang[primary_lang]
+                    
+                    if not primary_files:
+                        raise ValueError("No supported code files found")
+                    
+                    # Convert file paths to file content dictionary
+                    files_dict = {}
+                    for file_path in primary_files:
+                        try:
+                            with open(file_path, 'r', encoding='utf-8') as f:
+                                # Use relative path as key
+                                rel_path = os.path.relpath(file_path, repo_path_or_url)
+                                files_dict[rel_path] = f.read()
+                        except Exception as e:
+                            print(f"Warning: Could not read {file_path}: {e}")
+                            continue
+                    
+                    print(f"📝 Using {primary_lang} files: {len(files_dict)} files")
+                    self.codebase = Codebase.from_files(files_dict)
             else:
                 raise ImportError("Graph-sitter not available")
             
             print(f"✅ Codebase loaded: {len(self.codebase.files)} files")
             
             # Perform comprehensive analysis
+            repository_facts = self._analyze_repository_facts()
+            entry_points = self._detect_entry_points()
+            actual_errors = self._detect_runtime_errors()
+            
+            # Update entry points count in repository facts
+            repository_facts["entry_points_detected"] = len(entry_points)
+            
             results = {
-                "repository_facts": self._analyze_repository_facts(),
+                "repository_facts": repository_facts,
                 "most_important_files": self._find_most_important_files(),
-                "entry_points": self._detect_entry_points(),
+                "entry_points": entry_points,
                 "repository_structure": self._build_tree_structure(),
-                "actual_errors": self._detect_runtime_errors(),
-                "error_summary": self._generate_error_summary(),
+                "actual_errors": actual_errors,
+                "error_summary": self._generate_error_summary_from_errors(actual_errors),
                 "analysis_metadata": {
                     "timestamp": datetime.now().isoformat(),
                     "analyzer_version": "2.0.0",
@@ -81,38 +131,43 @@ class GraphSitterAnalyzer:
         if not self.codebase:
             return {}
         
-        # Get all files
-        all_files = list(self.codebase.files)
+        # Get all files from the actual filesystem (not just graph-sitter files)
+        import os
+        all_files_on_disk = []
+        code_files_on_disk = []
+        doc_files_on_disk = []
+        config_files_on_disk = []
         
-        # Categorize files
-        code_files = [f for f in all_files if self._is_code_file(f)]
-        doc_files = [f for f in all_files if self._is_doc_file(f)]
-        config_files = [f for f in all_files if self._is_config_file(f)]
+        for root, dirs, files in os.walk('.'):
+            # Skip hidden directories and common build/cache directories
+            dirs[:] = [d for d in dirs if not d.startswith('.') and d not in ['node_modules', '__pycache__', 'build', 'dist']]
+            
+            for file in files:
+                file_path = os.path.join(root, file)
+                all_files_on_disk.append(file_path)
+                
+                if self._is_code_file_by_extension(file):
+                    code_files_on_disk.append(file_path)
+                elif self._is_doc_file_by_extension(file):
+                    doc_files_on_disk.append(file_path)
+                elif self._is_config_file_by_extension(file):
+                    config_files_on_disk.append(file_path)
         
-        # Language analysis
+        # Language analysis from all code files
         languages = defaultdict(int)
-        for file in code_files:
-            lang = self._detect_language(file)
+        for file_path in code_files_on_disk:
+            lang = self._detect_language_by_extension(file_path)
             languages[lang] += 1
         
-        # Function and class counts
-        total_functions = 0
-        total_classes = 0
-        
-        for file in code_files:
-            try:
-                if hasattr(file, 'functions'):
-                    total_functions += len(file.functions)
-                if hasattr(file, 'classes'):
-                    total_classes += len(file.classes)
-            except:
-                continue
+        # Function and class counts using graph-sitter's direct access
+        total_functions = len(self.codebase.functions) if hasattr(self.codebase, 'functions') else 0
+        total_classes = len(self.codebase.classes) if hasattr(self.codebase, 'classes') else 0
         
         return {
-            "total_files": len(all_files),
-            "code_files": len(code_files),
-            "documentation_files": len(doc_files),
-            "config_files": len(config_files),
+            "total_files": len(all_files_on_disk),
+            "code_files": len(code_files_on_disk),
+            "documentation_files": len(doc_files_on_disk),
+            "config_files": len(config_files_on_disk),
             "total_functions": total_functions,
             "total_classes": total_classes,
             "languages": dict(languages),
@@ -191,34 +246,31 @@ class GraphSitterAnalyzer:
         
         entry_points = []
         
-        for file in self.codebase.files:
-            if not self._is_code_file(file):
-                continue
-                
-            try:
-                if hasattr(file, 'functions'):
-                    for func in file.functions:
-                        if self._is_entry_point_function(func):
-                            # Calculate metrics using graph-sitter data
-                            usage_count = len(func.usages) if hasattr(func, 'usages') else 0
-                            calls_count = len(func.function_calls) if hasattr(func, 'function_calls') else 0
-                            
-                            # Calculate importance score
-                            importance_score = self._calculate_function_importance(func)
-                            
-                            entry_points.append({
-                                "function_name": func.name,
-                                "filepath": file.filepath,
-                                "line_number": getattr(func, 'start_point', [0])[0],
-                                "importance_score": importance_score,
-                                "usage_count": usage_count,
-                                "calls_count": calls_count,
-                                "entry_type": self._determine_entry_type(func),
-                                "call_chain_depth": self._calculate_call_chain_depth(func)
-                            })
-            except Exception as e:
-                print(f"Warning: Could not analyze functions in {file.filepath}: {e}")
-                continue
+        # Use codebase.functions directly for better access
+        if hasattr(self.codebase, 'functions'):
+            for func in self.codebase.functions:
+                try:
+                    if self._is_entry_point_function(func):
+                        # Calculate metrics using graph-sitter data
+                        usage_count = len(func.usages) if hasattr(func, 'usages') else 0
+                        calls_count = len(func.function_calls) if hasattr(func, 'function_calls') else 0
+                        
+                        # Calculate importance score
+                        importance_score = self._calculate_function_importance(func)
+                        
+                        entry_points.append({
+                            "function_name": func.name,
+                            "filepath": func.filepath,
+                            "line_number": getattr(func, 'start_point', [0])[0],
+                            "importance_score": importance_score,
+                            "usage_count": usage_count,
+                            "calls_count": calls_count,
+                            "entry_type": self._determine_entry_type(func),
+                            "call_chain_depth": self._calculate_call_chain_depth(func)
+                        })
+                except Exception as e:
+                    print(f"Warning: Could not analyze function {getattr(func, 'name', 'unknown')}: {e}")
+                    continue
         
         # Sort by importance
         entry_points.sort(key=lambda x: x["importance_score"], reverse=True)
@@ -462,7 +514,10 @@ class GraphSitterAnalyzer:
             return {}
         
         errors = self.analysis_results.get("actual_errors", [])
-        
+        return self._generate_error_summary_from_errors(errors)
+    
+    def _generate_error_summary_from_errors(self, errors: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate summary from a list of errors"""
         # Count by type
         by_type = defaultdict(int)
         auto_fixable = 0
@@ -517,6 +572,51 @@ class GraphSitterAnalyzer:
             return 'cpp'
         elif file.filepath.endswith('.c'):
             return 'c'
+        else:
+            return 'unknown'
+    
+    def _is_code_file_by_extension(self, filename: str) -> bool:
+        """Check if file is a code file by extension"""
+        code_extensions = ['.py', '.js', '.ts', '.tsx', '.jsx', '.java', '.cpp', '.c', '.h', '.hpp', '.cs', '.php', '.rb', '.go', '.rs', '.swift', '.kt']
+        return any(filename.endswith(ext) for ext in code_extensions)
+    
+    def _is_doc_file_by_extension(self, filename: str) -> bool:
+        """Check if file is a documentation file by extension"""
+        doc_extensions = ['.md', '.txt', '.rst', '.doc', '.docx', '.pdf']
+        return any(filename.endswith(ext) for ext in doc_extensions)
+    
+    def _is_config_file_by_extension(self, filename: str) -> bool:
+        """Check if file is a config file by extension"""
+        config_extensions = ['.json', '.yaml', '.yml', '.toml', '.ini', '.cfg', '.conf', '.xml']
+        config_names = ['package.json', 'tsconfig.json', 'webpack.config.js', 'babel.config.js', '.eslintrc', '.gitignore', 'Dockerfile', 'docker-compose.yml']
+        return any(filename.endswith(ext) for ext in config_extensions) or any(filename.endswith(name) for name in config_names)
+    
+    def _detect_language_by_extension(self, file_path: str) -> str:
+        """Detect programming language by file extension"""
+        if file_path.endswith(('.ts', '.tsx')):
+            return 'typescript'
+        elif file_path.endswith('.py'):
+            return 'python'
+        elif file_path.endswith(('.js', '.jsx')):
+            return 'javascript'
+        elif file_path.endswith('.java'):
+            return 'java'
+        elif file_path.endswith(('.cpp', '.c', '.h', '.hpp')):
+            return 'c++'
+        elif file_path.endswith('.cs'):
+            return 'c#'
+        elif file_path.endswith('.php'):
+            return 'php'
+        elif file_path.endswith('.rb'):
+            return 'ruby'
+        elif file_path.endswith('.go'):
+            return 'go'
+        elif file_path.endswith('.rs'):
+            return 'rust'
+        elif file_path.endswith('.swift'):
+            return 'swift'
+        elif file_path.endswith('.kt'):
+            return 'kotlin'
         else:
             return 'unknown'
     
