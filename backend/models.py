@@ -188,6 +188,14 @@ class AnalysisResults:
     
     # Repository Structure
     repository_structure: Dict[str, Any] = field(default_factory=dict)
+    
+    # Graph-Sitter Summary Integration
+    codebase_summary: str = ""
+    file_summaries: Dict[str, str] = field(default_factory=dict)  # filepath -> summary
+    class_summaries: Dict[str, str] = field(default_factory=dict)  # class_name -> summary
+    function_summaries: Dict[str, str] = field(default_factory=dict)  # function_name -> summary
+    symbol_summaries: Dict[str, str] = field(default_factory=dict)  # symbol_name -> summary
+    summary_metadata: Dict[str, Any] = field(default_factory=dict)  # metadata about summary generation
 
 
 # ============================================================================
@@ -217,6 +225,8 @@ class CodebaseAnalysisResponse(BaseModel):
     analysis_timestamp: str
     features_analyzed: List[str]
     error_message: Optional[str] = None
+    # Graph-Sitter Summary Data
+    summaries: Optional[Dict[str, Any]] = None  # Contains all summary types
 
 
 class HealthCheckResponse(BaseModel):
@@ -294,4 +304,3 @@ ClassNameType = str
 MetricsDict = Dict[str, Any]
 IssuesList = List[CodeIssue]
 ResolutionsList = List[AutomatedResolution]
-

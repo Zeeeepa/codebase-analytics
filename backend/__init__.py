@@ -11,7 +11,7 @@ from .models import (
 )
 
 from .analysis import (
-    CodebaseAnalyzer, get_codebase_summary, create_health_dashboard
+    CodebaseAnalyzer, create_health_dashboard
 )
 
 from .api import fastapi_app
@@ -28,7 +28,7 @@ __all__ = [
     "HealthCheckResponse", "RootResponse",
     
     # Analysis Engine
-    "CodebaseAnalyzer", "get_codebase_summary", "create_health_dashboard",
+    "CodebaseAnalyzer", "create_health_dashboard",
     
     # API
     "fastapi_app"
