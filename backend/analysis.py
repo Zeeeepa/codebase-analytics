@@ -34,6 +34,14 @@ from models import (
 )
 
 
+# Check if graph-sitter is available
+try:
+    import graph_sitter
+    GRAPH_SITTER_AVAILABLE = True
+except ImportError:
+    GRAPH_SITTER_AVAILABLE = False
+    print("Warning: graph-sitter not available, using fallback analysis")
+
 
 # ============================================================================
 # ADVANCED ANALYSIS COMPONENTS
@@ -74,6 +82,7 @@ class GraphSitterAnalyzer:
                 "entry_points": self._detect_entry_points(),
                 "repository_structure": self._build_tree_structure(),
                 "actual_errors": self._detect_runtime_errors(),
+                "summaries": self._generate_comprehensive_summaries(),
                 "error_summary": self._generate_error_summary(),
                 "analysis_metadata": {
                     "timestamp": datetime.now().isoformat(),
@@ -660,6 +669,141 @@ class GraphSitterAnalyzer:
                     context_lines.append(f"Line {j+1}: {prefix}{lines[j]}")
                 return "\n".join(context_lines)
         return f"Pattern '{pattern}' found in source"
+    
+    def _generate_comprehensive_summaries(self) -> Dict[str, Any]:
+        """Generate comprehensive summaries using graph-sitter functions"""
+        if not self.codebase or not GRAPH_SITTER_AVAILABLE:
+            return {
+                "codebase_summary": "Graph-sitter not available",
+                "file_summaries": {},
+                "class_summaries": {},
+                "function_summaries": {},
+                "symbol_summaries": {},
+                "summary_metadata": {
+                    "generation_timestamp": datetime.now().isoformat(),
+                    "graph_sitter_available": False,
+                    "total_summaries_generated": 0
+                }
+            }
+        
+        print("🔍 Generating comprehensive summaries...")
+        summaries = {
+            "codebase_summary": "",
+            "file_summaries": {},
+            "class_summaries": {},
+            "function_summaries": {},
+            "symbol_summaries": {},
+            "summary_metadata": {
+                "generation_timestamp": datetime.now().isoformat(),
+                "graph_sitter_available": True,
+                "total_summaries_generated": 0,
+                "errors": []
+            }
+        }
+        
+        summary_count = 0
+        
+        try:
+            # Generate codebase summary
+            summaries["codebase_summary"] = get_codebase_summary(self.codebase)
+            summary_count += 1
+            print(f"✅ Generated codebase summary")
+        except Exception as e:
+            error_msg = f"Failed to generate codebase summary: {str(e)}"
+            print(f"❌ {error_msg}")
+            summaries["summary_metadata"]["errors"].append(error_msg)
+            summaries["codebase_summary"] = f"Error generating summary: {str(e)}"
+        
+        # Generate file summaries for important files
+        try:
+            important_files = self._find_most_important_files()[:10]  # Top 10 files
+            for file_info in important_files:
+                try:
+                    # Find the actual file object
+                    file_obj = None
+                    for file in self.codebase.files:
+                        if file.filepath == file_info.get("filepath"):
+                            file_obj = file
+                            break
+                    
+                    if file_obj:
+                        file_summary = get_file_summary(file_obj)
+                        summaries["file_summaries"][file_obj.filepath] = file_summary
+                        summary_count += 1
+                except Exception as e:
+                    error_msg = f"Failed to generate summary for file {file_info.get('filepath', 'unknown')}: {str(e)}"
+                    summaries["summary_metadata"]["errors"].append(error_msg)
+                    print(f"❌ {error_msg}")
+            
+            print(f"✅ Generated {len(summaries['file_summaries'])} file summaries")
+        except Exception as e:
+            error_msg = f"Failed to generate file summaries: {str(e)}"
+            print(f"❌ {error_msg}")
+            summaries["summary_metadata"]["errors"].append(error_msg)
+        
+        # Generate class summaries
+        try:
+            if hasattr(self.codebase, 'classes'):
+                for class_obj in list(self.codebase.classes)[:20]:  # Top 20 classes
+                    try:
+                        class_summary = get_class_summary(class_obj)
+                        summaries["class_summaries"][class_obj.name] = class_summary
+                        summary_count += 1
+                    except Exception as e:
+                        error_msg = f"Failed to generate summary for class {getattr(class_obj, 'name', 'unknown')}: {str(e)}"
+                        summaries["summary_metadata"]["errors"].append(error_msg)
+                        print(f"❌ {error_msg}")
+                
+                print(f"✅ Generated {len(summaries['class_summaries'])} class summaries")
+        except Exception as e:
+            error_msg = f"Failed to generate class summaries: {str(e)}"
+            print(f"❌ {error_msg}")
+            summaries["summary_metadata"]["errors"].append(error_msg)
+        
+        # Generate function summaries for important functions
+        try:
+            if hasattr(self.codebase, 'functions'):
+                important_functions = list(self.codebase.functions)[:30]  # Top 30 functions
+                for func_obj in important_functions:
+                    try:
+                        func_summary = get_function_summary(func_obj)
+                        summaries["function_summaries"][func_obj.name] = func_summary
+                        summary_count += 1
+                    except Exception as e:
+                        error_msg = f"Failed to generate summary for function {getattr(func_obj, 'name', 'unknown')}: {str(e)}"
+                        summaries["summary_metadata"]["errors"].append(error_msg)
+                        print(f"❌ {error_msg}")
+                
+                print(f"✅ Generated {len(summaries['function_summaries'])} function summaries")
+        except Exception as e:
+            error_msg = f"Failed to generate function summaries: {str(e)}"
+            print(f"❌ {error_msg}")
+            summaries["summary_metadata"]["errors"].append(error_msg)
+        
+        # Generate symbol summaries for key symbols
+        try:
+            if hasattr(self.codebase, 'symbols'):
+                key_symbols = list(self.codebase.symbols)[:50]  # Top 50 symbols
+                for symbol_obj in key_symbols:
+                    try:
+                        symbol_summary = get_symbol_summary(symbol_obj)
+                        summaries["symbol_summaries"][symbol_obj.name] = symbol_summary
+                        summary_count += 1
+                    except Exception as e:
+                        error_msg = f"Failed to generate summary for symbol {getattr(symbol_obj, 'name', 'unknown')}: {str(e)}"
+                        summaries["summary_metadata"]["errors"].append(error_msg)
+                        print(f"❌ {error_msg}")
+                
+                print(f"✅ Generated {len(summaries['symbol_summaries'])} symbol summaries")
+        except Exception as e:
+            error_msg = f"Failed to generate symbol summaries: {str(e)}"
+            print(f"❌ {error_msg}")
+            summaries["summary_metadata"]["errors"].append(error_msg)
+        
+        summaries["summary_metadata"]["total_summaries_generated"] = summary_count
+        print(f"🎉 Summary generation complete! Generated {summary_count} total summaries")
+        
+        return summaries
         
 class ImportResolver:
     """Advanced import resolution and automated import fixing"""
@@ -2169,25 +2313,7 @@ class CodebaseAnalyzer:
 # UTILITY FUNCTIONS
 # ============================================================================
 
-def get_codebase_summary(codebase: Codebase) -> str:
-    """Generate a human-readable summary of the codebase"""
-    
-    total_files = len(codebase.files)
-    total_functions = sum(
-        len([s for s in sf.symbols if isinstance(s, Function)])
-        for sf in codebase.files
-    )
-    total_classes = sum(
-        len([s for s in sf.symbols if isinstance(s, Class)])
-        for sf in codebase.files
-    )
-    
-    return f"""
-    📊 Codebase Summary:
-    • Files: {total_files}
-    • Functions: {total_functions}
-    • Classes: {total_classes}
-    """
+# Local get_codebase_summary removed - now using graph_sitter.codebase.codebase_analysis.get_codebase_summary
 
 
 def create_health_dashboard(results: AnalysisResults) -> Dict[str, Any]:
