@@ -10,6 +10,14 @@ import json
 from collections import defaultdict
 import math
 
+
+from models import (
+    CodeIssue, IssueType, IssueSeverity, FunctionContext,
+    AnalysisResults, AutomatedResolution, AnalysisConfig
+)
+
+
+# Graph-sitter is required for this backend
 import graph_sitter
 from graph_sitter.codebase.codebase_analysis import get_codebase_summary, get_file_summary, get_class_summary, get_function_summary, get_symbol_summary
 from graph_sitter.core.class_definition import Class
@@ -20,27 +28,6 @@ from graph_sitter.core.function import Function
 from graph_sitter.core.import_resolution import Import
 from graph_sitter.core.symbol import Symbol
 from graph_sitter.enums import EdgeType, SymbolType
-from graph_sitter.statements.for_loop_statement import ForLoopStatement
-from graph_sitter.core.statements.if_block_statement import IfBlockStatement
-from graph_sitter.core.statements.try_catch_statement import TryCatchStatement
-from graph_sitter.core.statements.while_statement import WhileStatement
-from graph_sitter.core.expressions.binary_expression import BinaryExpression
-from graph_sitter.core.expressions.unary_expression import UnaryExpression
-from graph_sitter.core.expressions.comparison_expression import ComparisonExpression
-
-from models import (
-    CodeIssue, IssueType, IssueSeverity, FunctionContext,
-    AnalysisResults, AutomatedResolution, AnalysisConfig
-)
-
-
-# Check if graph-sitter is available
-try:
-    import graph_sitter
-    GRAPH_SITTER_AVAILABLE = True
-except ImportError:
-    GRAPH_SITTER_AVAILABLE = False
-    print("Warning: graph-sitter not available, using fallback analysis")
 
 
 # ============================================================================
@@ -60,18 +47,15 @@ class GraphSitterAnalyzer:
         
         try:
             # Initialize codebase
-            if GRAPH_SITTER_AVAILABLE:
-                if repo_path_or_url.startswith('http'):
-                    # Remote repository - extract repo name from URL
-                    repo_name = repo_path_or_url.split('/')[-2] + '/' + repo_path_or_url.split('/')[-1]
-                    if repo_name.endswith('.git'):
-                        repo_name = repo_name[:-4]
-                    self.codebase = Codebase.from_repo(repo_name)
-                else:
-                    # Local repository
-                    self.codebase = Codebase(repo_path_or_url)
+            if repo_path_or_url.startswith('http'):
+                # Remote repository - extract repo name from URL
+                repo_name = repo_path_or_url.split('/')[-2] + '/' + repo_path_or_url.split('/')[-1]
+                if repo_name.endswith('.git'):
+                    repo_name = repo_name[:-4]
+                self.codebase = Codebase.from_repo(repo_name)
             else:
-                raise ImportError("Graph-sitter not available")
+                # Local repository
+                self.codebase = Codebase(repo_path_or_url)
             
             print(f"✅ Codebase loaded: {len(self.codebase.files)} files")
             
@@ -87,7 +71,7 @@ class GraphSitterAnalyzer:
                 "analysis_metadata": {
                     "timestamp": datetime.now().isoformat(),
                     "analyzer_version": "2.0.0",
-                    "graph_sitter_enabled": GRAPH_SITTER_AVAILABLE
+                    "graph_sitter_enabled": True
                 }
             }
             
@@ -101,7 +85,7 @@ class GraphSitterAnalyzer:
                 "analysis_metadata": {
                     "timestamp": datetime.now().isoformat(),
                     "analyzer_version": "2.0.0",
-                    "graph_sitter_enabled": GRAPH_SITTER_AVAILABLE
+                    "graph_sitter_enabled": True
                 }
             }
     
@@ -672,16 +656,16 @@ class GraphSitterAnalyzer:
     
     def _generate_comprehensive_summaries(self) -> Dict[str, Any]:
         """Generate comprehensive summaries using graph-sitter functions"""
-        if not self.codebase or not GRAPH_SITTER_AVAILABLE:
+        if not self.codebase:
             return {
-                "codebase_summary": "Graph-sitter not available",
+                "codebase_summary": "No codebase available",
                 "file_summaries": {},
                 "class_summaries": {},
                 "function_summaries": {},
                 "symbol_summaries": {},
                 "summary_metadata": {
                     "generation_timestamp": datetime.now().isoformat(),
-                    "graph_sitter_available": False,
+                    "graph_sitter_available": True,
                     "total_summaries_generated": 0
                 }
             }

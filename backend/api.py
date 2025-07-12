@@ -20,6 +20,8 @@ from .models import (
     HealthCheckResponse, RootResponse
 )
 from .analysis import CodebaseAnalyzer, GraphSitterAnalyzer, create_health_dashboard
+
+# Graph-sitter is required for this backend
 from graph_sitter.codebase.codebase_analysis import get_codebase_summary
 
 
