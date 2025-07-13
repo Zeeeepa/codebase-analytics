@@ -1,0 +1,19 @@
+{
+  "repository_facts": {
+    "total_files": 58,
+    "code_files": 58,
+    "documentation_files": 0,
+    "config_files": 0,
+    "total_functions": 54,
+    "total_classes": 0,
+    "languages": {
+      "typescript": 58
+    },
+    "entry_points_detected": 0
+  },
+  "important_files_count": 8,
+  "entry_points_count": 1,
+  "errors_count": 103,
+  "error_summary": {},
+  "analysis_timestamp": "2025-07-12T16:08:09.038681"
+}

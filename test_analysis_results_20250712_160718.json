@@ -1,0 +1,135 @@
+{
+  "repository_facts": {
+    "total_files": 58,
+    "code_files": 58,
+    "documentation_files": 0,
+    "config_files": 0,
+    "total_functions": 54,
+    "total_classes": 0,
+    "languages": {
+      "typescript": 58
+    },
+    "entry_points_detected": 0
+  },
+  "most_important_files": [
+    {
+      "rank": 1,
+      "filepath": "frontend/lib/utils.ts",
+      "importance_score": 748,
+      "usage_count": 241,
+      "dependency_count": 3,
+      "function_count": 1,
+      "entry_points": 1,
+      "is_entry_file": true,
+      "language": "typescript"
+    },
+    {
+      "rank": 2,
+      "filepath": "frontend/components/ui/pagination.tsx",
+      "importance_score": 85,
+      "usage_count": 21,
+      "dependency_count": 12,
+      "function_count": 5,
+      "entry_points": 0,
+      "is_entry_file": false,
+      "language": "typescript"
+    },
+    {
+      "rank": 3,
+      "filepath": "frontend/hooks/use-toast.ts",
+      "importance_score": 85,
+      "usage_count": 15,
+      "dependency_count": 28,
+      "function_count": 6,
+      "entry_points": 0,
+      "is_entry_file": false,
+      "language": "typescript"
+    },
+    {
+      "rank": 4,
+      "filepath": "frontend/components/ui/use-toast.ts",
+      "importance_score": 79,
+      "usage_count": 13,
+      "dependency_count": 28,
+      "function_count": 6,
+      "entry_points": 0,
+      "is_entry_file": false,
+      "language": "typescript"
+    },
+    {
+      "rank": 5,
+      "filepath": "frontend/components/repo-analytics-dashboard.tsx",
+      "importance_score": 42,
+      "usage_count": 3,
+      "dependency_count": 31,
+      "function_count": 1,
+      "entry_points": 0,
+      "is_entry_file": false,
+      "language": "typescript"
+    },
+    {
+      "rank": 6,
+      "filepath": "frontend/components/ui/drawer.tsx",
+      "importance_score": 36,
+      "usage_count": 9,
+      "dependency_count": 3,
+      "function_count": 3,
+      "entry_points": 0,
+      "is_entry_file": false,
+      "language": "typescript"
+    },
+    {
+      "rank": 7,
+      "filepath": "frontend/components/ui/chart.tsx",
+      "importance_score": 34,
+      "usage_count": 7,
+      "dependency_count": 7,
+      "function_count": 3,
+      "entry_points": 0,
+      "is_entry_file": false,
+      "language": "typescript"
+    },
+    {
+      "rank": 8,
+      "filepath": "frontend/components/ui/form.tsx",
+      "importance_score": 28,
+      "usage_count": 6,
+      "dependency_count": 6,
+      "function_count": 2,
+      "entry_points": 0,
+      "is_entry_file": false,
+      "language": "typescript"
+    }
+  ],
+  "entry_points": [
+    {
+      "function_name": "cn",
+      "filepath": "frontend/lib/utils.ts",
+      "line_number": 3,
+      "importance_score": 100,
+      "usage_count": 241,
+      "calls_count": 2,
+      "entry_type": "other",
+      "call_chain_depth": 2
+    }
+  ],
+  "repository_structure": {
+    "frontend": {
+      "type": "directory",
+      "children": {
+        "components": {
+          "type": "directory",
+          "children": {
+            "ui": {
+              "type": "directory",
+              "children": {
+                "accordion.tsx": {
+                  "type": "file",
+                  "filepath": "frontend/components/ui/accordion.tsx",
+                  "language": "typescript",
+                  "file_type": "code",
+                  "functions": [],
+                  "classes": [],
+                  "imports": [
+                    {
+                      "module": 
